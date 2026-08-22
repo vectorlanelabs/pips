@@ -3489,3 +3489,37 @@ shipping each verified charter promptly.
   specifically, not just trust a new test with a passing name), then
   land spec 47 as one commit — still not pushed without explicit user
   "push".
+
+## Cycle 22 (landed) — spec 47 (Scrabble engine) lands
+- **Round 3 re-verified independently**: tsc clean, `npm test -- --run`
+  genuinely 51 files / 1127 tests passing, build clean. Re-ran the
+  lead's own scratch reproduction one more time, this round checking
+  the actual `publicState.bagCount` field specifically (not the
+  internal session bag) — confirmed correct: 100-tile conservation
+  holds end-to-end through a place-then-successful-challenge sequence,
+  measured entirely through public fields a client would actually see.
+- **Landed**: `scripts/build-dictionary.ts`, `scripts/enable1.txt`
+  (vendored word list), `public/dictionary/enable1.dawg.json` (real
+  168,551-word DAWG), `src/board-games/scrabble/{board,state,rules,
+  bot,dictionary}.ts` + their `.test.ts` files, committed as one
+  slice on `claude/scrabble-engine-loop`. **Not pushed** — this
+  project's `CLAUDE.md` requires the user's explicit "push" before
+  anything reaches `main`/`origin`, which overrides this skill's
+  default per-cycle push.
+- **Lesson for future cycles** (feeding forward per the review
+  protocol): when a fix touches any handler that returns a
+  `publicState` object, diff EVERY field the sibling handlers for the
+  same action-family set (PLACE_WORD/EXCHANGE_TILES both set
+  `bagCount`; the CHALLENGE handler being fixed initially didn't) —
+  don't just verify the specific bug that was reported, verify the
+  handler now sets every field its siblings set. This is exactly the
+  class of "absence defect" the review protocol's whole-codebase-audit
+  guidance warns diff-scoped review can miss; worth an explicit probe
+  in any future Scrabble-engine review round.
+- **Continue?** Yes. M0 (engine) is done and landed. Next up: M1
+  (screens) — the lead writes that spec next cycle (board rendering,
+  blank-tile popup UX already locked by the user: type the letter at
+  placement time, render it on the tile with an obviously lighter/
+  different treatment than a normal tile), reading Dominoes/Chess's
+  table screens in full first per this project's own
+  pattern-matching requirement, same as spec 47 did for the engine.

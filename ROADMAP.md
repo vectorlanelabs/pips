@@ -3,9 +3,31 @@
 Charter: Scrabble — see `CHARTER.md`.
 
 ## Charter: Scrabble (2026-08-22) — in progress
-- [ ] M0 — engine (spec 47, already written): dictionary generator +
-      asset, board.ts premium layout, state/rules/bot. No screens, no
-      wiring.
+- [x] M0 — engine (spec 47): dictionary generator + real ENABLE1
+      DAWG asset (168,551 words, 362.2 KB gzipped), board.ts premium
+      layout, state/rules/bot. 1127 tests / tsc / build green.
+      Implementer: Haiku (deepseek unavailable in this session, its
+      documented fallback used from cycle 1). Review: the lead,
+      personally, fallback adversarial persona (no ai-grouch-claude
+      installed) — genuinely adversarial across 2 rounds, not a
+      rubber stamp: round 1 live-reproduced 2 blocking bugs
+      (EXCHANGE_TILES silently destroying a tile every use;
+      a successful CHALLENGE ballooning the placer's rack past
+      RACK_SIZE) plus 2 majors (per-word scores hardcoded to 0;
+      missing/vacuous required tests) the implementer's own "all
+      green" report had missed entirely. Round 2's fix for the
+      rack-ballooning bug introduced a NEW bug (publicState.bagCount
+      left stale after a successful challenge, caught only because
+      the lead's repro checked the actual public field rather than
+      the internal session state) — fixed in a third scoped round.
+      One nit (dead branch in dictionary.ts's isWord) confirmed
+      genuinely unreachable-by-design against all 52,928 real DAWG
+      nodes and rejected rather than fixed, same disposition class as
+      Skip-Bo's precedent. The real dictionary asset itself was built
+      by the lead directly (not delegated) after the implementer's
+      sandbox turned out to have no network access — fetched ENABLE1
+      from a public mirror, vendored it, ran the already-written
+      generator script.
 - [ ] M1 — screens (spec to be written after M0 lands)
 - [ ] M2 — wiring (spec to be written after M1 lands)
 
