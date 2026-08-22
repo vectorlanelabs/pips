@@ -3564,3 +3564,46 @@ shipping each verified charter promptly.
   a live browser check available at this layer), review, land as one
   commit, then write spec 49 (wiring) — the first point where a real
   live-in-browser verification becomes possible for this charter.
+
+## Cycle 23 (cont.) — screens re-verified, review found real defects
+- **Independent re-run**: tsc clean, 1127/1127 tests (unchanged, as
+  expected — screens get no dedicated tests), build clean, scope
+  confirmed exactly the 6 spec'd files, no engine touch needed (seat-
+  count constants already existed).
+- **Adversarial review (lead, personally)**: read `ScrabbleTable.tsx`
+  in full — the highest-risk file (placement-staging state machine,
+  blank-tile overlay wiring). Placement/exchange/blank-overlay logic
+  itself is correct. Found 4 real defects the implementer's own report
+  didn't surface:
+  1. **[BLOCKING] Deal-intro shuffle replays every turn.** Keyed off
+     `publicState.turn.turnNumber`, which increments on every single
+     move (confirmed against `turn-engine.ts` — Scrabble has no
+     "round" concept, so this condition re-fires constantly). A
+     multi-second shuffle animation replaying after every move,
+     including every bot move at a 4-seat table, is a severe violation
+     of CLAUDE.md's mandatory "bots play at human speed" top-priority
+     rule — caught by treating that section as a required check for
+     this spec, not just tsc/test/build.
+  2. **[BLOCKING] Table's Rules button is a no-op** (`onRules={() =>
+     {}}`) — `ScrabbleRulesOverlay` is correctly wired in
+     `ScrabbleRoom.tsx` but never connected in `ScrabbleTable.tsx`, so
+     mid-game players have no way to see the rules at all, only
+     pre-game in the lobby.
+  3. **[MAJOR] No props exist for opponent display names or per-seat
+     colors** — every opponent hardcoded to the literal string
+     "Opponent" and the same single brand color, making a 3-4 player
+     game's opponents indistinguishable from each other. The props
+     interface needed to receive real identity data was simply
+     missing, which would have forced a redesign during the wiring
+     spec instead of just supplying values to already-present props.
+  4. **[MINOR] Duplicate score display** in the opponent tile (same
+     number rendered twice via two different spans).
+- **Dispatched** a scoped 4-item fix to the implementer, files limited
+  to `ScrabbleTable.tsx`/`.css` only (placement/exchange/blank-overlay
+  logic confirmed correct, explicitly told not to touch). In flight.
+- **Continue?** Yes. Next: re-verify this round the same way (tsc/
+  test/build + re-read the specific diffs, especially confirming the
+  deal-intro fix actually only fires once and not on some other
+  over-broad condition), then land M1 as one commit, then write spec
+  49 (wiring) — the point where a live-in-browser check finally
+  becomes possible and required for this charter.
