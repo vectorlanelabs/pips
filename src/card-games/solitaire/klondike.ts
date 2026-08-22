@@ -5,7 +5,7 @@ import { createRng } from '../../engine/rng.ts'
 
 export const KLONDIKE_COLUMNS = 7
 
-export function dealKlondike(seed: number): SolitaireState {
+export function dealKlondike(seed: number, mode: 'klondike' | 'klondike3' = 'klondike'): SolitaireState {
   const deck = createStandardDeck()
   const rng = createRng(seed)
   const shuffled = shuffleDeck(deck, rng)
@@ -31,7 +31,7 @@ export function dealKlondike(seed: number): SolitaireState {
   }
 
   return {
-    mode: 'klondike',
+    mode,
     seed,
     tableau,
     faceUp: Array(KLONDIKE_COLUMNS).fill(1),

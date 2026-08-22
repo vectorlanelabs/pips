@@ -1,7 +1,12 @@
 import type { Card } from '../../card-engine/cards.ts'
 import { SUITS, RANKS } from '../../card-engine/cards.ts'
 import type { SolitaireState, SolitaireLoc, SolitaireMove, MoveOutcome } from './state.ts'
+import { KLONDIKE_FAMILY, tableauColumns } from './state.ts'
 import { maxMovableCards } from './freecell.ts'
+
+function isKlondikeFamily(mode: SolitaireState['mode']): boolean {
+  return (KLONDIKE_FAMILY as string[]).includes(mode)
+}
 
 export function rankIndex(card: Card): number {
   return RANKS.indexOf(card.rank)
@@ -53,15 +58,22 @@ function locKey(loc: SolitaireLoc): string {
 
 export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutcome {
   if (move.type === 'DRAW') {
-    if (state.mode !== 'klondike') {
+    if (!isKlondikeFamily(state.mode)) {
       return { ok: false, reason: 'DRAW only in klondike' }
     }
 
     const newState = { ...state }
 
     if (state.stock.length > 0) {
-      newState.stock = state.stock.slice(0, -1)
-      newState.waste = [...state.waste, state.stock[state.stock.length - 1]]
+      // Draw 1 (klondike) or up to 3 (klondike3) cards, chronologically:
+      // the top of the stock is drawn FIRST, so it ends up buried under
+      // any cards drawn after it — the LAST card drawn is the one on top
+      // of the waste and the only one actually playable.
+      const drawCount = state.mode === 'klondike3' ? 3 : 1
+      const n = Math.min(drawCount, state.stock.length)
+      const drawnChronological = state.stock.slice(state.stock.length - n).reverse()
+      newState.stock = state.stock.slice(0, state.stock.length - n)
+      newState.waste = [...state.waste, ...drawnChronological]
     } else if (state.waste.length > 0) {
       newState.stock = [...state.waste].reverse()
       newState.waste = []
@@ -90,7 +102,7 @@ export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutco
   let sourceCards: Card[]
 
   if (from.kind === 'waste') {
-    if (state.mode !== 'klondike') {
+    if (!isKlondikeFamily(state.mode)) {
       return { ok: false, reason: 'waste only in klondike' }
     }
     if (count !== 1) {
@@ -135,7 +147,7 @@ export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutco
     if (!Number.isInteger(from.index)) {
       return { ok: false, reason: 'tableau index out of range' }
     }
-    const maxCol = state.mode === 'klondike' ? 7 : 8
+    const maxCol = tableauColumns(state.mode)
     if (from.index < 0 || from.index >= maxCol) {
       return { ok: false, reason: 'tableau index out of range' }
     }
@@ -190,13 +202,13 @@ export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutco
     if (!Number.isInteger(to.index)) {
       return { ok: false, reason: 'tableau index out of range' }
     }
-    const maxCol = state.mode === 'klondike' ? 7 : 8
+    const maxCol = tableauColumns(state.mode)
     if (to.index < 0 || to.index >= maxCol) {
       return { ok: false, reason: 'tableau index out of range' }
     }
 
     if (state.tableau[to.index].length === 0) {
-      if (state.mode === 'klondike') {
+      if (isKlondikeFamily(state.mode)) {
         if (rankIndex(sourceCard) !== 12) {
           return { ok: false, reason: 'only Kings can be placed on empty columns in klondike' }
         }
@@ -232,7 +244,7 @@ export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutco
   } else if (from.kind === 'tableau') {
     newState.tableau[from.index] = state.tableau[from.index].slice(0, state.tableau[from.index].length - count)
 
-    if (state.mode === 'klondike') {
+    if (isKlondikeFamily(state.mode)) {
       if (newState.tableau[from.index].length === 0) {
         newState.faceUp[from.index] = 0
       } else if (count === state.faceUp[from.index]) {
@@ -298,7 +310,7 @@ export function findFoundationMove(state: SolitaireState, from: SolitaireLoc): S
 // (klondike), each occupied cell (freecell), and each tableau column's top card.
 function foundationSources(state: SolitaireState): SolitaireLoc[] {
   const sources: SolitaireLoc[] = []
-  if (state.mode === 'klondike' && state.waste.length > 0) sources.push({ kind: 'waste' })
+  if (isKlondikeFamily(state.mode) && state.waste.length > 0) sources.push({ kind: 'waste' })
   if (state.mode === 'freecell') {
     for (let i = 0; i < state.cells.length; i++) {
       if (state.cells[i] !== null) sources.push({ kind: 'cell', index: i })
@@ -340,7 +352,7 @@ export function autoCompleteMoves(state: SolitaireState): SolitaireMove[] {
 export function legalDestinations(state: SolitaireState, from: SolitaireLoc, count: number): SolitaireLoc[] {
   const destinations: SolitaireLoc[] = []
 
-  const maxCol = state.mode === 'klondike' ? 7 : 8
+  const maxCol = tableauColumns(state.mode)
   for (let i = 0; i < maxCol; i++) {
     const move: SolitaireMove = {
       type: 'MOVE',

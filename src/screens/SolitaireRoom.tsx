@@ -6,13 +6,17 @@ import { Wordmark } from '../components/Wordmark'
 import { CardBackPicker } from '../components/CardBackPicker'
 
 export const SOLITAIRE_MODE_LABELS: Record<SolitaireMode, string> = {
-  klondike: 'Klondike',
+  klondike: 'Klondike (Draw 1)',
+  klondike3: 'Klondike (Draw 3)',
   freecell: 'FreeCell',
+  spider: 'Spider',
 }
 
 const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
   klondike: 'Seven columns, draw one at a time from the stock, unlimited passes.',
+  klondike3: 'Seven columns, draw three at a time from the stock — only the last one drawn is playable.',
   freecell: 'Eight columns, every card face up, four free cells to park cards in.',
+  spider: 'Ten columns, two suits, no free cells or foundations — build full King-to-Ace runs to clear them.',
 }
 
 export interface SolitaireRoomProps {

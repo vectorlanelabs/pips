@@ -93,6 +93,18 @@
   flex: none;
 }
 
+/*
+  Spider piles up cards far past klondike/freecell's 13-card ceiling: any
+  card can stack on any one-rank-higher card regardless of suit, so a single
+  column can accumulate a long run of individually-valid moves well before a
+  complete same-suit K-A run triggers an auto-clear. This gives real headroom
+  without resizing on every move; a very long run still scrolls the page,
+  which beats the pile constantly changing height as you play.
+*/
+.sol-column--spider {
+  height: 950px;
+}
+
 .sol-slot {
   width: 75px;
   height: 105px;
