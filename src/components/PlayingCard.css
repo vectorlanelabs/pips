@@ -101,6 +101,26 @@
 }
 
 /* ===================================================================
+   PlayingCard — tableau (100 × 140) — Solitaire's play-area card size.
+   Exactly 2× discard's 50 × 70 (Solitaire has no opponents to make room
+   for, so its own cards can run bigger than every other game's).
+   =================================================================== */
+
+.playing-card--tableau {
+  width: 100px;
+  height: 140px;
+  border-radius: 16px;
+  border-width: 4px;
+  border-color: var(--ink);
+  box-shadow: 0 6px 0 var(--grey-border);
+}
+
+.playing-card--tableau.playing-card--selected {
+  border-color: var(--yellow);
+  box-shadow: 0 6px 0 var(--_selected-shadow);
+}
+
+/* ===================================================================
    Content — corner (hand top-left + discard top-left)
    =================================================================== */
 
@@ -146,6 +166,22 @@
   line-height: 1.15;
 }
 
+/* Tableau — same stacked layout, doubled from discard's corner */
+.playing-card--tableau .playing-card__corner--stacked {
+  top: 8px;
+  left: 10px;
+}
+
+.playing-card--tableau .playing-card__rank {
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.playing-card--tableau .playing-card__suit {
+  font-size: 24px;
+  line-height: 1.15;
+}
+
 /* ===================================================================
    Content — bottom-large suit glyph (hand cards per RUMMY.md, plus the
    discard pile's own smaller variant — see below)
@@ -172,6 +208,12 @@
   bottom: 4px;
   left: 5px;
   font-size: 19px;
+}
+
+.playing-card__bottom-suit--tableau {
+  bottom: 8px;
+  left: 10px;
+  font-size: 38px;
 }
 
 /* ===================================================================
@@ -255,30 +297,38 @@
 }
 
 /* ===================================================================
-   CardBack — pile (50 × 70) — stacked tableau columns
+   CardBack — pile (100 × 140) — Solitaire's face-down cards, both the
+   stock draw pile and stacked tableau columns. Matches playing-card
+   --tableau's size (2× the old 50 × 70) since Solitaire's own scale is
+   independent of every other game's shared 'stock'/'discard' sizes.
    =================================================================== */
 
 .card-back--pile {
-  --cb: 0.37;
-  width: 50px;
-  height: 70px;
-  border-radius: 10px;
-  border-width: 3px;
+  --cb: 0.77;
+  width: 100px;
+  height: 140px;
+  border-radius: 16px;
+  border-width: 4px;
   border-color: var(--ink);
+  box-shadow: 0 6px 0 var(--ink);
 }
 
-/* Turn-highlight: border turns yellow */
-.card-back--stock.card-back--can-draw {
+/* Turn-highlight: border turns yellow (stock, or pile reused as Solitaire's stock) */
+.card-back--stock.card-back--can-draw,
+.card-back--pile.card-back--can-draw {
   border-color: var(--yellow);
 }
 
-/* Hover lift (stock only) */
-.card-back--stock:hover:not(:disabled) {
+/* Hover lift — harmless on non-clickable piles: no onClick means disabled,
+   and :disabled already sets pointer-events: none so :hover never fires. */
+.card-back--stock:hover:not(:disabled),
+.card-back--pile:hover:not(:disabled) {
   transform: translateY(-6px);
 }
 
 /* Empty stock: outline only, no fill/pattern — the pile is gone, not just unclickable */
-.card-back--stock.card-back--empty {
+.card-back--stock.card-back--empty,
+.card-back--pile.card-back--empty {
   background-color: transparent;
   background-image: none;
   border-style: dashed;
@@ -320,7 +370,10 @@
 
 .card-back--stock.card-back--empty::before,
 .card-back--stock.card-back--empty::after,
-.card-back--stock.card-back--empty .card-back__medallion {
+.card-back--stock.card-back--empty .card-back__medallion,
+.card-back--pile.card-back--empty::before,
+.card-back--pile.card-back--empty::after,
+.card-back--pile.card-back--empty .card-back__medallion {
   display: none;
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/solitaire/state'
-import { applyMove, findFoundationMove, legalDestinations } from '../card-games/solitaire/shared'
+import { applyMove, autoCompleteMoves, findFoundationMove, legalDestinations } from '../card-games/solitaire/shared'
 import type { Rank, Suit } from '../card-engine/cards'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
@@ -11,6 +11,12 @@ import { SOLITAIRE_MODE_LABELS } from './SolitaireRoom'
 import './SolitaireTable.css'
 
 export const SOLITAIRE_COLOR = '#4d7c0f'
+
+// Tableau stacking offsets — 2× the discard-size numbers, since tableau
+// cards are a flat 2× scale-up (100×140 vs 50×70). See SolitaireTable.css's
+// .sol-column for the matching fixed column height derived from these.
+const FACE_DOWN_OFFSET = 20
+const FACE_UP_OFFSET = 48
 
 export interface SolitaireTableProps {
   localName: string
@@ -108,7 +114,7 @@ export function SolitaireTable({
   const faceDownCount = (col: number) => state.tableau[col].length - state.faceUp[col]
   const cardTop = (col: number, i: number) => {
     const down = faceDownCount(col)
-    return i < down ? i * 10 : down * 10 + (i - down) * 24
+    return i < down ? i * FACE_DOWN_OFFSET : down * FACE_DOWN_OFFSET + (i - down) * FACE_UP_OFFSET
   }
 
   const handleCardClick = (loc: SolitaireLoc, count: number, isTop: boolean = true) => {
@@ -165,6 +171,21 @@ export function SolitaireTable({
     return `Click a column, foundation${cell} to move ${selection.count} card(s).`
   }
 
+  // Auto-play only offers itself once there's no hidden information left to
+  // reveal by playing on: every tableau card is face up, and (klondike) the
+  // stock/waste are empty — at that point the rest of the game is fully
+  // known, so cascading every remaining safe foundation move is risk-free.
+  const noHiddenCardsLeft = state.stock.length === 0
+    && state.waste.length === 0
+    && state.tableau.every((col, i) => state.faceUp[i] === col.length)
+  const autoMoves = noHiddenCardsLeft ? autoCompleteMoves(state) : []
+
+  const handleAutoPlay = () => {
+    if (autoMoves.length === 0) return
+    play('shuffle')
+    autoMoves.forEach(onMove)
+  }
+
   const targets = selection ? legalDestinations(state, selection.from, selection.count) : []
   const isTarget = (loc: SolitaireLoc): boolean => {
     for (const target of targets) {
@@ -205,6 +226,7 @@ export function SolitaireTable({
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn pill-small" onClick={onUndo} disabled={!canUndo}>Undo</button>
+          <button type="button" className="btn pill-small" onClick={handleAutoPlay} disabled={autoMoves.length === 0}>Auto-play</button>
           <button type="button" className="btn pill-small" onClick={onDealAgain}>Deal again</button>
         </div>
       </div>
@@ -225,10 +247,11 @@ export function SolitaireTable({
                   <div className="sol-group">
                     <div className="sol-caption">stock {state.stock.length}</div>
                     <CardBack
-                      size="stock"
+                      size="pile"
                       design={cardBack}
                       canDraw={state.stock.length > 0 || state.waste.length > 0}
                       empty={state.stock.length === 0}
+                      ariaLabel={state.stock.length === 0 ? 'Stock pile (empty)' : 'Stock pile'}
                       onClick={tryStock}
                     />
                   </div>
@@ -238,7 +261,7 @@ export function SolitaireTable({
                       <PlayingCard
                         rank={state.waste[state.waste.length - 1].rank as Exclude<Rank, 'JOKER'>}
                         suit={state.waste[state.waste.length - 1].suit as Exclude<Suit, 'joker'>}
-                        size="discard"
+                        size="tableau"
                         selected={selection?.from.kind === 'waste'}
                         onClick={() => handleCardClick({ kind: 'waste' }, 1)}
                       />
@@ -257,7 +280,7 @@ export function SolitaireTable({
                           key={i}
                           rank={card.rank as Exclude<Rank, 'JOKER'>}
                           suit={card.suit as Exclude<Suit, 'joker'>}
-                          size="discard"
+                          size="tableau"
                           selected={selection?.from.kind === 'cell' && selection.from.index === i}
                           onClick={() => handleCardClick({ kind: 'cell', index: i }, 1)}
                         />
@@ -288,7 +311,7 @@ export function SolitaireTable({
                         disabled={!selection}
                         onClick={() => handleSlotClick({ kind: 'foundation', index: i })}
                       >
-                        <span style={{ fontSize: 22, opacity: 0.45, color: suitColor(suit) }}>
+                        <span style={{ fontSize: 40, opacity: 0.45, color: suitColor(suit) }}>
                           {suitGlyph(suit)}
                         </span>
                       </button>
@@ -297,7 +320,7 @@ export function SolitaireTable({
                         key={i}
                         rank={foundation[foundation.length - 1].rank as Exclude<Rank, 'JOKER'>}
                         suit={foundation[foundation.length - 1].suit as Exclude<Suit, 'joker'>}
-                        size="discard"
+                        size="tableau"
                         selected={selection?.from.kind === 'foundation' && selection.from.index === i}
                         onClick={() => handleCardClick({ kind: 'foundation', index: i }, 1)}
                         className={isTarget({ kind: 'foundation', index: i }) ? 'sol-target' : undefined}
@@ -312,10 +335,8 @@ export function SolitaireTable({
 
             <div className="sol-tableau">
               {state.tableau.map((column, colIndex) => {
-                const columnHeight = column.length === 0 ? 70 : cardTop(colIndex, column.length - 1) + 70
-
                 return (
-                  <div key={colIndex} className="sol-column" style={{ height: columnHeight }}>
+                  <div key={colIndex} className="sol-column">
                     {column.length === 0 ? (
                       <button
                         type="button"
@@ -348,7 +369,7 @@ export function SolitaireTable({
                               <PlayingCard
                                 rank={card.rank as Exclude<Rank, 'JOKER'>}
                                 suit={card.suit as Exclude<Suit, 'joker'>}
-                                size="discard"
+                                size="tableau"
                                 selected={selection?.from.kind === 'tableau' && selection.from.index === colIndex && selection.count === cardsFromHere}
                                 onClick={() => handleCardClick(cardLoc, cardsFromHere, isTopCard)}
                                 className={isTarget(cardLoc) && isTopCard ? 'sol-target' : undefined}
