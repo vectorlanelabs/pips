@@ -3401,3 +3401,58 @@ shipping each verified charter promptly.
   the highest-risk surfaces in this spec), then land as one commit on
   `claude/scrabble-engine-loop` — NOT pushed without explicit user
   "push", per this project's `CLAUDE.md`.
+
+## Cycle 22 (cont.) — independent verification + adversarial review
+- **Independent re-run** (never trusted the implementer's "all green"
+  report): tsc clean, `npm test -- --run` genuinely 1118/1118 passing,
+  build clean. Reverted an unrelated `package-lock.json` diff (npm
+  metadata reformat, no real dependency change) the implementer left
+  behind outside its file ownership.
+- **Real dictionary gap closed by the lead, not delegated**: the
+  implementer shipped a ~30-node stub dictionary (a handful of test
+  words) because its sandbox had no network access — flagged honestly
+  in its own report rather than hidden. The lead's own Bash tool DOES
+  have network access via this environment's proxy; fetched the real
+  ENABLE1 list (172,823 words) from a public mirror, vendored it as
+  `scripts/enable1.txt`, and ran the already-written
+  `scripts/build-dictionary.ts` directly. Real output: 168,551 valid
+  Scrabble words, 52,928 DAWG nodes, **362.2 KB gzipped** — comfortably
+  inside spec 47's 300-800KB estimate. `public/dictionary/
+  enable1.dawg.json` now holds the real dictionary, not a stub.
+- **Adversarial review (lead, fallback persona — no ai-grouch-claude
+  installed)**: read `rules.ts`/`dictionary.ts` in full. Found and
+  LIVE-REPRODUCED (via a temporary scratch test, deleted after
+  capturing the failing output — receipts below) two blocking defects
+  the implementer's own suite never caught:
+  1. **EXCHANGE_TILES destroys tiles.** `moveCards(bag, bag,
+     action.tileIds)` looks for rack tile ids inside the bag — finds
+     none, so the exchanged tiles (already removed from the rack) are
+     never returned anywhere. Repro: 100 total tiles (bag+racks)
+     before a single-tile exchange, 99 after. Permanent, compounding
+     conservation violation.
+  2. **A successful CHALLENGE balloons the placer's rack.** The
+     already-refilled-to-7 rack gets the returned tiles appended on
+     top instead of replacing the compensating draw. Repro: place 2
+     tiles (rack correctly back at 7), opponent challenges
+     successfully, rack ends at 9.
+  Plus one major (per-word `lastPlacement.words[].score` hardcoded to
+  0, only the aggregate `totalScore` was ever real — the implementer's
+  own comment admitted the stub: "for now just track it was placed")
+  and one major test-coverage gap (no `dictionary.test.ts` despite
+  spec 47 explicitly requiring it; an existing exchange-rejection test
+  didn't actually test rejection, its own comment admitted as much).
+  One nit confirmed genuinely unreachable-by-design (a dead branch in
+  `isWord`, verified against all 52,928 real DAWG nodes — zero
+  letter-keys ever carry a boolean value) — same disposition class as
+  the Skip-Bo review's accepted unreachable-branch nit, so left as-is
+  rather than delegated.
+- **Findings dispositioned**: all 4 real findings sent back to the
+  implementer as one decision-locked fix spec (exact root cause, exact
+  fix shape, exact regression test for each, per the "nothing gets
+  left behind" rule) — in flight, not yet landed. The nit is rejected
+  with reasoning per above, no fix needed.
+- **Continue?** Yes. Next: re-verify the fix cycle myself (tsc/tests/
+  build + re-run of the same reproductions to confirm they now pass),
+  confirm no new regressions, then land spec 47 as one commit on
+  `claude/scrabble-engine-loop` — still not pushed without the user's
+  explicit "push".
