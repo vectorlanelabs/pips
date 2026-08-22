@@ -379,17 +379,35 @@ export function SolitaireTable({
                   <div className="sol-group">
                     <div className="sol-caption">waste {state.waste.length}</div>
                     {state.waste.length > 0 ? (
-                      <PlayingCard
-                        rank={state.waste[state.waste.length - 1].rank as Exclude<Rank, 'JOKER'>}
-                        suit={state.waste[state.waste.length - 1].suit as Exclude<Suit, 'joker'>}
-                        size="tableau"
-                        selected={selection?.from.kind === 'waste'}
-                        className={isDragSource({ kind: 'waste' }) ? 'sol-dragging' : undefined}
-                        onClick={() => handleCardClick({ kind: 'waste' }, 1)}
-                        draggable
-                        onDragStart={(e) => startDrag(e, { kind: 'waste' }, 1)}
-                        onDragEnd={handleDragEnd}
-                      />
+                      <div style={{ position: 'relative', width: CARD_WIDTH, height: CARD_HEIGHT }}>
+                        {/* The card just underneath the top of the waste — normally fully
+                            covered by the top card rendered below, so it only becomes
+                            visible while that top card is hidden mid-drag. Otherwise
+                            dragging the top waste card away made the whole pile look
+                            empty even with cards still underneath it. */}
+                        {state.waste.length > 1 && (
+                          <div style={{ position: 'absolute', top: 0, left: 0 }}>
+                            <PlayingCard
+                              rank={state.waste[state.waste.length - 2].rank as Exclude<Rank, 'JOKER'>}
+                              suit={state.waste[state.waste.length - 2].suit as Exclude<Suit, 'joker'>}
+                              size="tableau"
+                            />
+                          </div>
+                        )}
+                        <div style={{ position: 'absolute', top: 0, left: 0 }}>
+                          <PlayingCard
+                            rank={state.waste[state.waste.length - 1].rank as Exclude<Rank, 'JOKER'>}
+                            suit={state.waste[state.waste.length - 1].suit as Exclude<Suit, 'joker'>}
+                            size="tableau"
+                            selected={selection?.from.kind === 'waste'}
+                            className={isDragSource({ kind: 'waste' }) ? 'sol-dragging' : undefined}
+                            onClick={() => handleCardClick({ kind: 'waste' }, 1)}
+                            draggable
+                            onDragStart={(e) => startDrag(e, { kind: 'waste' }, 1)}
+                            onDragEnd={handleDragEnd}
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <div className="sol-empty">empty</div>
                     )}
