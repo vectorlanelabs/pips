@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/solitaire/state'
 import { applyAnyMove as applyMove, autoCompleteAnyMoves as autoCompleteMoves, findAnyFoundationMove as findFoundationMove, anyLegalDestinations as legalDestinations } from '../card-games/solitaire/dispatch'
+import { hasAnyLegalMove } from '../card-games/solitaire/shared'
 import type { Rank, Suit } from '../card-engine/cards'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
@@ -72,12 +73,24 @@ export function SolitaireTable({
   // tick lets Chrome finish starting the drag first; the ref above is what
   // actually gates drop logic, so this delay never touches functionality.
   const dragRevealTimeoutRef = useRef<number | null>(null)
+  // Klondike(3) only: how many full stock cycles (drawn all the way down,
+  // then flipped back from the waste) have passed with zero cards actually
+  // played in between. This is what gates the "no playable cards" notice —
+  // the player gets to dig through the deck themselves for a couple of laps
+  // before the game says anything, per the house rule that this is an
+  // informational nudge, never a verdict that ends the game.
+  const [stuckCycles, setStuckCycles] = useState(0)
+  const [dismissedAtCycle, setDismissedAtCycle] = useState(0)
+  const playedSinceReshuffleRef = useRef(false)
 
   useEffect(() => {
     if (dealId !== introShownForDealIdRef.current) {
       setShowDealIntro(true)
       introShownForDealIdRef.current = dealId
     }
+    setStuckCycles(0)
+    setDismissedAtCycle(0)
+    playedSinceReshuffleRef.current = false
   }, [dealId])
 
   // A click-selection can outlive the card it pointed at (undo, deal again)
@@ -107,13 +120,29 @@ export function SolitaireTable({
   useEffect(() => {
     if (prevStateRef.current) {
       const prev = prevStateRef.current
+      const reshuffled = prev.stock.length === 0 && prev.waste.length > 0 && state.stock.length > 0 && state.waste.length === 0
       if (prev.stock.length > state.stock.length) play('card-draw')
-      else if (state.stock.length > prev.stock.length) play('shuffle')
+      else if (reshuffled) play('shuffle')
       else if (state.moves > prev.moves) play('card-play')
       else if (state.moves < prev.moves) play('card-draw')
+
+      if (state.mode === 'klondike' || state.mode === 'klondike3') {
+        if (!reshuffled && state.moves > prev.moves) {
+          playedSinceReshuffleRef.current = true
+        }
+        if (reshuffled) {
+          setStuckCycles((n) => (playedSinceReshuffleRef.current ? 0 : n + 1))
+          playedSinceReshuffleRef.current = false
+        }
+      }
     }
     prevStateRef.current = state
   }, [state, play])
+
+  const stuck = (state.mode === 'klondike' || state.mode === 'klondike3')
+    && stuckCycles >= 2
+    && stuckCycles !== dismissedAtCycle
+    && !hasAnyLegalMove(state)
 
   const tryMove = (move: SolitaireMove) => {
     const result = applyMove(state, move)
@@ -515,6 +544,13 @@ export function SolitaireTable({
             </div>
 
             <div className="sol-status">{getStatusLine()}</div>
+
+            {stuck && (
+              <div className="sol-stuck-banner">
+                <span>No playable cards left in the deck right now — you can still pull cards back off a foundation to open things up.</span>
+                <button type="button" className="btn pill-small" onClick={() => setDismissedAtCycle(stuckCycles)}>Dismiss</button>
+              </div>
+            )}
 
             <div className="sol-tableau">
               {state.tableau.map((column, colIndex) => {

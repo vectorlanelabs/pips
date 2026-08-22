@@ -349,6 +349,33 @@ export function autoCompleteMoves(state: SolitaireState): SolitaireMove[] {
   return moves
 }
 
+// Is there any legal MOVE at all from the current position — waste top,
+// every tableau run (including partial runs, not just the full face-up
+// stack), a foundation top moving back into the tableau, or a free cell?
+// Ignores whether DRAW is still available: drawing doesn't place a card,
+// it only reveals one, so it isn't itself a "move" for this check.
+export function hasAnyLegalMove(state: SolitaireState): boolean {
+  if (isKlondikeFamily(state.mode) && state.waste.length > 0) {
+    if (legalDestinations(state, { kind: 'waste' }, 1).length > 0) return true
+  }
+
+  for (let i = 0; i < state.cells.length; i++) {
+    if (state.cells[i] !== null && legalDestinations(state, { kind: 'cell', index: i }, 1).length > 0) return true
+  }
+
+  for (let i = 0; i < state.foundations.length; i++) {
+    if (state.foundations[i].length > 0 && legalDestinations(state, { kind: 'foundation', index: i }, 1).length > 0) return true
+  }
+
+  for (let i = 0; i < state.tableau.length; i++) {
+    for (let count = 1; count <= state.faceUp[i]; count++) {
+      if (legalDestinations(state, { kind: 'tableau', index: i }, count).length > 0) return true
+    }
+  }
+
+  return false
+}
+
 export function legalDestinations(state: SolitaireState, from: SolitaireLoc, count: number): SolitaireLoc[] {
   const destinations: SolitaireLoc[] = []
 
