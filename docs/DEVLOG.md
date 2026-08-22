@@ -3456,3 +3456,36 @@ shipping each verified charter promptly.
   confirm no new regressions, then land spec 47 as one commit on
   `claude/scrabble-engine-loop` — still not pushed without the user's
   explicit "push".
+
+## Cycle 22 (cont.) — fix cycle re-verified, found a NEW bug the fix introduced
+- **Independent re-run of the 4-bug fix cycle**: tsc clean, 1126/1126
+  tests (up from 1118), build clean — matches the implementer's report
+  on the numbers.
+- **Re-ran the exact same live reproductions from before the fix**
+  (not the implementer's own new tests — the lead's own scratch
+  repros, to rule out the implementer writing a test that passes
+  without actually exercising the original failure): EXCHANGE_TILES
+  conservation ✅ fixed, per-word `lastPlacement.words[].score` ✅ real
+  and sums correctly to `totalScore`, rack size after a successful
+  CHALLENGE ✅ back to exactly 7.
+- **But found a NEW bug the fix introduced**: the CHALLENGE-succeeds
+  handler correctly restores the underlying `ScrabbleSession.bag` zone
+  (verified: 84→86 after a 2-tile challenge, correct), but never
+  updates `publicState.bagCount` to match — the wire-visible field
+  clients would actually see stays stale at the pre-challenge value,
+  under-reporting the bag by the number of tiles just returned. Caught
+  only because the lead's repro checked the PUBLIC field specifically,
+  not just the internal session state (a lesson worth carrying
+  forward: verify the wire-visible field a client would actually
+  receive, not merely whatever variable happens to hold the right
+  number internally).
+- **Dispatched** a tightly-scoped one-line fix (add `bagCount:
+  cardCount(newBag)` to the challenge-succeeds branch's returned
+  publicState, mirroring how PLACE_WORD/EXCHANGE_TILES already do it)
+  plus one regression test asserting the actual public field. In
+  flight.
+- **Continue?** Yes. Next: re-verify this round the same way (re-run
+  tsc/test/build myself, re-run my own repro checking the public field
+  specifically, not just trust a new test with a passing name), then
+  land spec 47 as one commit — still not pushed without explicit user
+  "push".
