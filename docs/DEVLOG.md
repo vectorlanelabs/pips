@@ -3367,3 +3367,37 @@ shipping each verified charter promptly.
   authorized — `REQUESTS.md`/`Die.tsx`/`FarkleTable.tsx`/
   `components.css` (the other session's active work) left untouched.
 - **Continue?** No further Skip-Bo work requested.
+
+## Cycle 22 — 2026-08-22 — Scrabble charter opened, spec 47 dispatched
+- **Setup**: isolated git worktree (`.claude/worktrees/scrabble-engine`,
+  branch `claude/scrabble-engine-loop`, based off
+  `claude/scrabble-viability-0v9r1x` which already carries the
+  committed `specs/47-scrabble-engine.md`) so this run doesn't disturb
+  any other in-progress work in the primary checkout, per explicit user
+  instruction. `CHARTER.md` rewritten for Scrabble (directed mode,
+  pre-approved at invocation); `ROADMAP.md` given a new in-progress
+  Scrabble section (M0 engine / M1 screens / M2 wiring) above the
+  now-`done` Skip-Bo history.
+- **Model routing note**: this session's Agent tool does not offer
+  "deepseek" as an option (sonnet/opus/haiku/fable only) — falling
+  back to Haiku as implementer from cycle 1, per this skill's own
+  documented fallback rule, not as a later degradation. No
+  `ai-grouch-claude`/companion skills installed in this environment —
+  reviewing personally under the fallback persona in
+  `references/review.md`.
+- **Dispatched**: spec 47 (dictionary generator, board.ts, state.ts,
+  rules.ts, bot.ts + tests) to a Haiku implementer as one slice,
+  matching Skip-Bo's precedent of landing its equivalent engine spec
+  (40) as a single delegation. Full delegation contract given: design
+  decisions locked (spec 47 itself), exact file ownership, do-NOT list
+  (no new runtime deps, no git, no touching other files, dictionary
+  must stay lazily-loaded not bundle-wide), required tests per spec
+  47's own "Verify before reporting" list, exact tsc/test/build verify
+  commands.
+- **Continue?** Yes — cycle in flight. Next: independently re-run
+  tsc/test/build myself (never trust the implementer's report), read
+  the diff line by line, run the adversarial review pass (challenge-
+  mechanic rollback correctness and dictionary-asset wire-safety are
+  the highest-risk surfaces in this spec), then land as one commit on
+  `claude/scrabble-engine-loop` — NOT pushed without explicit user
+  "push", per this project's `CLAUDE.md`.

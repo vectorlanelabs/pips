@@ -1,6 +1,15 @@
 # Roadmap
 
-Charter: Skip-Bo — see `CHARTER.md`.
+Charter: Scrabble — see `CHARTER.md`.
+
+## Charter: Scrabble (2026-08-22) — in progress
+- [ ] M0 — engine (spec 47, already written): dictionary generator +
+      asset, board.ts premium layout, state/rules/bot. No screens, no
+      wiring.
+- [ ] M1 — screens (spec to be written after M0 lands)
+- [ ] M2 — wiring (spec to be written after M1 lands)
+
+## Charter: Skip-Bo (2026-08-17) — done, see below
 
 ## Charter: Skip-Bo (2026-08-17) — done
 - [x] Card-engine module (spec 40): deck.ts (162-card deck), state.ts,
