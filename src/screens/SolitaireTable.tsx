@@ -58,6 +58,13 @@ export function SolitaireTable({
   const introShownForDealIdRef = useRef<number>(-1)
   const prevStateRef = useRef<SolitaireState | null>(null)
   const ghostRef = useRef<HTMLDivElement>(null)
+  // A real drag fires dragover/drop continuously as the mouse moves, often
+  // faster than React's async state updates land — `dragFrom` (state) can
+  // still read stale/null on the very first dragover after dragstart, which
+  // would skip preventDefault() and have the browser cancel the whole drag
+  // before a drop ever happens. This ref updates synchronously in the same
+  // tick as dragstart, so the native handlers below never see a stale value.
+  const dragFromRef = useRef<{ from: SolitaireLoc; count: number } | null>(null)
 
   useEffect(() => {
     if (dealId !== introShownForDealIdRef.current) {
@@ -201,26 +208,34 @@ export function SolitaireTable({
     e.dataTransfer.setData('text/plain', '') // required by some browsers for a drag to start at all
 
     setSelection(null)
+    dragFromRef.current = { from, count }
     setDragFrom({ from, count })
   }
 
   const handleDragEnd = () => {
+    dragFromRef.current = null
     setDragFrom(null)
     ghostRef.current?.replaceChildren()
   }
 
+  // Always allow the drop — every element this is attached to is one of our
+  // own drop targets, and the only thing that ever drags in this app is one
+  // of our own cards, so there's nothing to conditionally reject here. (See
+  // dragFromRef's comment: gating this on React state was the actual bug.)
   const handleDragOver = (e: React.DragEvent) => {
-    if (dragFrom) e.preventDefault() // required to allow a drop at all
+    e.preventDefault()
   }
 
   const handleDrop = (to: SolitaireLoc) => (e: React.DragEvent) => {
     e.preventDefault()
-    if (!dragFrom) return
-    tryMove({ type: 'MOVE', from: dragFrom.from, to, count: dragFrom.count })
+    const from = dragFromRef.current
+    if (!from) return
+    tryMove({ type: 'MOVE', from: from.from, to, count: from.count })
     // Clear here rather than waiting on dragend: a successful drop can move the
     // dragged card(s) to a different parent in the tree (a different tableau
     // column), which React remounts rather than relocates, so the source
     // element's own dragend may never bubble to a listener that still exists.
+    dragFromRef.current = null
     setDragFrom(null)
     ghostRef.current?.replaceChildren()
   }
