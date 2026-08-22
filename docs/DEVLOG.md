@@ -3523,3 +3523,44 @@ shipping each verified charter promptly.
   different treatment than a normal tile), reading Dominoes/Chess's
   table screens in full first per this project's own
   pattern-matching requirement, same as spec 47 did for the engine.
+
+## Cycle 23 — 2026-08-22 — M1 (screens) spec written and dispatched
+- **Investigation before spec** (per this loop's `understanding-
+  before-coding` step): surveyed `SkipBoRoom.tsx` (N-seat lobby
+  template — Dominoes is 2p-only, not the right lobby reference),
+  `DominoesTable.tsx`/`.css` (select-then-confirm interaction
+  language, status-block pattern, sound-trigger-on-state-diff
+  pattern), `DominoesResults.tsx`/`RulesOverlay.tsx`, `DealIntro.tsx`'s
+  real prop shape, the full registered sound-name list in
+  `useSound.ts` (34 names — none new needed for Scrabble), `TableHeader`'s
+  exact props, and confirmed there is NO existing free-text modal-input
+  pattern in this codebase — the closest precedent for the blank-tile
+  letter assignment is Chess's inert, forced-choice pawn-promotion
+  overlay, adapted to a 26-button A-Z grid rather than invented from
+  scratch.
+- **Wrote `specs/48-scrabble-screens.md`**: Room mirrors SkipBoRoom
+  exactly; Table locks a new-but-precedented select-tile→place-on-
+  cell→Play-word/Clear staging flow (multi-tile placement has no
+  direct sibling, built from Dominoes' select/target visual language);
+  blank tile letter popup per the user's explicit lock (type the
+  letter at placement time, render the assigned letter in a visibly
+  lighter weight/color than a normal tile — specified as concrete
+  font-weight/color values, not left vague); opponent rail reuses
+  SkipBo's `.sb-opp-rail`/`.sb-opp-tile` CSS verbatim under a renamed
+  prefix; Results handles a new case no sibling needs (a tied
+  `winnerId: null` final score, per spec 47's locked tie behavior).
+  One open judgment call left to the implementer: the brand
+  `gameColor`, with explicit instructions to grep existing colors and
+  pick an unused one rather than guess blind.
+- **Dispatched** to a Haiku implementer under the full delegation
+  contract (exact file ownership incl. the one narrow allowed touch to
+  `state.ts` for seat-count constants if missing, do-NOT list, no live
+  browser check possible yet since wiring is spec 49, verify commands).
+  In flight.
+- **Continue?** Yes. Next: independently re-verify (tsc/test/build,
+  read the diff — screens are exactly the kind of change where "looks
+  right" isn't enough, so a careful read of the placement-flow state
+  machine and the blank-tile overlay wiring is warranted even without
+  a live browser check available at this layer), review, land as one
+  commit, then write spec 49 (wiring) — the first point where a real
+  live-in-browser verification becomes possible for this charter.
