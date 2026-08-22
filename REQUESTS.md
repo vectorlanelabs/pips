@@ -65,3 +65,14 @@
       on a blocked round.
 - [x] 2026-08-15, Uno charter — commit the charter: done, pushed
       (verified: full Uno commit sequence on `main`, HEAD == origin/main).
+
+- [ ] 2026-08-22, Scrabble charter wrap-up — commit the charter: all
+      three milestones (engine spec 47, screens spec 48, wiring spec
+      49) verified in the tree on `claude/scrabble-engine-loop` (10
+      commits, 1128 tests / tsc / build green throughout, live browser
+      match-verified including the mandatory 4-seat bot-pacing check).
+      Nothing has been pushed — this project's standing policy is to
+      ask first, and this run's isolated worktree makes that doubly
+      true. Say the word ("push") and it merges into `main` and pushes
+      to `origin`, then the worktree/branch get pruned per CLAUDE.md's
+      git workflow.
