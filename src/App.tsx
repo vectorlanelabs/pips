@@ -113,6 +113,15 @@ import { SkipBoTable } from './screens/SkipBoTable'
 import { SkipBoResults } from './screens/SkipBoResults'
 import { SkipBoRoom } from './screens/SkipBoRoom'
 
+// ---- Scrabble ----
+import { createScrabbleGame, SCRABBLE_MAX_SEATS, SCRABBLE_MIN_SEATS, type ScrabbleAction, type ScrabblePublicState, type ScrabbleSession, type ScrabbleTile } from './board-games/scrabble/state'
+import { applyScrabbleAction, runScrabbleBotTurn } from './board-games/scrabble/rules'
+import { createScrabbleBotStrategy } from './board-games/scrabble/bot'
+import { loadDictionary, type ScrabbleDictionary } from './board-games/scrabble/dictionary'
+import { ScrabbleTable } from './screens/ScrabbleTable'
+import { ScrabbleResults } from './screens/ScrabbleResults'
+import { ScrabbleRoom } from './screens/ScrabbleRoom'
+
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
@@ -137,6 +146,9 @@ type UnoView =
 type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
+type ScrabbleView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: ScrabblePublicState; rack: ScrabbleTile[]; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -300,6 +312,16 @@ export default function App() {
   const [skipBoStarted, setSkipBoStarted] = useState(false)
   const [skipBoSeats, setSkipBoSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
+  // ---- Scrabble ----
+  const [scrabbleRole, setScrabbleRole] = useState<'host' | 'guest' | null>(null)
+  const [scrabbleCode, setScrabbleCode] = useState('')
+  const [scrabbleLocalPlayerId, setScrabbleLocalPlayerId] = useState<string | null>(null)
+  const [scrabbleView, setScrabbleView] = useState<ScrabbleView | null>(null)
+  const [scrabbleConnection, setScrabbleConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [scrabbleNotice, setScrabbleNotice] = useState<string | null>(null)
+  const [scrabbleStarted, setScrabbleStarted] = useState(false)
+  const [scrabbleSeats, setScrabbleSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -413,6 +435,18 @@ export default function App() {
   const skipBoBotSeatsRef = useRef<Set<string>>(new Set())
   const skipBoBotCounterRef = useRef(0)
   const skipBoBotsHeldUntilRef = useRef(0)
+  const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
+  const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
+  const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
+  const scrabbleBotBusyRef = useRef(false)
+  const scrabbleLocalPlayerIdRef = useRef<string | null>(null)
+  const scrabbleSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const scrabbleStartedRef = useRef(false)
+  const scrabbleNamesRef = useRef<Record<string, string>>({})
+  const scrabbleBotSeatsRef = useRef<Set<string>>(new Set())
+  const scrabbleBotCounterRef = useRef(0)
+  const scrabbleBotsHeldUntilRef = useRef(0)
+  const scrabbleDictionaryRef = useRef<ScrabbleDictionary | null>(null)
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -442,6 +476,8 @@ export default function App() {
     unoGuestRef.current?.destroy()
     skipBoHostRef.current?.destroy()
     skipBoGuestRef.current?.destroy()
+    scrabbleHostRef.current?.destroy()
+    scrabbleGuestRef.current?.destroy()
   }, [])
 
   // ---- Routing ----
@@ -512,13 +548,14 @@ export default function App() {
     if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
     if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
     if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
+    if (scrabbleRole && scrabbleStarted && scrabbleView?.kind === 'game' && scrabbleView.publicState.stage !== 'over') return 'scrabble'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, scrabbleRole, scrabbleStarted, scrabbleView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -550,6 +587,7 @@ export default function App() {
       case 'chess': startChessHost(); return
       case 'uno': startUnoHost(); return
       case 'skipbo': startSkipBoHost(); return
+      case 'scrabble': startScrabbleHost(); return
     }
   }
 
@@ -854,6 +892,29 @@ export default function App() {
     skipBoBotCounterRef.current = 0
     skipBoNamesRef.current = {}
     skipBoBotsHeldUntilRef.current = 0
+    // Scrabble
+    scrabbleHostRef.current?.destroy()
+    scrabbleHostRef.current = null
+    scrabbleGuestRef.current?.destroy()
+    scrabbleGuestRef.current = null
+    scrabbleSessionRef.current = null
+    setScrabbleRole(null)
+    setScrabbleCode('')
+    setScrabbleLocalPlayerId(null)
+    scrabbleLocalPlayerIdRef.current = null
+    setScrabbleView(null)
+    setScrabbleConnection('connected')
+    setScrabbleNotice(null)
+    setScrabbleStarted(false)
+    scrabbleStartedRef.current = false
+    setScrabbleSeats([])
+    scrabbleSeatsRef.current = []
+    scrabbleBotBusyRef.current = false
+    scrabbleBotSeatsRef.current.clear()
+    scrabbleBotCounterRef.current = 0
+    scrabbleNamesRef.current = {}
+    scrabbleBotsHeldUntilRef.current = 0
+    scrabbleDictionaryRef.current = null
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -3039,6 +3100,7 @@ export default function App() {
 
   // Seat inks: same 4-entry palette as Rummy (Skip-Bo also caps at 4 seats).
   const SKIPBO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+  const SCRABBLE_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
 
   // The actor key must re-key on any field that can change within the SAME
   // player's turn — Skip-Bo turns are chains of individual plays, so
@@ -3282,6 +3344,280 @@ export default function App() {
     skipBoSessionRef.current = next
     skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
     skipBoBroadcast()
+  }
+
+  // ---- Scrabble helpers ----
+
+  // Scrabble's actor key: must re-key on fields that change within CHALLENGE actions
+  // (lastPlacement.challengeable changes when someone challenges or moves again).
+  function scrabbleActorKey(session: ScrabbleSession): string {
+    const ps = session.session.publicState
+    const placement = ps.lastPlacement
+    const placementKey = placement
+      ? `${placement.by}:${placement.challengeable}:${placement.tiles.length}`
+      : 'none'
+    return `${ps.turn.turnNumber}:${ps.stage}:${placementKey}:${Object.values(ps.scores).join(',')}`
+  }
+
+  function scrabbleStale(key: string) {
+    return !scrabbleSessionRef.current || scrabbleActorKey(scrabbleSessionRef.current) !== key
+  }
+
+  function scrabbleBroadcast() {
+    if (!scrabbleStartedRef.current) {
+      const view: ScrabbleView = {
+        kind: 'lobby',
+        roster: scrabbleSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === scrabbleLocalPlayerIdRef.current })),
+      }
+      setScrabbleView(view)
+      scrabbleHostRef.current?.broadcast(view)
+      return
+    }
+    const session = scrabbleSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, scrabbleLocalPlayerIdRef.current!)
+    setScrabbleView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      rack: hostSnap.privateState!.rack.cards,
+      names: { ...scrabbleNamesRef.current },
+    })
+    const names = { ...scrabbleNamesRef.current }
+    for (const seat of scrabbleSeatsRef.current) {
+      if (seat.playerId === scrabbleLocalPlayerIdRef.current) continue
+      if (scrabbleBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      scrabbleHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        rack: guestSnap.privateState!.rack.cards,
+        names,
+      })
+    }
+  }
+
+  function startScrabbleHost() {
+    const code = `SCR-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setScrabbleRole('host')
+    writeNameCookie(name)
+    pushGameUrl('scrabble')
+    setScrabbleCode(code)
+    setScrabbleLocalPlayerId(hostId)
+    scrabbleLocalPlayerIdRef.current = hostId
+    setScrabbleStarted(false)
+    scrabbleStartedRef.current = false
+    setScrabbleSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    scrabbleSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    setScrabbleNotice(null)
+    setError(null)
+    // Fire-and-forget dictionary loading (no blocking on room creation)
+    loadDictionary().then(d => { scrabbleDictionaryRef.current = d }).catch(() => {})
+    scrabbleHostRef.current = createHost<ScrabbleView, ScrabbleAction>(code, {
+      onJoin(guestId, guestName) {
+        if (scrabbleStartedRef.current) {
+          scrabbleHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (scrabbleSeatsRef.current.length >= SCRABBLE_MAX_SEATS) {
+          scrabbleHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        scrabbleSeatsRef.current = [...scrabbleSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setScrabbleSeats(scrabbleSeatsRef.current)
+        scrabbleBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!scrabbleStartedRef.current) return
+        const session = scrabbleSessionRef.current
+        if (!session) return
+        if (!scrabbleSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyScrabbleAction(session, guestId, action, scrabbleDictionaryRef.current)
+        if (!result.outcome.ok) return
+        scrabbleSessionRef.current = result.session
+        scrabbleBroadcast()
+        runScrabbleBotsIfNeeded()
+      },
+      onLeave(guestId) {
+        if (!scrabbleStartedRef.current) {
+          scrabbleSeatsRef.current = scrabbleSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setScrabbleSeats(scrabbleSeatsRef.current)
+          scrabbleBroadcast()
+          return
+        }
+        const seat = scrabbleSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setScrabbleNotice(`${seat.name} disconnected.`)
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    scrabbleBroadcast()
+  }
+
+  function addScrabbleHouseBot() {
+    if (scrabbleRole !== 'host' || scrabbleStartedRef.current) return
+    if (scrabbleSeatsRef.current.length >= SCRABBLE_MAX_SEATS) return
+    scrabbleBotCounterRef.current += 1
+    const botId = `bot-${scrabbleBotCounterRef.current}`
+    const botName = randomBotName(scrabbleSeatsRef.current.map((s) => s.name))
+    scrabbleSeatsRef.current = [...scrabbleSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setScrabbleSeats(scrabbleSeatsRef.current)
+    scrabbleBotSeatsRef.current.add(botId)
+    scrabbleBroadcast()
+  }
+
+  async function scrabbleStart() {
+    if (scrabbleRole !== 'host' || scrabbleStartedRef.current) return
+    const seats = scrabbleSeatsRef.current
+    if (seats.length < SCRABBLE_MIN_SEATS || seats.length > SCRABBLE_MAX_SEATS) return
+
+    // Ensure dictionary is loaded before starting
+    if (scrabbleDictionaryRef.current === null) {
+      try {
+        scrabbleDictionaryRef.current = await loadDictionary()
+      } catch (e) {
+        setError('Failed to load dictionary. Please try again.')
+        return
+      }
+    }
+
+    const playerIds = seats.map((s) => s.playerId)
+    const seed = Math.floor(Math.random() * 2147483647)
+    scrabbleSessionRef.current = createScrabbleGame(playerIds, seed)
+    scrabbleNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    // Hold bots until every client's DealIntro (7 tiles per seat) has played out
+    scrabbleBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 7) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    scrabbleStartedRef.current = true
+    setScrabbleStarted(true)
+    scrabbleBroadcast()
+    runScrabbleBotsIfNeeded()
+  }
+
+  async function runScrabbleBot(botId: string, key: string) {
+    while (!scrabbleStale(key)) {
+      const holdRemaining = scrabbleBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
+      if (scrabbleStale(key)) return
+      if (Date.now() < scrabbleBotsHeldUntilRef.current) continue
+      const session = scrabbleSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage === 'over') return
+      if (!scrabbleBotSeatsRef.current.has(botId)) return
+
+      const result = runScrabbleBotTurn(session, botId, createScrabbleBotStrategy(scrabbleDictionaryRef.current!), scrabbleDictionaryRef.current)
+      if (!result.outcome.ok) return
+      scrabbleSessionRef.current = result.session
+      scrabbleBroadcast()
+    }
+  }
+
+  async function runScrabbleBotsIfNeeded() {
+    if (scrabbleBotBusyRef.current) return
+    const session = scrabbleSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage === 'over') return
+
+    // Find first priority: any bot that can challenge
+    let botToRun: string | null = null
+    if (ps.lastPlacement !== null && ps.lastPlacement.challengeable) {
+      for (const botId of ps.turn.playerOrder) {
+        if (scrabbleBotSeatsRef.current.has(botId) &&
+            botId !== ps.lastPlacement.by) {
+          botToRun = botId
+          break
+        }
+      }
+    }
+
+    // Second priority: current player's turn
+    if (!botToRun) {
+      const currentId = currentPlayer(ps.turn)
+      if (scrabbleBotSeatsRef.current.has(currentId)) {
+        botToRun = currentId
+      }
+    }
+
+    if (!botToRun) return
+
+    scrabbleBotBusyRef.current = true
+    const key = scrabbleActorKey(session)
+    try {
+      await runScrabbleBot(botToRun, key)
+    } finally {
+      scrabbleBotBusyRef.current = false
+      setTimeout(() => runScrabbleBotsIfNeeded(), 50)
+    }
+  }
+
+  function startScrabbleGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<ScrabbleView, ScrabbleAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setScrabbleView(view)
+          setScrabbleStarted(false)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setScrabbleView(view)
+        setScrabbleStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setScrabbleConnection('connected')
+      },
+      onDisconnected() {
+        setScrabbleConnection('disconnected')
+      },
+    })
+    scrabbleGuestRef.current = handle
+    setScrabbleRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('scrabble')
+    setScrabbleCode(code)
+    handle.peerId.then((id) => { setScrabbleLocalPlayerId(id); scrabbleLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function scrabbleDispatch(action: ScrabbleAction) {
+    if (scrabbleRole === 'host' && scrabbleLocalPlayerId) {
+      const session = scrabbleSessionRef.current
+      if (!session) return
+      const result = applyScrabbleAction(session, scrabbleLocalPlayerId, action, scrabbleDictionaryRef.current)
+      if (!result.outcome.ok) return
+      scrabbleSessionRef.current = result.session
+      scrabbleBroadcast()
+      runScrabbleBotsIfNeeded()
+    } else if (scrabbleRole === 'guest') {
+      scrabbleGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function scrabbleRematch() {
+    if (scrabbleRole !== 'host' || !scrabbleSessionRef.current) return
+    const ps = scrabbleSessionRef.current.session.publicState
+    if (ps.stage !== 'over' || ps.winnerId === null) return
+    const prevRevision = scrabbleSessionRef.current.session.revision
+    const playerIds = [...ps.turn.playerOrder]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createScrabbleGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    scrabbleSessionRef.current = next
+    scrabbleBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 7) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    scrabbleBroadcast()
   }
 
   // ---- End Skip-Bo helpers ----
@@ -3671,7 +4007,7 @@ export default function App() {
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
   // Checkers, Mexican Train, Chess, Uno, and Skip-Bo are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole) {
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !scrabbleRole) {
     return (
       <Landing
         name={name}
@@ -3690,6 +4026,7 @@ export default function App() {
           else if (code.startsWith('CH-')) startChessGuest(code)
           else if (code.startsWith('UN-')) startUnoGuest(code)
           else if (code.startsWith('SB-')) startSkipBoGuest(code)
+          else if (code.startsWith('SCR-')) startScrabbleGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -3703,6 +4040,7 @@ export default function App() {
         onPickChess={startChessHost}
         onPickUno={startUnoHost}
         onPickSkipBo={startSkipBoHost}
+        onPickScrabble={startScrabbleHost}
         error={error}
       />
     )
@@ -4517,6 +4855,74 @@ export default function App() {
         onPlayDiscard={(pileIndex, buildPileIndex) => skipBoDispatch({ type: 'PLAY_DISCARD', pileIndex, buildPileIndex })}
         onDiscard={(cardId, pileIndex) => skipBoDispatch({ type: 'DISCARD', cardId, pileIndex })}
         onPass={() => skipBoDispatch({ type: 'PASS' })}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Scrabble lobby
+  if (scrabbleRole && !scrabbleStarted) {
+    const roster = scrabbleRole === 'host'
+      ? scrabbleSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === scrabbleLocalPlayerId }))
+      : (scrabbleView?.kind === 'lobby' ? scrabbleView.roster : [])
+    return (
+      <ScrabbleRoom
+        code={scrabbleCode}
+        localName={name}
+        isHost={scrabbleRole === 'host'}
+        seats={roster}
+        notice={scrabbleNotice ?? error}
+        onAddHouseBot={addScrabbleHouseBot}
+        onStartGame={scrabbleStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Scrabble results
+  if (scrabbleView?.kind === 'game' && scrabbleView.publicState.stage === 'over') {
+    const scrabbleOpponentNames = Object.fromEntries(
+      scrabbleView.publicState.turn.playerOrder
+        .filter((id) => id !== scrabbleLocalPlayerId)
+        .map((id) => [id, scrabbleView.names[id] ?? id])
+    )
+    return (
+      <ScrabbleResults
+        localPlayerId={scrabbleLocalPlayerId ?? ''}
+        localName={name}
+        publicState={scrabbleView.publicState}
+        opponentNames={scrabbleOpponentNames}
+        isHost={scrabbleRole === 'host'}
+        notice={scrabbleNotice ?? error}
+        onRematch={scrabbleRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Scrabble table (active game)
+  if (scrabbleView?.kind === 'game' && scrabbleView.publicState.stage === 'play' && scrabbleLocalPlayerId) {
+    const scrabbleColors = Object.fromEntries(scrabbleView.publicState.turn.playerOrder.map((id, i) => [id, SCRABBLE_SEAT_INKS[i]]))
+    const scrabbleOpponentNames = Object.fromEntries(
+      scrabbleView.publicState.turn.playerOrder
+        .filter((id) => id !== scrabbleLocalPlayerId)
+        .map((id) => [id, scrabbleView.names[id] ?? id])
+    )
+    return (
+      <ScrabbleTable
+        code={scrabbleCode}
+        localPlayerId={scrabbleLocalPlayerId}
+        localName={name}
+        publicState={scrabbleView.publicState}
+        myRack={scrabbleView.rack}
+        connection={scrabbleConnection}
+        notice={scrabbleNotice ?? error}
+        opponentNames={scrabbleOpponentNames}
+        opponentColors={scrabbleColors}
+        onPlaceWord={(tiles) => scrabbleDispatch({ type: 'PLACE_WORD', tiles })}
+        onExchange={(tileIds) => scrabbleDispatch({ type: 'EXCHANGE_TILES', tileIds })}
+        onPass={() => scrabbleDispatch({ type: 'PASS' })}
+        onChallenge={() => scrabbleDispatch({ type: 'CHALLENGE' })}
         onLeave={resetToEntry}
       />
     )

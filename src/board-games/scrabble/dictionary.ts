@@ -13,7 +13,7 @@ function deserializeDAWG(data: Array<Record<string, number | boolean>>): DAWGNod
 }
 
 export async function loadDictionary(): Promise<ScrabbleDictionary> {
-  const response = await fetch('/dictionary/enable1.dawg.json')
+  const response = await fetch(`${import.meta.env.BASE_URL}dictionary/enable1.dawg.json`)
   if (!response.ok) {
     throw new Error(`Failed to load dictionary: ${response.statusText}`)
   }

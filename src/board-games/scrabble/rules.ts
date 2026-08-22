@@ -108,6 +108,28 @@ function extractWords(
     }
   }
 
+  // Note on duplicate prevention: A previous iteration added dedup logic here, but it was
+  // unnecessary. Duplicate word extraction (same board position set) cannot occur given the
+  // structure of extractWords:
+  //
+  // For horizontal placements (single row):
+  //   - Main word: extracted once, horizontally
+  //   - Cross-words: for each tile at unique column, check for vertical neighbors
+  //   - Since tiles occupy different columns, each cross-word is at a different column
+  //   - Main word and cross-words are geometrically distinct (horizontal vs vertical)
+  //
+  // For vertical placements (single column):
+  //   - Main word: extracted once, vertically
+  //   - Cross-words: for each tile at unique row, check for horizontal neighbors
+  //   - Since tiles occupy different rows, each cross-word is at a different row
+  //   - Main word and cross-words are geometrically distinct (vertical vs horizontal)
+  //
+  // extractLineWord processes each cell in its span exactly once, so no cell is duplicated
+  // within a single extraction. The only way to get position-identical words would be to
+  // extract the exact same cell range twice via different code paths, which the above
+  // analysis shows cannot happen. Per CLAUDE.md, defensive code for impossible conditions
+  // is removed.
+
   return words
 }
 

@@ -3636,3 +3636,222 @@ shipping each verified charter promptly.
   browser match finally becomes verifiable, including the mandatory
   bot-pacing-at-capacity check this charter's Definition of Done
   requires.
+
+## Cycle 24 — 2026-08-22 — spec 49 (Scrabble wiring) implemented, live browser check finds a game-breaking bug
+- **Independent re-verification of the implementer's report**: tsc
+  clean, 1127/1127 tests, build clean. Read the highest-risk wiring
+  code directly (not just the report): `scrabbleBroadcast`'s private
+  per-seat `sendTo` delivery is correct (mirrors `skipBoBroadcast`
+  exactly, bots correctly skipped), the challenge-first bot scheduler
+  in `runScrabbleBotsIfNeeded` correctly scans ALL bot seats for
+  challenge eligibility before falling back to the current-turn bot
+  (matches spec 49's locked departure from Skip-Bo's turn-only model),
+  dictionary loading is fire-and-forget on host start and properly
+  awaited before `scrabbleStart()` creates the session, route/Landing/
+  reset-cleanup all correctly wired.
+- **Found one real bug by direct code reading before the live check**:
+  the Results-screen routing condition required `winnerId` truthy,
+  which would leave a tied game (a real, spec-47-locked outcome) on a
+  blank screen — `ScrabbleResults.tsx` itself already handled the tie
+  case correctly, the bug was purely a stray extra clause in the
+  App.tsx routing condition, not present in spec 49's own text. Fixed
+  and re-verified in one scoped round before the live check.
+- **The live browser check (this project's mandatory bar for any
+  UI/wiring spec) then found the single most severe bug of this
+  entire charter**: Scrabble is completely unplayable. Root-caused via
+  live instrumentation (a temporary console.log added, exercised
+  through an actual Chromium session driven by a Playwright script the
+  lead wrote in an isolated scratch directory since this sandbox has
+  no `chromium-cli`/project run-skill, reverted immediately after
+  diagnosis): `App.tsx`'s composite "show the Landing shelf" guard
+  (`if (!room && !rummyRole && ... && !skipBoRole) { ... }`) lists
+  every OTHER game's role state in its negation chain but never got
+  `!scrabbleRole` added — so clicking the Scrabble tile correctly ran
+  `startScrabbleHost()` (confirmed: state updated, a real PeerJS
+  connection attempt fired with the right `pips-scr-...` id) but the
+  app never navigated away from Landing, because this guard intercepts
+  and returns Landing first, before the render function ever reaches
+  Scrabble's own screen-switch block further down the file.
+- **Also confirmed, ruling out a false lead**: this sandboxed
+  environment cannot reach PeerJS's cloud signaling server at all
+  (`wss://0.peerjs.com` connections fail through the proxy) — verified
+  this is a pre-existing, universal environment constraint affecting
+  EVERY game equally (Skip-Bo hits an identical WebSocket failure) and
+  NOT a regression; Skip-Bo's Room still renders and is fully usable
+  locally (bots need no network) under that exact same failure,
+  which is exactly what first exposed that Scrabble's Room, unlike
+  every sibling's, was silently never rendering at all.
+- **Dispatched** a 2-spot fix (add the missing `!scrabbleRole` clause;
+  also cleaned up a fabricated "per CHARTER.md resolution #7" code
+  comment citing a resolution number that doesn't exist anywhere in
+  this charter). In flight.
+- **Lesson for future cycles, feeding forward per the review
+  protocol**: a "no live browser access" honest report from an
+  implementer is not a substitute for the lead's own live check when
+  the harness genuinely has one available (Chromium is pre-installed
+  in this environment) — this exact bug (the app silently never
+  leaving the shelf screen) would have been invisible to tsc/test/
+  build and to a code read that didn't specifically trace the
+  composite Landing guard's full boolean chain against the newest
+  game's name. Add "grep every composite multi-game guard for the new
+  game's role variable" as a standing probe for any future game's
+  wiring review in this codebase, not just this charter.
+- **Continue?** Yes. Next: independently re-verify the fix (including
+  re-running the SAME live browser sequence that found the bug, to
+  confirm the Room actually renders now — not just tsc/test/build),
+  then a full live playthrough per spec 49's mandatory verification
+  bar (deal intro once, private racks, blank-tile placement, bot
+  pacing at 4 seats, a challenge, reaching Results), then land M2 —
+  the final milestone of this charter.
+
+## Cycle 24 (cont.) — landing-guard fix verified, live check finds a SECOND real bug
+- **Landing-guard fix independently re-verified**: tsc/test(1127)/build
+  clean, confirmed the exact `!scrabbleRole` clause landed. Redid the
+  live browser sequence: Scrabble's Room lobby now genuinely renders
+  (screenshot confirms code chip, house-bot seat, working Start
+  button) — the game-breaking bug is real and really fixed.
+- **Continuing the live playthrough immediately surfaced a second,
+  independent real bug**: clicking "Start game" produced "Failed to
+  load dictionary. Please try again." — traced to
+  `src/board-games/scrabble/dictionary.ts` (a spec-47 engine file,
+  landed earlier in this charter): `loadDictionary()` hardcoded an
+  absolute `fetch('/dictionary/enable1.dawg.json')`, but this repo's
+  `vite.config.ts` sets `base: '/pips/'` (a GitHub Pages project
+  site) — confirmed by direct curl: root path 404s, `/pips/`-prefixed
+  path 200s. This would have blocked every real game start in both
+  dev and the actual deployed site, not just this sandbox — a genuine
+  gap the earlier engine review (round 1/2/3 of spec 47, all
+  vitest-level) had no way to catch, since none of those tests ever
+  exercised a real browser `fetch()` against the configured base path.
+- **Dispatched** the idiomatic Vite fix
+  (`import.meta.env.BASE_URL` instead of a hardcoded root path),
+  scoped to the one file. In flight.
+- **Lesson for future cycles**: this is the second bug in a row this
+  cycle that only a live browser check could have caught — vitest-
+  level engine tests and a code read both missed it because neither
+  ever constructs a real same-origin `fetch()` against the app's
+  actual configured base path. Any future spec touching a `fetch()`/
+  asset-loading call in this codebase should get an explicit live
+  check of the resulting URL against the dev server, not just a
+  passing unit test with a mocked/stubbed fetch.
+- **Continue?** Yes. Next: re-verify this fix (tsc/test/build + the
+  curl check + redo the live start-game sequence), then continue the
+  full mandatory playthrough (deal intro, blank tile, 4-seat bot
+  pacing, a challenge, Results) before landing M2.
+
+## Cycle 24 (cont.) — dictionary fix verified, full live playthrough
+- **Dictionary fetch fix independently re-verified**: tsc/test(1127)/
+  build clean, confirmed the `import.meta.env.BASE_URL` fix landed,
+  confirmed via curl that the dictionary asset now resolves under the
+  correct `/pips/` base.
+- **Full live playthrough via a Playwright driver script the lead
+  wrote in an isolated scratch dir** (this sandbox has neither
+  `chromium-cli` nor a project run-skill; used a self-contained
+  `playwright-core` script against the pre-installed Chromium instead,
+  never touching the repo's own dependencies):
+  - 2-seat host+1-bot game: deal intro fired exactly once (~1.8s,
+    reasonable), rack showed the correct 7 tiles, tile selection and
+    board placement worked, an invalid 1-tile first placement was
+    correctly REJECTED by the host (real Scrabble rule: first move
+    needs 2+ tiles covering center) with the UI silently reverting the
+    staged tile — confirms the validator is genuinely wired end to
+    end, not just accepting anything. A real 2-tile placement ("VE"
+    for 10) was accepted, scored correctly, and the bot responded in
+    ~1.2s with its own real placement, all reflected correctly in the
+    status line.
+  - 4-seat host+3-bots game (the CLAUDE.md-mandated maxed-table pacing
+    check): host passed immediately to isolate bot-vs-bot timing;
+    measured real wall-clock gaps between 5 consecutive bot actions:
+    831ms, 940ms, 949ms, 1050ms, 936ms — all comfortably matching the
+    intended ~900ms `BASE_MS` per-action pacing, no stacked/instant
+    actions even with 3 bots going consecutively between the host's
+    own turns. This is the specific scenario CLAUDE.md's pacing
+    section calls out as the one that actually matters ("more bots
+    means more consecutive fast actions... judge against a full
+    table") — confirmed correct, not just asserted.
+- **One live-observed anomaly, not yet resolved**: the same 4-seat
+  run's status line reported `"They played HID for 11 (+ GAGAH for
+  10, GAGAH for 10)."` — the identical cross-word text and score
+  appearing twice for one placement. If `extractWords()` genuinely
+  extracts the same word span twice, `scoreWords()` would double-count
+  its points — a real scoring-inflation bug, not cosmetic. Dispatched
+  a proper investigation (reproduce first per the evidence-over-
+  assertion standard, root-cause if real, fix + regression test; or a
+  reasoned "couldn't reproduce, here's why" if it turns out to be
+  something else) rather than assuming or dismissing it. In flight.
+- **Continue?** Yes, this is the last open item before M2 can land.
+  Blank-tile UI and the challenge/results paths were verified via
+  direct code reading (already-landed screens code, confirmed correct
+  in the spec-48 review round) rather than a forced live repro of a
+  specific random tile draw / engineered challenge scenario — noting
+  this honestly as a live-verification gap rather than claiming a
+  check that wasn't actually performed with a real random deal.
+
+## Cycle 24 (cont.) — first duplicate-word fix round rejected, not accepted as-is
+- **Independent review of the round-1 duplicate-word investigation
+  found it insufficient, not landed**: the implementer added a
+  position-based dedup to `extractWords` but its own report admitted
+  "I couldn't isolate the exact game-state scenario that triggered
+  this" — meaning the fix was never actually proven to address a real
+  bug. Worse, the "regression test" it wrote is vacuous: gated behind
+  `if (outcome.ok) { if (words.length > 0) { assertions } }` built on
+  6 RNG-driven `PASS` actions and random rack draws, so if that
+  particular random scenario doesn't happen to produce cross-words at
+  all, every assertion is silently skipped and the test passes having
+  verified nothing. This is exactly the "credited a vacuous test as
+  proof" failure mode this loop's own protocol warns the lead to
+  watch for at every "declare done" moment, and defensive code added
+  without confirming the guarded-against condition can occur is a
+  CLAUDE.md violation in its own right, not just an incomplete
+  verification.
+- **The lead's own re-derivation of `extractWords`'s geometry** (main-
+  word span vs. each newly-placed tile's independent perpendicular
+  cross-word span) could not find a mechanism producing genuinely
+  identical board positions from two different code paths — strongly
+  suggesting the real live observation ("GAGAH for 10" twice) was
+  more likely two textually-identical but geometrically DISTINCT
+  words (correct, not a bug) rather than a true duplicate extraction.
+  This is a hypothesis, not proof — re-dispatched for a deterministic,
+  hand-built-board reproduction attempt rather than accepting either
+  the lead's own reasoning or the implementer's unverified fix at
+  face value.
+- **Dispatched round 2**: construct a deterministic (not RNG-driven)
+  board fixture specifically designed to try to trigger a same-
+  position duplicate; if it succeeds, keep the dedup with a REAL
+  regression test; if a genuine attempt fails, remove the unverified
+  defensive code and the vacuous test per CLAUDE.md, replacing with an
+  explanatory comment. In flight.
+- **Continue?** Yes — this is the last open question before M2 lands.
+  Not accepting "added a plausible-sounding fix" as sufficient without
+  actual proof, consistent with every prior review round this charter.
+
+## Cycle 24 (landed) — spec 49 (Scrabble wiring) lands, charter complete
+- **Round-2 duplicate-word investigation independently re-verified**:
+  read the actual diff (dedup logic replaced with a 21-line geometric
+  proof comment explaining why same-position duplicate extraction
+  cannot occur), confirmed the empirical check (dedup removed, full
+  suite re-run, all 1128 tests green — meaning no real test, including
+  gameplay-driven ones, ever needed it). tsc clean, build clean.
+  Accepted — this is a properly resolved "not a bug" outcome, not a
+  shortcut: two rounds of real investigation, the first rejected for
+  being unverified, the second landing on solid reasoning plus
+  empirical confirmation.
+- **Landed**: `src/App.tsx`, `src/screens/Landing.tsx`,
+  `src/state/route.ts`, `README.md` (spec 49 wiring) plus two engine-
+  file fixes surfaced by M2's own live verification —
+  `src/board-games/scrabble/dictionary.ts` (base-path fetch fix) and
+  `src/board-games/scrabble/rules.ts` (the duplicate-word
+  investigation's net-negative diff: removed unverified code) —
+  committed as one slice on `claude/scrabble-engine-loop`. Not pushed.
+- **Charter complete.** All three milestones (engine, screens, wiring)
+  landed and independently verified, the last one via a real live
+  browser playthrough the lead drove personally after discovering this
+  environment had no existing driver for it. This charter's single
+  biggest lesson, worth carrying into every future UI/wiring spec in
+  this codebase: **tsc + tests + a code read were not enough to catch
+  either of M2's two most severe bugs** (the unplayable-game routing
+  gap, the dictionary base-path 404) — both were only visible once the
+  app actually ran in a real browser against its real configured
+  environment. Budget real live verification time into any future
+  spec that touches routing, asset loading, or cross-game shared
+  guards, not just the games' own new code paths.
