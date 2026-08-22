@@ -5,10 +5,13 @@ account, no sign-in, nothing to install. Each game lives at its own
 URL (`/pips/<game>`) — refresh lands you on that game's fresh room,
 and Back returns to the shelf.
 
-Sixteen games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
+Seventeen games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
 **Rummy**, **Phase 10**, **Battleship**, **Dominoes**, **Wahoo**, **Checkers**,
-**Mexican Train**, **Chess**, **Uno**, **Skip-Bo**, and **Solitaire** (Klondike or FreeCell). Farkle and Yahtzee seat up to 8, Wahoo seats 2–4,
-Rummy seats 2–4, Phase 10 seats 2–6, Mexican Train seats 2–8, Uno seats 2–6, Skip-Bo seats 2–4, and Solitaire is one player; the rest are two-player (for now).
+**Mexican Train**, **Chess**, **Uno**, **Skip-Bo**, **Solitaire** (Klondike or FreeCell),
+and **Scrabble**. Farkle and Yahtzee seat up to 8, Wahoo seats 2–4,
+Rummy seats 2–4, Phase 10 seats 2–6, Mexican Train seats 2–8, Uno seats 2–6, Skip-Bo
+seats 2–4, Solitaire is one player, and Scrabble seats 2–4; the rest are two-player
+(for now).
 Every game can be played solo against house bots.
 
 Rummy and Phase 10 are built on a reusable card-game engine (`src/card-engine/`),

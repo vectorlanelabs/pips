@@ -1,8 +1,119 @@
 # Roadmap
 
-Charter: Solitaire — see `CHARTER.md`.
+Charter: Scrabble — see `CHARTER.md`.
 
-## Charter: Solitaire (2026-08-21) — done (awaiting "push")
+## Charter: Scrabble (2026-08-22) — done
+
+**Charter complete.** Scrabble is a real, playable 2-4 player game end
+to end — engine, screens, and wiring all landed, following this
+codebase's established conventions throughout (Skip-Bo's N-seat lobby/
+broadcast/bot-loop shape, Dominoes' select-then-confirm interaction
+language, Chess's inert forced-choice overlay pattern) with every
+deliberate departure (the challenge-mechanic bot scheduler, the
+dictionary-loading lifecycle) explicitly locked in a spec first, not
+improvised. Uncommitted to `main`/`origin` — pending the user's
+explicit "push" per this project's standing git workflow.
+- [x] M0 — engine (spec 47): dictionary generator + real ENABLE1
+      DAWG asset (168,551 words, 362.2 KB gzipped), board.ts premium
+      layout, state/rules/bot. 1127 tests / tsc / build green.
+      Implementer: Haiku (deepseek unavailable in this session, its
+      documented fallback used from cycle 1). Review: the lead,
+      personally, fallback adversarial persona (no ai-grouch-claude
+      installed) — genuinely adversarial across 2 rounds, not a
+      rubber stamp: round 1 live-reproduced 2 blocking bugs
+      (EXCHANGE_TILES silently destroying a tile every use;
+      a successful CHALLENGE ballooning the placer's rack past
+      RACK_SIZE) plus 2 majors (per-word scores hardcoded to 0;
+      missing/vacuous required tests) the implementer's own "all
+      green" report had missed entirely. Round 2's fix for the
+      rack-ballooning bug introduced a NEW bug (publicState.bagCount
+      left stale after a successful challenge, caught only because
+      the lead's repro checked the actual public field rather than
+      the internal session state) — fixed in a third scoped round.
+      One nit (dead branch in dictionary.ts's isWord) confirmed
+      genuinely unreachable-by-design against all 52,928 real DAWG
+      nodes and rejected rather than fixed, same disposition class as
+      Skip-Bo's precedent. The real dictionary asset itself was built
+      by the lead directly (not delegated) after the implementer's
+      sandbox turned out to have no network access — fetched ENABLE1
+      from a public mirror, vendored it, ran the already-written
+      generator script.
+- [x] M1 — screens (spec 48): ScrabbleRoom (SkipBoRoom mirror),
+      ScrabbleTable (board/rack/staged-placement flow, blank-tile A-Z
+      overlay, opponent rail, status block), ScrabbleResults (handles
+      the tied-winner case no sibling needs), ScrabbleRulesOverlay,
+      ScrabbleTileBack. Brand color `#8b6e47` (grepped existing
+      colors first, picked an unused warm-brown "paper/wood board"
+      tone). 1127 tests (unchanged, screens get no dedicated tests
+      here) / tsc / build green. Review (lead, personally): 2 rounds.
+      Round 1 found 2 blocking bugs the implementer's own "all green"
+      report missed — the deal-intro shuffle animation replaying on
+      EVERY turn (keyed off `turnNumber`, which increments every move,
+      not once at game start; a severe violation of CLAUDE.md's
+      mandatory bot-pacing top-priority rule) and the Table screen's
+      Rules button being a dead no-op despite `ScrabbleRulesOverlay`
+      existing and being correctly wired in Room — plus a major
+      (opponent names/colors had no props to receive them at all,
+      making 3-4 player games visually indistinguishable) and a minor
+      (duplicate score display). All 4 fixed and independently
+      re-verified by reading the actual diff, not trusting the report.
+      No live browser check possible yet (not wired into App.tsx) —
+      the wiring spec is where that finally happens.
+- [x] M2 — wiring (spec 49): App.tsx lobby/broadcast/bot-per-seat,
+      Landing.tsx shelf tile, route.ts, README. One genuine departure
+      from Skip-Bo's bot-loop shape (locked in the spec): CHALLENGE
+      isn't turn-gated, so the bot scheduler scans all bot seats for
+      challenge eligibility each tick rather than only waking the
+      current-turn bot. Host-only async dictionary loading, awaited
+      before game start. 1128 tests (1127+1, a kept deterministic
+      geometry test from the duplicate-word investigation below) /
+      tsc / build green. Review (lead, personally, highest risk tier
+      of the charter — host-authoritative state + private-rack
+      delivery + real bot scheduling): found and fixed, across several
+      rounds, the most consequential defects of this entire charter,
+      all via a live browser check the implementer's own sandbox
+      couldn't perform (no chromium-cli/project run-skill existed
+      here, so the lead wrote a self-contained Playwright driver in
+      an isolated scratch dir against this environment's pre-installed
+      Chromium):
+      1. A tie-routing bug (Results screen required `winnerId`
+         truthy, blanking out on a real tied-game outcome) — caught by
+         direct code reading before the live check even started.
+      2. **Scrabble was completely unplayable**: the composite
+         "show Landing" guard in App.tsx enumerated every other game's
+         role flag but never got `!scrabbleRole` added, so the app
+         silently never left the shelf screen no matter what state
+         Scrabble's own wiring set — invisible to tsc/test/build and
+         to a code read that didn't specifically trace that one
+         guard's full boolean chain against the newest game.
+      3. The dictionary asset fetch hardcoded an absolute root path,
+         ignoring this site's configured `/pips/` Vite base — would
+         have 404'd in the real deployed site too, not just this
+         sandbox; fixed to use `import.meta.env.BASE_URL`.
+      4. A live-observed scoring anomaly (a cross-word appearing twice
+         in one placement's summary) got a proper multi-round
+         investigation rather than a quick patch: round 1's fix
+         (unverified defensive dedup + a vacuous RNG-gated test) was
+         REJECTED on independent review and sent back; round 2
+         constructed a deterministic reproduction attempt, found no
+         mechanism could produce a genuine same-position duplicate,
+         and correctly removed the unverified dedup per CLAUDE.md's
+         "no defensive code for conditions that can't occur" rather
+         than keeping a fix that was never actually proven necessary.
+      Full live playthrough otherwise confirmed correct: deal intro
+      fires exactly once, a 2-tile first placement scores and turn-
+      advances correctly, the host correctly rejects an invalid
+      1-tile first move, and — the CLAUDE.md-mandated pacing check —
+      real wall-clock gaps between 5 consecutive bot actions at a
+      maxed 4-seat table measured 831-1050ms, matching the intended
+      ~900ms per-action pacing with no stacked/instant actions.
+      Blank-tile popup and the challenge/results paths were verified
+      via direct code reading (already reviewed correct in the spec-
+      48 round) rather than a forced live repro of a random blank-
+      tile draw or an engineered challenge — noted honestly as a
+      live-verification gap, not claimed as performed.
+
+## Charter: Solitaire (2026-08-21) — done
 - [x] Spec 47 — rules engine: `src/card-games/solitaire/` (state.ts,
       shared.ts, klondike.ts, freecell.ts + tests). Both modes' deal,
       move validation, auto-flip, stock/waste recycle, supermove cap,
@@ -28,7 +139,10 @@ Charter: Solitaire — see `CHARTER.md`.
       recorded in DEVLOG Cycle 25 (DealIntro's "You · 7/8" pile label,
       results screen not reachable in a live session without winning a
       deal).
-- [ ] Push: merge `solitaire` → `main` on the user's "push".
+- [x] Pushed to `main` together with the Scrabble charter (both were
+      awaiting "push"; the user authorized it once, covering both).
+
+## Charter: Skip-Bo (2026-08-17) — done, see below
 
 ## Charter: Skip-Bo (2026-08-17) — done
 - [x] Card-engine module (spec 40): deck.ts (162-card deck), state.ts,

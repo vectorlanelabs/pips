@@ -66,7 +66,13 @@
 - [x] 2026-08-15, Uno charter — commit the charter: done, pushed
       (verified: full Uno commit sequence on `main`, HEAD == origin/main).
 
-- [ ] 2026-08-21, Solitaire charter — non-blocking — DONE on branch
-      `solitaire` (4 commits: engine, screens, wiring, docs), verified
-      live in both modes. Say "push" to merge into `main`, push, and
-      prune the branch. Nothing else is waiting on you.
+- [x] 2026-08-21, Solitaire charter — done, already merged to
+      `origin/main` (confirmed present in the fetch ahead of the
+      Scrabble merge below).
+- [x] 2026-08-22, Scrabble charter wrap-up — done: all three
+      milestones (engine spec 47, screens spec 48, wiring spec 49)
+      verified in the tree on `claude/scrabble-engine-loop` (1128
+      tests / tsc / build green throughout, live browser match-
+      verified including the mandatory 4-seat bot-pacing check), user
+      said "push" — merged into `main` and pushed to `origin`. Branch/
+      worktree intentionally NOT pruned yet per explicit instruction.

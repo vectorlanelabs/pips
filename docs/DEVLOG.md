@@ -3559,3 +3559,491 @@ shipping each verified charter promptly.
 - **Continue?** No — wrap-up. Safety-net cron cancelled. Branch
   `solitaire` is clean and ready; merge/push waits for the word
   "push" (REQUESTS.md).
+
+## Cycle 22 — 2026-08-22 — Scrabble charter opened, spec 47 dispatched
+- **Setup**: isolated git worktree (`.claude/worktrees/scrabble-engine`,
+  branch `claude/scrabble-engine-loop`, based off
+  `claude/scrabble-viability-0v9r1x` which already carries the
+  committed `specs/47-scrabble-engine.md`) so this run doesn't disturb
+  any other in-progress work in the primary checkout, per explicit user
+  instruction. `CHARTER.md` rewritten for Scrabble (directed mode,
+  pre-approved at invocation); `ROADMAP.md` given a new in-progress
+  Scrabble section (M0 engine / M1 screens / M2 wiring) above the
+  now-`done` Skip-Bo history.
+- **Model routing note**: this session's Agent tool does not offer
+  "deepseek" as an option (sonnet/opus/haiku/fable only) — falling
+  back to Haiku as implementer from cycle 1, per this skill's own
+  documented fallback rule, not as a later degradation. No
+  `ai-grouch-claude`/companion skills installed in this environment —
+  reviewing personally under the fallback persona in
+  `references/review.md`.
+- **Dispatched**: spec 47 (dictionary generator, board.ts, state.ts,
+  rules.ts, bot.ts + tests) to a Haiku implementer as one slice,
+  matching Skip-Bo's precedent of landing its equivalent engine spec
+  (40) as a single delegation. Full delegation contract given: design
+  decisions locked (spec 47 itself), exact file ownership, do-NOT list
+  (no new runtime deps, no git, no touching other files, dictionary
+  must stay lazily-loaded not bundle-wide), required tests per spec
+  47's own "Verify before reporting" list, exact tsc/test/build verify
+  commands.
+- **Continue?** Yes — cycle in flight. Next: independently re-run
+  tsc/test/build myself (never trust the implementer's report), read
+  the diff line by line, run the adversarial review pass (challenge-
+  mechanic rollback correctness and dictionary-asset wire-safety are
+  the highest-risk surfaces in this spec), then land as one commit on
+  `claude/scrabble-engine-loop` — NOT pushed without explicit user
+  "push", per this project's `CLAUDE.md`.
+
+## Cycle 22 (cont.) — independent verification + adversarial review
+- **Independent re-run** (never trusted the implementer's "all green"
+  report): tsc clean, `npm test -- --run` genuinely 1118/1118 passing,
+  build clean. Reverted an unrelated `package-lock.json` diff (npm
+  metadata reformat, no real dependency change) the implementer left
+  behind outside its file ownership.
+- **Real dictionary gap closed by the lead, not delegated**: the
+  implementer shipped a ~30-node stub dictionary (a handful of test
+  words) because its sandbox had no network access — flagged honestly
+  in its own report rather than hidden. The lead's own Bash tool DOES
+  have network access via this environment's proxy; fetched the real
+  ENABLE1 list (172,823 words) from a public mirror, vendored it as
+  `scripts/enable1.txt`, and ran the already-written
+  `scripts/build-dictionary.ts` directly. Real output: 168,551 valid
+  Scrabble words, 52,928 DAWG nodes, **362.2 KB gzipped** — comfortably
+  inside spec 47's 300-800KB estimate. `public/dictionary/
+  enable1.dawg.json` now holds the real dictionary, not a stub.
+- **Adversarial review (lead, fallback persona — no ai-grouch-claude
+  installed)**: read `rules.ts`/`dictionary.ts` in full. Found and
+  LIVE-REPRODUCED (via a temporary scratch test, deleted after
+  capturing the failing output — receipts below) two blocking defects
+  the implementer's own suite never caught:
+  1. **EXCHANGE_TILES destroys tiles.** `moveCards(bag, bag,
+     action.tileIds)` looks for rack tile ids inside the bag — finds
+     none, so the exchanged tiles (already removed from the rack) are
+     never returned anywhere. Repro: 100 total tiles (bag+racks)
+     before a single-tile exchange, 99 after. Permanent, compounding
+     conservation violation.
+  2. **A successful CHALLENGE balloons the placer's rack.** The
+     already-refilled-to-7 rack gets the returned tiles appended on
+     top instead of replacing the compensating draw. Repro: place 2
+     tiles (rack correctly back at 7), opponent challenges
+     successfully, rack ends at 9.
+  Plus one major (per-word `lastPlacement.words[].score` hardcoded to
+  0, only the aggregate `totalScore` was ever real — the implementer's
+  own comment admitted the stub: "for now just track it was placed")
+  and one major test-coverage gap (no `dictionary.test.ts` despite
+  spec 47 explicitly requiring it; an existing exchange-rejection test
+  didn't actually test rejection, its own comment admitted as much).
+  One nit confirmed genuinely unreachable-by-design (a dead branch in
+  `isWord`, verified against all 52,928 real DAWG nodes — zero
+  letter-keys ever carry a boolean value) — same disposition class as
+  the Skip-Bo review's accepted unreachable-branch nit, so left as-is
+  rather than delegated.
+- **Findings dispositioned**: all 4 real findings sent back to the
+  implementer as one decision-locked fix spec (exact root cause, exact
+  fix shape, exact regression test for each, per the "nothing gets
+  left behind" rule) — in flight, not yet landed. The nit is rejected
+  with reasoning per above, no fix needed.
+- **Continue?** Yes. Next: re-verify the fix cycle myself (tsc/tests/
+  build + re-run of the same reproductions to confirm they now pass),
+  confirm no new regressions, then land spec 47 as one commit on
+  `claude/scrabble-engine-loop` — still not pushed without the user's
+  explicit "push".
+
+## Cycle 22 (cont.) — fix cycle re-verified, found a NEW bug the fix introduced
+- **Independent re-run of the 4-bug fix cycle**: tsc clean, 1126/1126
+  tests (up from 1118), build clean — matches the implementer's report
+  on the numbers.
+- **Re-ran the exact same live reproductions from before the fix**
+  (not the implementer's own new tests — the lead's own scratch
+  repros, to rule out the implementer writing a test that passes
+  without actually exercising the original failure): EXCHANGE_TILES
+  conservation ✅ fixed, per-word `lastPlacement.words[].score` ✅ real
+  and sums correctly to `totalScore`, rack size after a successful
+  CHALLENGE ✅ back to exactly 7.
+- **But found a NEW bug the fix introduced**: the CHALLENGE-succeeds
+  handler correctly restores the underlying `ScrabbleSession.bag` zone
+  (verified: 84→86 after a 2-tile challenge, correct), but never
+  updates `publicState.bagCount` to match — the wire-visible field
+  clients would actually see stays stale at the pre-challenge value,
+  under-reporting the bag by the number of tiles just returned. Caught
+  only because the lead's repro checked the PUBLIC field specifically,
+  not just the internal session state (a lesson worth carrying
+  forward: verify the wire-visible field a client would actually
+  receive, not merely whatever variable happens to hold the right
+  number internally).
+- **Dispatched** a tightly-scoped one-line fix (add `bagCount:
+  cardCount(newBag)` to the challenge-succeeds branch's returned
+  publicState, mirroring how PLACE_WORD/EXCHANGE_TILES already do it)
+  plus one regression test asserting the actual public field. In
+  flight.
+- **Continue?** Yes. Next: re-verify this round the same way (re-run
+  tsc/test/build myself, re-run my own repro checking the public field
+  specifically, not just trust a new test with a passing name), then
+  land spec 47 as one commit — still not pushed without explicit user
+  "push".
+
+## Cycle 22 (landed) — spec 47 (Scrabble engine) lands
+- **Round 3 re-verified independently**: tsc clean, `npm test -- --run`
+  genuinely 51 files / 1127 tests passing, build clean. Re-ran the
+  lead's own scratch reproduction one more time, this round checking
+  the actual `publicState.bagCount` field specifically (not the
+  internal session bag) — confirmed correct: 100-tile conservation
+  holds end-to-end through a place-then-successful-challenge sequence,
+  measured entirely through public fields a client would actually see.
+- **Landed**: `scripts/build-dictionary.ts`, `scripts/enable1.txt`
+  (vendored word list), `public/dictionary/enable1.dawg.json` (real
+  168,551-word DAWG), `src/board-games/scrabble/{board,state,rules,
+  bot,dictionary}.ts` + their `.test.ts` files, committed as one
+  slice on `claude/scrabble-engine-loop`. **Not pushed** — this
+  project's `CLAUDE.md` requires the user's explicit "push" before
+  anything reaches `main`/`origin`, which overrides this skill's
+  default per-cycle push.
+- **Lesson for future cycles** (feeding forward per the review
+  protocol): when a fix touches any handler that returns a
+  `publicState` object, diff EVERY field the sibling handlers for the
+  same action-family set (PLACE_WORD/EXCHANGE_TILES both set
+  `bagCount`; the CHALLENGE handler being fixed initially didn't) —
+  don't just verify the specific bug that was reported, verify the
+  handler now sets every field its siblings set. This is exactly the
+  class of "absence defect" the review protocol's whole-codebase-audit
+  guidance warns diff-scoped review can miss; worth an explicit probe
+  in any future Scrabble-engine review round.
+- **Continue?** Yes. M0 (engine) is done and landed. Next up: M1
+  (screens) — the lead writes that spec next cycle (board rendering,
+  blank-tile popup UX already locked by the user: type the letter at
+  placement time, render it on the tile with an obviously lighter/
+  different treatment than a normal tile), reading Dominoes/Chess's
+  table screens in full first per this project's own
+  pattern-matching requirement, same as spec 47 did for the engine.
+
+## Cycle 23 — 2026-08-22 — M1 (screens) spec written and dispatched
+- **Investigation before spec** (per this loop's `understanding-
+  before-coding` step): surveyed `SkipBoRoom.tsx` (N-seat lobby
+  template — Dominoes is 2p-only, not the right lobby reference),
+  `DominoesTable.tsx`/`.css` (select-then-confirm interaction
+  language, status-block pattern, sound-trigger-on-state-diff
+  pattern), `DominoesResults.tsx`/`RulesOverlay.tsx`, `DealIntro.tsx`'s
+  real prop shape, the full registered sound-name list in
+  `useSound.ts` (34 names — none new needed for Scrabble), `TableHeader`'s
+  exact props, and confirmed there is NO existing free-text modal-input
+  pattern in this codebase — the closest precedent for the blank-tile
+  letter assignment is Chess's inert, forced-choice pawn-promotion
+  overlay, adapted to a 26-button A-Z grid rather than invented from
+  scratch.
+- **Wrote `specs/48-scrabble-screens.md`**: Room mirrors SkipBoRoom
+  exactly; Table locks a new-but-precedented select-tile→place-on-
+  cell→Play-word/Clear staging flow (multi-tile placement has no
+  direct sibling, built from Dominoes' select/target visual language);
+  blank tile letter popup per the user's explicit lock (type the
+  letter at placement time, render the assigned letter in a visibly
+  lighter weight/color than a normal tile — specified as concrete
+  font-weight/color values, not left vague); opponent rail reuses
+  SkipBo's `.sb-opp-rail`/`.sb-opp-tile` CSS verbatim under a renamed
+  prefix; Results handles a new case no sibling needs (a tied
+  `winnerId: null` final score, per spec 47's locked tie behavior).
+  One open judgment call left to the implementer: the brand
+  `gameColor`, with explicit instructions to grep existing colors and
+  pick an unused one rather than guess blind.
+- **Dispatched** to a Haiku implementer under the full delegation
+  contract (exact file ownership incl. the one narrow allowed touch to
+  `state.ts` for seat-count constants if missing, do-NOT list, no live
+  browser check possible yet since wiring is spec 49, verify commands).
+  In flight.
+- **Continue?** Yes. Next: independently re-verify (tsc/test/build,
+  read the diff — screens are exactly the kind of change where "looks
+  right" isn't enough, so a careful read of the placement-flow state
+  machine and the blank-tile overlay wiring is warranted even without
+  a live browser check available at this layer), review, land as one
+  commit, then write spec 49 (wiring) — the first point where a real
+  live-in-browser verification becomes possible for this charter.
+
+## Cycle 23 (cont.) — screens re-verified, review found real defects
+- **Independent re-run**: tsc clean, 1127/1127 tests (unchanged, as
+  expected — screens get no dedicated tests), build clean, scope
+  confirmed exactly the 6 spec'd files, no engine touch needed (seat-
+  count constants already existed).
+- **Adversarial review (lead, personally)**: read `ScrabbleTable.tsx`
+  in full — the highest-risk file (placement-staging state machine,
+  blank-tile overlay wiring). Placement/exchange/blank-overlay logic
+  itself is correct. Found 4 real defects the implementer's own report
+  didn't surface:
+  1. **[BLOCKING] Deal-intro shuffle replays every turn.** Keyed off
+     `publicState.turn.turnNumber`, which increments on every single
+     move (confirmed against `turn-engine.ts` — Scrabble has no
+     "round" concept, so this condition re-fires constantly). A
+     multi-second shuffle animation replaying after every move,
+     including every bot move at a 4-seat table, is a severe violation
+     of CLAUDE.md's mandatory "bots play at human speed" top-priority
+     rule — caught by treating that section as a required check for
+     this spec, not just tsc/test/build.
+  2. **[BLOCKING] Table's Rules button is a no-op** (`onRules={() =>
+     {}}`) — `ScrabbleRulesOverlay` is correctly wired in
+     `ScrabbleRoom.tsx` but never connected in `ScrabbleTable.tsx`, so
+     mid-game players have no way to see the rules at all, only
+     pre-game in the lobby.
+  3. **[MAJOR] No props exist for opponent display names or per-seat
+     colors** — every opponent hardcoded to the literal string
+     "Opponent" and the same single brand color, making a 3-4 player
+     game's opponents indistinguishable from each other. The props
+     interface needed to receive real identity data was simply
+     missing, which would have forced a redesign during the wiring
+     spec instead of just supplying values to already-present props.
+  4. **[MINOR] Duplicate score display** in the opponent tile (same
+     number rendered twice via two different spans).
+- **Dispatched** a scoped 4-item fix to the implementer, files limited
+  to `ScrabbleTable.tsx`/`.css` only (placement/exchange/blank-overlay
+  logic confirmed correct, explicitly told not to touch). In flight.
+- **Continue?** Yes. Next: re-verify this round the same way (tsc/
+  test/build + re-read the specific diffs, especially confirming the
+  deal-intro fix actually only fires once and not on some other
+  over-broad condition), then land M1 as one commit, then write spec
+  49 (wiring) — the point where a live-in-browser check finally
+  becomes possible and required for this charter.
+
+## Cycle 23 (landed) — spec 48 (Scrabble screens) lands
+- **Round 2 re-verified independently**: tsc clean, 1127/1127 tests,
+  build clean. Read the actual fixed code (not just the report) for
+  all 4 items: deal-intro now uses an empty-dependency-array
+  mount-only effect gated on the board actually being empty at that
+  moment (correctly handles a mid-game reload/late-join not
+  re-triggering the intro), Rules button now opens `rulesOpen` state
+  exactly mirroring Room's pattern, `opponentNames`/`opponentColors`
+  props added and used with sensible fallbacks everywhere an
+  opponent's identity renders, duplicate score span removed from both
+  the component and its CSS.
+- **Landed**: `src/screens/Scrabble{Room,Table,Results,RulesOverlay}.tsx`,
+  `ScrabbleTable.css`, `src/components/ScrabbleTileBack.tsx`, committed
+  as one slice on `claude/scrabble-engine-loop`. Not pushed.
+- **Lesson for future cycles**: this project's CLAUDE.md "bots play at
+  human speed" section is a MANDATORY check on every spec/fix touching
+  animation or pacing, not an optional nice-to-have — round 1 of this
+  screens review would have missed the deal-intro-replays-every-turn
+  bug entirely if the review had stopped at tsc/test/build passing.
+  Treat that CLAUDE.md section as a standing, explicit review probe
+  for every future UI-touching cycle in this charter, same as the
+  wire-visible-field lesson from the engine round.
+- **Continue?** Yes. M0 and M1 are both done and landed. Next: spec 49
+  (wiring — App.tsx lobby/broadcast/bot-per-seat, Landing.tsx shelf
+  tile, README). This is the point where a live 2-seat and 4-seat
+  browser match finally becomes verifiable, including the mandatory
+  bot-pacing-at-capacity check this charter's Definition of Done
+  requires.
+
+## Cycle 24 — 2026-08-22 — spec 49 (Scrabble wiring) implemented, live browser check finds a game-breaking bug
+- **Independent re-verification of the implementer's report**: tsc
+  clean, 1127/1127 tests, build clean. Read the highest-risk wiring
+  code directly (not just the report): `scrabbleBroadcast`'s private
+  per-seat `sendTo` delivery is correct (mirrors `skipBoBroadcast`
+  exactly, bots correctly skipped), the challenge-first bot scheduler
+  in `runScrabbleBotsIfNeeded` correctly scans ALL bot seats for
+  challenge eligibility before falling back to the current-turn bot
+  (matches spec 49's locked departure from Skip-Bo's turn-only model),
+  dictionary loading is fire-and-forget on host start and properly
+  awaited before `scrabbleStart()` creates the session, route/Landing/
+  reset-cleanup all correctly wired.
+- **Found one real bug by direct code reading before the live check**:
+  the Results-screen routing condition required `winnerId` truthy,
+  which would leave a tied game (a real, spec-47-locked outcome) on a
+  blank screen — `ScrabbleResults.tsx` itself already handled the tie
+  case correctly, the bug was purely a stray extra clause in the
+  App.tsx routing condition, not present in spec 49's own text. Fixed
+  and re-verified in one scoped round before the live check.
+- **The live browser check (this project's mandatory bar for any
+  UI/wiring spec) then found the single most severe bug of this
+  entire charter**: Scrabble is completely unplayable. Root-caused via
+  live instrumentation (a temporary console.log added, exercised
+  through an actual Chromium session driven by a Playwright script the
+  lead wrote in an isolated scratch directory since this sandbox has
+  no `chromium-cli`/project run-skill, reverted immediately after
+  diagnosis): `App.tsx`'s composite "show the Landing shelf" guard
+  (`if (!room && !rummyRole && ... && !skipBoRole) { ... }`) lists
+  every OTHER game's role state in its negation chain but never got
+  `!scrabbleRole` added — so clicking the Scrabble tile correctly ran
+  `startScrabbleHost()` (confirmed: state updated, a real PeerJS
+  connection attempt fired with the right `pips-scr-...` id) but the
+  app never navigated away from Landing, because this guard intercepts
+  and returns Landing first, before the render function ever reaches
+  Scrabble's own screen-switch block further down the file.
+- **Also confirmed, ruling out a false lead**: this sandboxed
+  environment cannot reach PeerJS's cloud signaling server at all
+  (`wss://0.peerjs.com` connections fail through the proxy) — verified
+  this is a pre-existing, universal environment constraint affecting
+  EVERY game equally (Skip-Bo hits an identical WebSocket failure) and
+  NOT a regression; Skip-Bo's Room still renders and is fully usable
+  locally (bots need no network) under that exact same failure,
+  which is exactly what first exposed that Scrabble's Room, unlike
+  every sibling's, was silently never rendering at all.
+- **Dispatched** a 2-spot fix (add the missing `!scrabbleRole` clause;
+  also cleaned up a fabricated "per CHARTER.md resolution #7" code
+  comment citing a resolution number that doesn't exist anywhere in
+  this charter). In flight.
+- **Lesson for future cycles, feeding forward per the review
+  protocol**: a "no live browser access" honest report from an
+  implementer is not a substitute for the lead's own live check when
+  the harness genuinely has one available (Chromium is pre-installed
+  in this environment) — this exact bug (the app silently never
+  leaving the shelf screen) would have been invisible to tsc/test/
+  build and to a code read that didn't specifically trace the
+  composite Landing guard's full boolean chain against the newest
+  game's name. Add "grep every composite multi-game guard for the new
+  game's role variable" as a standing probe for any future game's
+  wiring review in this codebase, not just this charter.
+- **Continue?** Yes. Next: independently re-verify the fix (including
+  re-running the SAME live browser sequence that found the bug, to
+  confirm the Room actually renders now — not just tsc/test/build),
+  then a full live playthrough per spec 49's mandatory verification
+  bar (deal intro once, private racks, blank-tile placement, bot
+  pacing at 4 seats, a challenge, reaching Results), then land M2 —
+  the final milestone of this charter.
+
+## Cycle 24 (cont.) — landing-guard fix verified, live check finds a SECOND real bug
+- **Landing-guard fix independently re-verified**: tsc/test(1127)/build
+  clean, confirmed the exact `!scrabbleRole` clause landed. Redid the
+  live browser sequence: Scrabble's Room lobby now genuinely renders
+  (screenshot confirms code chip, house-bot seat, working Start
+  button) — the game-breaking bug is real and really fixed.
+- **Continuing the live playthrough immediately surfaced a second,
+  independent real bug**: clicking "Start game" produced "Failed to
+  load dictionary. Please try again." — traced to
+  `src/board-games/scrabble/dictionary.ts` (a spec-47 engine file,
+  landed earlier in this charter): `loadDictionary()` hardcoded an
+  absolute `fetch('/dictionary/enable1.dawg.json')`, but this repo's
+  `vite.config.ts` sets `base: '/pips/'` (a GitHub Pages project
+  site) — confirmed by direct curl: root path 404s, `/pips/`-prefixed
+  path 200s. This would have blocked every real game start in both
+  dev and the actual deployed site, not just this sandbox — a genuine
+  gap the earlier engine review (round 1/2/3 of spec 47, all
+  vitest-level) had no way to catch, since none of those tests ever
+  exercised a real browser `fetch()` against the configured base path.
+- **Dispatched** the idiomatic Vite fix
+  (`import.meta.env.BASE_URL` instead of a hardcoded root path),
+  scoped to the one file. In flight.
+- **Lesson for future cycles**: this is the second bug in a row this
+  cycle that only a live browser check could have caught — vitest-
+  level engine tests and a code read both missed it because neither
+  ever constructs a real same-origin `fetch()` against the app's
+  actual configured base path. Any future spec touching a `fetch()`/
+  asset-loading call in this codebase should get an explicit live
+  check of the resulting URL against the dev server, not just a
+  passing unit test with a mocked/stubbed fetch.
+- **Continue?** Yes. Next: re-verify this fix (tsc/test/build + the
+  curl check + redo the live start-game sequence), then continue the
+  full mandatory playthrough (deal intro, blank tile, 4-seat bot
+  pacing, a challenge, Results) before landing M2.
+
+## Cycle 24 (cont.) — dictionary fix verified, full live playthrough
+- **Dictionary fetch fix independently re-verified**: tsc/test(1127)/
+  build clean, confirmed the `import.meta.env.BASE_URL` fix landed,
+  confirmed via curl that the dictionary asset now resolves under the
+  correct `/pips/` base.
+- **Full live playthrough via a Playwright driver script the lead
+  wrote in an isolated scratch dir** (this sandbox has neither
+  `chromium-cli` nor a project run-skill; used a self-contained
+  `playwright-core` script against the pre-installed Chromium instead,
+  never touching the repo's own dependencies):
+  - 2-seat host+1-bot game: deal intro fired exactly once (~1.8s,
+    reasonable), rack showed the correct 7 tiles, tile selection and
+    board placement worked, an invalid 1-tile first placement was
+    correctly REJECTED by the host (real Scrabble rule: first move
+    needs 2+ tiles covering center) with the UI silently reverting the
+    staged tile — confirms the validator is genuinely wired end to
+    end, not just accepting anything. A real 2-tile placement ("VE"
+    for 10) was accepted, scored correctly, and the bot responded in
+    ~1.2s with its own real placement, all reflected correctly in the
+    status line.
+  - 4-seat host+3-bots game (the CLAUDE.md-mandated maxed-table pacing
+    check): host passed immediately to isolate bot-vs-bot timing;
+    measured real wall-clock gaps between 5 consecutive bot actions:
+    831ms, 940ms, 949ms, 1050ms, 936ms — all comfortably matching the
+    intended ~900ms `BASE_MS` per-action pacing, no stacked/instant
+    actions even with 3 bots going consecutively between the host's
+    own turns. This is the specific scenario CLAUDE.md's pacing
+    section calls out as the one that actually matters ("more bots
+    means more consecutive fast actions... judge against a full
+    table") — confirmed correct, not just asserted.
+- **One live-observed anomaly, not yet resolved**: the same 4-seat
+  run's status line reported `"They played HID for 11 (+ GAGAH for
+  10, GAGAH for 10)."` — the identical cross-word text and score
+  appearing twice for one placement. If `extractWords()` genuinely
+  extracts the same word span twice, `scoreWords()` would double-count
+  its points — a real scoring-inflation bug, not cosmetic. Dispatched
+  a proper investigation (reproduce first per the evidence-over-
+  assertion standard, root-cause if real, fix + regression test; or a
+  reasoned "couldn't reproduce, here's why" if it turns out to be
+  something else) rather than assuming or dismissing it. In flight.
+- **Continue?** Yes, this is the last open item before M2 can land.
+  Blank-tile UI and the challenge/results paths were verified via
+  direct code reading (already-landed screens code, confirmed correct
+  in the spec-48 review round) rather than a forced live repro of a
+  specific random tile draw / engineered challenge scenario — noting
+  this honestly as a live-verification gap rather than claiming a
+  check that wasn't actually performed with a real random deal.
+
+## Cycle 24 (cont.) — first duplicate-word fix round rejected, not accepted as-is
+- **Independent review of the round-1 duplicate-word investigation
+  found it insufficient, not landed**: the implementer added a
+  position-based dedup to `extractWords` but its own report admitted
+  "I couldn't isolate the exact game-state scenario that triggered
+  this" — meaning the fix was never actually proven to address a real
+  bug. Worse, the "regression test" it wrote is vacuous: gated behind
+  `if (outcome.ok) { if (words.length > 0) { assertions } }` built on
+  6 RNG-driven `PASS` actions and random rack draws, so if that
+  particular random scenario doesn't happen to produce cross-words at
+  all, every assertion is silently skipped and the test passes having
+  verified nothing. This is exactly the "credited a vacuous test as
+  proof" failure mode this loop's own protocol warns the lead to
+  watch for at every "declare done" moment, and defensive code added
+  without confirming the guarded-against condition can occur is a
+  CLAUDE.md violation in its own right, not just an incomplete
+  verification.
+- **The lead's own re-derivation of `extractWords`'s geometry** (main-
+  word span vs. each newly-placed tile's independent perpendicular
+  cross-word span) could not find a mechanism producing genuinely
+  identical board positions from two different code paths — strongly
+  suggesting the real live observation ("GAGAH for 10" twice) was
+  more likely two textually-identical but geometrically DISTINCT
+  words (correct, not a bug) rather than a true duplicate extraction.
+  This is a hypothesis, not proof — re-dispatched for a deterministic,
+  hand-built-board reproduction attempt rather than accepting either
+  the lead's own reasoning or the implementer's unverified fix at
+  face value.
+- **Dispatched round 2**: construct a deterministic (not RNG-driven)
+  board fixture specifically designed to try to trigger a same-
+  position duplicate; if it succeeds, keep the dedup with a REAL
+  regression test; if a genuine attempt fails, remove the unverified
+  defensive code and the vacuous test per CLAUDE.md, replacing with an
+  explanatory comment. In flight.
+- **Continue?** Yes — this is the last open question before M2 lands.
+  Not accepting "added a plausible-sounding fix" as sufficient without
+  actual proof, consistent with every prior review round this charter.
+
+## Cycle 24 (landed) — spec 49 (Scrabble wiring) lands, charter complete
+- **Round-2 duplicate-word investigation independently re-verified**:
+  read the actual diff (dedup logic replaced with a 21-line geometric
+  proof comment explaining why same-position duplicate extraction
+  cannot occur), confirmed the empirical check (dedup removed, full
+  suite re-run, all 1128 tests green — meaning no real test, including
+  gameplay-driven ones, ever needed it). tsc clean, build clean.
+  Accepted — this is a properly resolved "not a bug" outcome, not a
+  shortcut: two rounds of real investigation, the first rejected for
+  being unverified, the second landing on solid reasoning plus
+  empirical confirmation.
+- **Landed**: `src/App.tsx`, `src/screens/Landing.tsx`,
+  `src/state/route.ts`, `README.md` (spec 49 wiring) plus two engine-
+  file fixes surfaced by M2's own live verification —
+  `src/board-games/scrabble/dictionary.ts` (base-path fetch fix) and
+  `src/board-games/scrabble/rules.ts` (the duplicate-word
+  investigation's net-negative diff: removed unverified code) —
+  committed as one slice on `claude/scrabble-engine-loop`. Not pushed.
+- **Charter complete.** All three milestones (engine, screens, wiring)
+  landed and independently verified, the last one via a real live
+  browser playthrough the lead drove personally after discovering this
+  environment had no existing driver for it. This charter's single
+  biggest lesson, worth carrying into every future UI/wiring spec in
+  this codebase: **tsc + tests + a code read were not enough to catch
+  either of M2's two most severe bugs** (the unplayable-game routing
+  gap, the dictionary base-path 404) — both were only visible once the
+  app actually ran in a real browser against its real configured
+  environment. Budget real live verification time into any future
+  spec that touches routing, asset loading, or cross-game shared
+  guards, not just the games' own new code paths.

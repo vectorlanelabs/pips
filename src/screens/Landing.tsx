@@ -2,7 +2,7 @@ import type { Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, onPickUno, onPickSkipBo, onPickSolitaire, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, onPickUno, onPickSkipBo, onPickSolitaire, onPickScrabble, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -21,6 +21,7 @@ export function Landing({
   onPickUno: () => void
   onPickSkipBo: () => void
   onPickSolitaire: () => void
+  onPickScrabble: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
@@ -46,6 +47,7 @@ export function Landing({
         { title: 'Checkers', note: '2 players', color: '#b45309', onClick: onPickCheckers },
         { title: 'Chess', note: '2 players', color: '#0891b2', onClick: onPickChess },
         { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },
+        { title: 'Scrabble', note: '2–4 players', color: '#8b6e47', onClick: onPickScrabble },
       ],
     },
     {
