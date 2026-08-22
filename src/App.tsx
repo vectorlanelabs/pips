@@ -3385,8 +3385,11 @@ export default function App() {
       if (stale(key)) return
       const holdIds = decideYahtzeeHold(state.yahtzee.dice, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
       let cur = state
-      for (const dieId of holdIds) {
-        const next = hostApply({ type: 'yahtzeeToggleHold', dieId }, seatId)
+      // yahtzeeToggleHold flips sel — only toggle dice whose CURRENT hold state disagrees with
+      // the decision, or a die correctly held from the previous roll gets un-held by mistake.
+      for (const die of cur.yahtzee.dice) {
+        if (holdIds.has(die.id) === die.sel) continue
+        const next = hostApply({ type: 'yahtzeeToggleHold', dieId: die.id }, seatId)
         if (!next) return
         cur = next
       }
