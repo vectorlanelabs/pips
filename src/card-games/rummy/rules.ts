@@ -249,7 +249,11 @@ function makeValidator(
       if (takenIds.length > 1) {
         const takenCards = pile.slice(action.index)
         const resultingHandCards = [...myHand.cards, ...takenCards]
-        if (!hasMeldIncluding(resultingHandCards, reachedCardId)) {
+        const reachedCard = takenCards.find((c) => c.id === reachedCardId)!
+        const meldableInHand = hasMeldIncluding(resultingHandCards, reachedCardId)
+        const layoffableOnTable = allMeldGroups(publicState.melds, publicState.layoffs)
+          .some((g) => classifyMeld([...g.cards, reachedCard]).valid)
+        if (!meldableInHand && !layoffableOnTable) {
           return { ok: false, reason: 'that card cannot be melded — reach for a different card, or draw just the top card instead' }
         }
       }
