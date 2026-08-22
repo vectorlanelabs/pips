@@ -26,3 +26,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local git worktrees (created ad hoc, e.g. for isolated agent sessions)
+.claude/worktrees/
