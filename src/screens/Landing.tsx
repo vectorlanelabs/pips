@@ -85,7 +85,7 @@ export function Landing({
             marginTop: 12, color: 'var(--body-text)',
           }}
           >
-            Dice, cards, pencil and paper — on your own or with a table full. Pick a game, share the code, play. No account, nothing to install.
+            Dice, board and word games, tiles, and cards, whether you're playing solo or with a table full. Pick a game, share the code, play. No account, nothing to install.
           </p>
         </div>
 
