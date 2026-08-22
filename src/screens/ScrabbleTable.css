@@ -1,0 +1,485 @@
+/* ===================================================================
+   ScrabbleTable — 15×15 board, rack, opponent rail, status
+   =================================================================== */
+
+.scr-table {
+  --scr-brand: #8b6e47;
+  --scr-dl-bg: #cfe0f5;
+  --scr-tl-bg: #e8d4f5;
+  --scr-dw-bg: #fffacd;
+  --scr-tw-bg: #f5d4d4;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Main table card ---- */
+
+.scr-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Code chip ---- */
+
+.scr-code-chip {
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Error banner ---- */
+
+.scr-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Opponent rail ---- */
+
+.scr-opp-rail {
+  --scr-opp-gap: clamp(10px, 1.6vw, 14px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--scr-opp-gap);
+  padding-bottom: clamp(12px, 2vw, 20px);
+}
+
+.scr-opp-tile {
+  flex: 1 1 260px;
+  max-width: calc((100% - 3 * var(--scr-opp-gap)) / 4);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.scr-opp-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scr-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.scr-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.scr-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Active (current player) tile is filled with the seat color */
+.scr-opp-tile--turn .scr-opp-tile-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.scr-opp-tile--turn .scr-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.scr-opp-tile-score,
+.scr-opp-tile-hand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scr-opp-tile-hand {
+  display: flex;
+  flex: none;
+}
+
+.scr-opp-tile-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+/* ---- Status block (two lines) ---- */
+
+.scr-status-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: clamp(12px, 2vw, 18px);
+}
+
+.scr-status-event {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.scr-status-prompt {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Board ---- */
+
+.scr-board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 600px;
+  max-height: 600px;
+  margin: 0 auto clamp(16px, 2vw, 24px);
+  border-radius: 12px;
+  border: 3px solid var(--ink);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+  gap: 1px;
+  background: #faf8f3;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+.scr-board-cell {
+  aspect-ratio: 1;
+  border: 1px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--muted-text);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.scr-board-cell:hover:not(.scr-board-cell--occupied) {
+  transform: scale(0.97);
+}
+
+/* Premium square backgrounds */
+
+.scr-board-cell--dl {
+  background: var(--scr-dl-bg);
+}
+
+.scr-board-cell--tl {
+  background: var(--scr-tl-bg);
+}
+
+.scr-board-cell--dw {
+  background: var(--scr-dw-bg);
+}
+
+.scr-board-cell--tw {
+  background: var(--scr-tw-bg);
+}
+
+/* Center square is DW with a star */
+.scr-board-cell--center {
+  background: var(--scr-dw-bg);
+  font-size: 24px;
+  color: var(--ink);
+}
+
+.scr-board-cell--center::after {
+  content: '★';
+}
+
+/* Empty premium squares show their label at low opacity */
+.scr-board-cell:not(.scr-board-cell--occupied) .scr-premium-label {
+  opacity: 0.4;
+}
+
+.scr-board-cell--occupied .scr-premium-label {
+  display: none;
+}
+
+/* Occupied cells hide the premium label */
+
+.scr-tile-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f5f1e8;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  margin: 1px;
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.scr-tile-face--blank {
+  font-weight: 400;
+  color: var(--muted-text);
+}
+
+.scr-tile-points {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* ---- Rack ---- */
+
+.scr-hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scr-hand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scr-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.scr-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+.scr-hand-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scr-hand-tile {
+  display: flex;
+  position: relative;
+  width: 48px;
+  height: 54px;
+  padding: 0;
+  background: #f5f1e8;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scr-hand-tile:disabled {
+  cursor: default;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.scr-hand-tile:hover:not(:disabled) {
+  transform: translateY(-4px);
+  border-color: var(--scr-brand);
+}
+
+.scr-hand-tile--selected {
+  border-color: var(--scr-brand);
+  box-shadow: 0 6px 0 var(--scr-brand);
+  transform: translateY(-8px);
+}
+
+.scr-hand-tile--blank {
+  font-weight: 400;
+  color: var(--muted-text);
+}
+
+.scr-hand-tile-points {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* ---- Actions ---- */
+
+.scr-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.scr-action-btn {
+  height: 44px;
+  padding: 0 20px;
+}
+
+.scr-action-hint {
+  font-size: 13px;
+  color: var(--muted-text);
+  font-weight: 500;
+}
+
+/* ---- Blank tile overlay ---- */
+
+.scr-blank-overlay-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(23, 23, 58, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.scr-blank-overlay-panel {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 20px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: 28px;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scr-blank-overlay-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  text-align: center;
+}
+
+.scr-blank-overlay-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.scr-blank-letter-btn {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f1e8;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ink);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+
+.scr-blank-letter-btn:hover {
+  background: var(--scr-brand);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.scr-blank-letter-btn:active {
+  transform: scale(0.95);
+}
+
+/* ---- Tile back (deal intro) ---- */
+
+.scr-tile-back {
+  position: relative;
+  display: block;
+  flex: none;
+  background: #f5f1e8;
+  border-color: var(--ink);
+  border-style: solid;
+}
+
+.scr-tile-back--fan {
+  width: 26px;
+  height: 48px;
+  border-width: 2px;
+  border-radius: 4px;
+}
+
+.scr-tile-back--stock {
+  width: 40px;
+  height: 72px;
+  border-width: 3px;
+  border-radius: 6px;
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+/* ---- Footnote ---- */
+
+.scr-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}

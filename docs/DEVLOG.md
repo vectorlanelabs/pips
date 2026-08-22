@@ -3607,3 +3607,32 @@ shipping each verified charter promptly.
   over-broad condition), then land M1 as one commit, then write spec
   49 (wiring) — the point where a live-in-browser check finally
   becomes possible and required for this charter.
+
+## Cycle 23 (landed) — spec 48 (Scrabble screens) lands
+- **Round 2 re-verified independently**: tsc clean, 1127/1127 tests,
+  build clean. Read the actual fixed code (not just the report) for
+  all 4 items: deal-intro now uses an empty-dependency-array
+  mount-only effect gated on the board actually being empty at that
+  moment (correctly handles a mid-game reload/late-join not
+  re-triggering the intro), Rules button now opens `rulesOpen` state
+  exactly mirroring Room's pattern, `opponentNames`/`opponentColors`
+  props added and used with sensible fallbacks everywhere an
+  opponent's identity renders, duplicate score span removed from both
+  the component and its CSS.
+- **Landed**: `src/screens/Scrabble{Room,Table,Results,RulesOverlay}.tsx`,
+  `ScrabbleTable.css`, `src/components/ScrabbleTileBack.tsx`, committed
+  as one slice on `claude/scrabble-engine-loop`. Not pushed.
+- **Lesson for future cycles**: this project's CLAUDE.md "bots play at
+  human speed" section is a MANDATORY check on every spec/fix touching
+  animation or pacing, not an optional nice-to-have — round 1 of this
+  screens review would have missed the deal-intro-replays-every-turn
+  bug entirely if the review had stopped at tsc/test/build passing.
+  Treat that CLAUDE.md section as a standing, explicit review probe
+  for every future UI-touching cycle in this charter, same as the
+  wire-visible-field lesson from the engine round.
+- **Continue?** Yes. M0 and M1 are both done and landed. Next: spec 49
+  (wiring — App.tsx lobby/broadcast/bot-per-seat, Landing.tsx shelf
+  tile, README). This is the point where a live 2-seat and 4-seat
+  browser match finally becomes verifiable, including the mandatory
+  bot-pacing-at-capacity check this charter's Definition of Done
+  requires.

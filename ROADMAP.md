@@ -28,8 +28,28 @@ Charter: Scrabble — see `CHARTER.md`.
       sandbox turned out to have no network access — fetched ENABLE1
       from a public mirror, vendored it, ran the already-written
       generator script.
-- [ ] M1 — screens (spec to be written after M0 lands)
-- [ ] M2 — wiring (spec to be written after M1 lands)
+- [x] M1 — screens (spec 48): ScrabbleRoom (SkipBoRoom mirror),
+      ScrabbleTable (board/rack/staged-placement flow, blank-tile A-Z
+      overlay, opponent rail, status block), ScrabbleResults (handles
+      the tied-winner case no sibling needs), ScrabbleRulesOverlay,
+      ScrabbleTileBack. Brand color `#8b6e47` (grepped existing
+      colors first, picked an unused warm-brown "paper/wood board"
+      tone). 1127 tests (unchanged, screens get no dedicated tests
+      here) / tsc / build green. Review (lead, personally): 2 rounds.
+      Round 1 found 2 blocking bugs the implementer's own "all green"
+      report missed — the deal-intro shuffle animation replaying on
+      EVERY turn (keyed off `turnNumber`, which increments every move,
+      not once at game start; a severe violation of CLAUDE.md's
+      mandatory bot-pacing top-priority rule) and the Table screen's
+      Rules button being a dead no-op despite `ScrabbleRulesOverlay`
+      existing and being correctly wired in Room — plus a major
+      (opponent names/colors had no props to receive them at all,
+      making 3-4 player games visually indistinguishable) and a minor
+      (duplicate score display). All 4 fixed and independently
+      re-verified by reading the actual diff, not trusting the report.
+      No live browser check possible yet (not wired into App.tsx) —
+      the wiring spec is where that finally happens.
+- [ ] M2 — wiring (spec to be written next cycle)
 
 ## Charter: Skip-Bo (2026-08-17) — done, see below
 
