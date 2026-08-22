@@ -43,11 +43,10 @@
 
 .sol-top {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 24px;
-  margin-bottom: 18px;
+  gap: clamp(28px, 4vw, 48px);
+  margin-bottom: 22px;
 }
 
 .sol-group {
@@ -70,23 +69,35 @@
 
 .sol-tableau {
   display: flex;
-  gap: clamp(6px, 1.2vw, 14px);
+  gap: clamp(10px, 1.4vw, 20px);
   overflow-x: auto;
   padding-bottom: 8px;
   align-items: flex-start;
 }
 
+/*
+  Fixed height, not content-driven: a resizing play area as you play is
+  distracting, so every column reserves enough room for the tallest
+  position it could ever actually reach — 6 face-down cards (Klondike's
+  own maximum initial deal; this count never grows after dealing) topped
+  by a full King-to-Ace run (13 cards, the longest sequence the rules can
+  ever produce, since each card must be exactly one rank below the last).
+  6 × FACE_DOWN_OFFSET(20) + 12 × FACE_UP_OFFSET(48) + card height(140) = 836.
+  FreeCell's own worst case (13 face-up, no face-down segment) is shorter
+  and comfortably fits the same box.
+*/
 .sol-column {
   position: relative;
-  width: 50px;
+  width: 100px;
+  height: 836px;
   flex: none;
 }
 
 .sol-slot {
-  width: 50px;
-  height: 70px;
-  border: 3px dashed var(--grey-border);
-  border-radius: 10px;
+  width: 100px;
+  height: 140px;
+  border: 4px dashed var(--grey-border);
+  border-radius: 16px;
   background: transparent;
   padding: 0;
   cursor: pointer;
@@ -103,19 +114,19 @@
 }
 
 .sol-empty {
-  width: 50px;
-  height: 70px;
-  border: 3px dashed var(--grey-border);
-  border-radius: 10px;
+  width: 100px;
+  height: 140px;
+  border: 4px dashed var(--grey-border);
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--muted-text);
 }
 
 .sol-target {
   outline: 3px solid var(--yellow);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }

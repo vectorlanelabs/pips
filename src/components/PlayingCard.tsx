@@ -32,7 +32,7 @@ const SUIT_NAMES: Record<Suit, string> = {
 
 // ---- PlayingCard ----
 
-export type PlayingCardSize = 'hand' | 'meld' | 'discard'
+export type PlayingCardSize = 'hand' | 'meld' | 'discard' | 'tableau'
 
 export interface PlayingCardProps {
   rank: Exclude<Rank, 'JOKER'>
@@ -54,6 +54,10 @@ export interface PlayingCardProps {
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
+  /** Native HTML5 drag-and-drop — currently used only by Solitaire's tableau. */
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent<HTMLButtonElement>) => void
+  onDragEnd?: () => void
 }
 
 export function PlayingCard({
@@ -66,6 +70,9 @@ export function PlayingCard({
   className,
   style,
   onClick,
+  draggable,
+  onDragStart,
+  onDragEnd,
 }: PlayingCardProps) {
   const cls = [
     'playing-card',
@@ -124,6 +131,18 @@ export function PlayingCard({
             </span>
           </>
         )
+      case 'tableau':
+        return (
+          <>
+            <span className="playing-card__corner playing-card__corner--stacked" style={{ color }}>
+              <span className="playing-card__rank">{rank}</span>
+              <span className="playing-card__suit">{glyph}</span>
+            </span>
+            <span className="playing-card__bottom-suit playing-card__bottom-suit--tableau" style={{ color }}>
+              {glyph}
+            </span>
+          </>
+        )
     }
   }
 
@@ -138,6 +157,9 @@ export function PlayingCard({
       style={cardStyle}
       onClick={onClick}
       disabled={!onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       aria-label={ariaLabel}
     >
       {renderContent()}
@@ -157,6 +179,8 @@ export interface CardBackProps {
   empty?: boolean
   /** Design id from components/cardBacks.ts. Omitted or unknown → the classic violet dot back. */
   design?: string
+  /** Overrides the default aria-label (e.g. a 'pile' reused as a stock draw pile). */
+  ariaLabel?: string
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
@@ -169,8 +193,8 @@ const SUIT_MEDALLION_GLYPHS: { glyph: string; suit: Suit; pos: React.CSSProperti
   { glyph: '♣', suit: 'clubs', pos: { left: '36%', top: '50%' } },
 ]
 
-export function CardBack({ size, canDraw, empty, design, className, style, onClick }: CardBackProps) {
-  const isEmpty = size === 'stock' && empty
+export function CardBack({ size, canDraw, empty, design, ariaLabel, className, style, onClick }: CardBackProps) {
+  const isEmpty = (size === 'stock' || size === 'pile') && empty
   const styled = design && design !== 'classic' ? design : null
   const cls = [
     'card-back',
@@ -190,7 +214,7 @@ export function CardBack({ size, canDraw, empty, design, className, style, onCli
       style={style}
       onClick={onClick}
       disabled={!onClick}
-      aria-label={size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card'}
+      aria-label={ariaLabel ?? (size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card')}
     >
       {!styled && size === 'stock' && !empty && <span className="card-back__mark" />}
       {styled === 'suit-medallion' && !isEmpty && (

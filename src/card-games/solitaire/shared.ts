@@ -294,6 +294,49 @@ export function findFoundationMove(state: SolitaireState, from: SolitaireLoc): S
   return null
 }
 
+// Every currently-face-up top card that could be a move source: the waste top
+// (klondike), each occupied cell (freecell), and each tableau column's top card.
+function foundationSources(state: SolitaireState): SolitaireLoc[] {
+  const sources: SolitaireLoc[] = []
+  if (state.mode === 'klondike' && state.waste.length > 0) sources.push({ kind: 'waste' })
+  if (state.mode === 'freecell') {
+    for (let i = 0; i < state.cells.length; i++) {
+      if (state.cells[i] !== null) sources.push({ kind: 'cell', index: i })
+    }
+  }
+  for (let i = 0; i < state.tableau.length; i++) {
+    if (state.tableau[i].length > 0) sources.push({ kind: 'tableau', index: i })
+  }
+  return sources
+}
+
+// Repeatedly sends any top card that has a legal foundation move there, until
+// no more exist. Terminates because each successful move removes one card
+// from play (bounded by the 52-card deck); returns the moves in the order
+// they'd need to be applied, not the final state, so a caller can dispatch
+// them one at a time through its own reducer.
+export function autoCompleteMoves(state: SolitaireState): SolitaireMove[] {
+  const moves: SolitaireMove[] = []
+  let current = state
+  let progressed = true
+
+  while (progressed) {
+    progressed = false
+    for (const loc of foundationSources(current)) {
+      const move = findFoundationMove(current, loc)
+      if (!move) continue
+      const outcome = applyMove(current, move)
+      if (!outcome.ok) continue
+      moves.push(move)
+      current = outcome.state
+      progressed = true
+      break
+    }
+  }
+
+  return moves
+}
+
 export function legalDestinations(state: SolitaireState, from: SolitaireLoc, count: number): SolitaireLoc[] {
   const destinations: SolitaireLoc[] = []
 
