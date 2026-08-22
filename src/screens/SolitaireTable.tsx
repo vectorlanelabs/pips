@@ -12,11 +12,14 @@ import './SolitaireTable.css'
 
 export const SOLITAIRE_COLOR = '#4d7c0f'
 
-// Tableau stacking offsets — 2× the discard-size numbers, since tableau
-// cards are a flat 2× scale-up (100×140 vs 50×70). See SolitaireTable.css's
-// .sol-column for the matching fixed column height derived from these.
-const FACE_DOWN_OFFSET = 20
-const FACE_UP_OFFSET = 48
+// Tableau stacking offsets and the card's own width — all 1.5× discard's
+// numbers, since tableau cards are a flat 1.5× scale-up (75×105 vs 50×70).
+// See SolitaireTable.css's .sol-column for the matching fixed column height
+// derived from these, and startDrag below for the drag-ghost stacking.
+const FACE_DOWN_OFFSET = 15
+const FACE_UP_OFFSET = 36
+const CARD_WIDTH = 75
+const CARD_HEIGHT = 105
 
 export interface SolitaireTableProps {
   localName: string
@@ -43,14 +46,18 @@ export function SolitaireTable({
 }: SolitaireTableProps) {
   void localName
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled } = useSound()
-  // The only in-progress "selection" left is a live drag — the browser's own
-  // dragstart/dragend pair already tells click from drag apart, so there's no
-  // multi-step click-to-select state left to revalidate after undo/redeal.
+  // Two independent interaction paths can each put a card "in flight":
+  // `selection` for click-to-select-then-click-a-destination (with the
+  // classic click-the-same-card-again-to-send-it-home shortcut), and
+  // `dragFrom` for an in-progress native drag. Either can be used at any
+  // time; starting one clears the other.
+  const [selection, setSelection] = useState<{ from: SolitaireLoc; count: number } | null>(null)
   const [dragFrom, setDragFrom] = useState<{ from: SolitaireLoc; count: number } | null>(null)
   const [showDealIntro, setShowDealIntro] = useState(true)
   const [rulesOpen, setRulesOpen] = useState(false)
   const introShownForDealIdRef = useRef<number>(-1)
   const prevStateRef = useRef<SolitaireState | null>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (dealId !== introShownForDealIdRef.current) {
@@ -58,6 +65,30 @@ export function SolitaireTable({
       introShownForDealIdRef.current = dealId
     }
   }, [dealId])
+
+  // A click-selection can outlive the card it pointed at (undo, deal again)
+  // — a live drag can't, since dropping or dragend always resolves it within
+  // the same gesture, well before any of those state changes could land.
+  useEffect(() => {
+    if (selection) {
+      const { from, count } = selection
+      let isValid = false
+
+      if (from.kind === 'tableau') {
+        isValid = count <= state.faceUp[from.index] && state.tableau[from.index].length > 0
+      } else if (from.kind === 'waste') {
+        isValid = state.waste.length > 0
+      } else if (from.kind === 'cell') {
+        isValid = state.cells[from.index] !== null
+      } else if (from.kind === 'foundation') {
+        isValid = state.foundations[from.index].length > 0
+      }
+
+      if (!isValid) {
+        setSelection(null)
+      }
+    }
+  }, [state, selection])
 
   useEffect(() => {
     if (prevStateRef.current) {
@@ -74,6 +105,7 @@ export function SolitaireTable({
     const result = applyMove(state, move)
     if (result.ok) {
       onMove(move)
+      setSelection(null)
     } else {
       play('error')
     }
@@ -86,28 +118,96 @@ export function SolitaireTable({
     }
   }
 
+  const isSameLocation = (a: SolitaireLoc, b: SolitaireLoc): boolean => {
+    if (a.kind !== b.kind) return false
+    if (a.kind === 'waste') return true
+    return (a as Exclude<SolitaireLoc, { kind: 'waste' }>).index === (b as Exclude<SolitaireLoc, { kind: 'waste' }>).index
+  }
+
   const faceDownCount = (col: number) => state.tableau[col].length - state.faceUp[col]
   const cardTop = (col: number, i: number) => {
     const down = faceDownCount(col)
     return i < down ? i * FACE_DOWN_OFFSET : down * FACE_DOWN_OFFSET + (i - down) * FACE_UP_OFFSET
   }
 
-  // A plain click (no drag) on any card sends it home if that's legal — the
-  // top card of a run always has count 1 against itself, so this naturally
-  // does nothing for a click on a buried card without any extra bookkeeping.
-  const handleClickHome = (loc: SolitaireLoc, count: number) => {
-    if (count !== 1) return
-    const home = findFoundationMove(state, loc)
-    if (home) tryMove(home)
+  const handleCardClick = (loc: SolitaireLoc, count: number, isTop: boolean = true) => {
+    if (!selection) {
+      setSelection({ from: loc, count })
+    } else {
+      if (isSameLocation(selection.from, loc) && selection.count === count) {
+        if (selection.count === 1) {
+          const homeMove = findFoundationMove(state, selection.from)
+          if (homeMove) {
+            tryMove(homeMove)
+            return
+          }
+        }
+        setSelection(null)
+      } else if (loc.kind === 'tableau' && !isTop) {
+        setSelection({ from: loc, count })
+      } else if (isTop || loc.kind !== 'tableau') {
+        const move: SolitaireMove = { type: 'MOVE', from: selection.from, to: loc, count: selection.count }
+        const result = applyMove(state, move)
+        if (result.ok) {
+          tryMove(move)
+        } else {
+          setSelection({ from: loc, count })
+        }
+      }
+    }
   }
 
-  const handleDragStart = (from: SolitaireLoc, count: number) => (e: React.DragEvent) => {
+  const handleSlotClick = (loc: SolitaireLoc) => {
+    if (selection) {
+      const move: SolitaireMove = { type: 'MOVE', from: selection.from, to: loc, count: selection.count }
+      tryMove(move)
+    }
+  }
+
+  // Builds a floating drag image out of clones of the ACTUAL dragged cards
+  // (so it looks exactly like the run being moved, not just its top card),
+  // stacked into the always-present, off-screen `ghostRef` container, then
+  // hands that to the browser as the native drag image. The real cards stay
+  // in the DOM underneath — `.sol-dragging` (driven by `dragFrom`, set right
+  // after) hides them so there's never a visible duplicate.
+  const startDrag = (e: React.DragEvent, from: SolitaireLoc, count: number) => {
+    const sourceEl = e.currentTarget as HTMLElement
+    const ghost = ghostRef.current
+    if (!ghost) return
+
+    let cardEls: HTMLElement[] = [sourceEl]
+    if (from.kind === 'tableau') {
+      const column = sourceEl.closest('.sol-column')
+      if (column) {
+        const allCards = [...column.querySelectorAll('.playing-card')] as HTMLElement[]
+        cardEls = allCards.slice(Math.max(0, allCards.length - count))
+      }
+    }
+
+    ghost.replaceChildren()
+    cardEls.forEach((el, i) => {
+      const clone = el.cloneNode(true) as HTMLElement
+      clone.style.position = 'absolute'
+      clone.style.top = `${i * FACE_UP_OFFSET}px`
+      clone.style.left = '0px'
+      ghost.appendChild(clone)
+    })
+    ghost.style.width = `${CARD_WIDTH}px`
+    ghost.style.height = `${(cardEls.length - 1) * FACE_UP_OFFSET + CARD_HEIGHT}px`
+
+    const rect = sourceEl.getBoundingClientRect()
+    e.dataTransfer.setDragImage(ghost, e.clientX - rect.left, e.clientY - rect.top)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', '') // required by some browsers for a drag to start at all
+
+    setSelection(null)
     setDragFrom({ from, count })
   }
 
-  const handleDragEnd = () => setDragFrom(null)
+  const handleDragEnd = () => {
+    setDragFrom(null)
+    ghostRef.current?.replaceChildren()
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     if (dragFrom) e.preventDefault() // required to allow a drop at all
@@ -117,7 +217,23 @@ export function SolitaireTable({
     e.preventDefault()
     if (!dragFrom) return
     tryMove({ type: 'MOVE', from: dragFrom.from, to, count: dragFrom.count })
+    // Clear here rather than waiting on dragend: a successful drop can move the
+    // dragged card(s) to a different parent in the tree (a different tableau
+    // column), which React remounts rather than relocates, so the source
+    // element's own dragend may never bubble to a listener that still exists.
     setDragFrom(null)
+    ghostRef.current?.replaceChildren()
+  }
+
+  // Is this rendered card one of the ones currently being dragged (and so
+  // should hide at its source position)? `cardsFromHere` mirrors the same
+  // "distance from the top" count used everywhere else for a tableau run.
+  const isDragSource = (loc: SolitaireLoc, cardsFromHere = 1): boolean => {
+    if (!dragFrom) return false
+    if (loc.kind === 'tableau' && dragFrom.from.kind === 'tableau') {
+      return dragFrom.from.index === loc.index && cardsFromHere <= dragFrom.count
+    }
+    return isSameLocation(dragFrom.from, loc)
   }
 
   const getStatusLine = (): string => {
@@ -128,7 +244,17 @@ export function SolitaireTable({
       const cell = state.mode === 'freecell' ? ', or a free cell' : ''
       return `Drop it on a column, foundation${cell}.`
     }
-    return 'Drag a card to move it, or click a card to send it to its foundation.'
+    if (selection) {
+      if (selection.count === 1) {
+        const homeMove = findFoundationMove(state, selection.from)
+        if (homeMove) {
+          return 'Click it again to send it to its foundation.'
+        }
+      }
+      const cell = state.mode === 'freecell' ? ', or free cell' : ''
+      return `Click a column, foundation${cell} to move ${selection.count} card(s).`
+    }
+    return 'Click a card to select it, then click where it goes — or just drag it there.'
   }
 
   // Auto-play only offers itself once there's no hidden information left to
@@ -146,7 +272,8 @@ export function SolitaireTable({
     autoMoves.forEach(onMove)
   }
 
-  const targets = dragFrom ? legalDestinations(state, dragFrom.from, dragFrom.count) : []
+  const activeSource = dragFrom ?? selection
+  const targets = activeSource ? legalDestinations(state, activeSource.from, activeSource.count) : []
   const isTarget = (loc: SolitaireLoc): boolean => {
     for (const target of targets) {
       if (target.kind === loc.kind) {
@@ -222,9 +349,11 @@ export function SolitaireTable({
                         rank={state.waste[state.waste.length - 1].rank as Exclude<Rank, 'JOKER'>}
                         suit={state.waste[state.waste.length - 1].suit as Exclude<Suit, 'joker'>}
                         size="tableau"
-                        onClick={() => handleClickHome({ kind: 'waste' }, 1)}
+                        selected={selection?.from.kind === 'waste'}
+                        className={isDragSource({ kind: 'waste' }) ? 'sol-dragging' : undefined}
+                        onClick={() => handleCardClick({ kind: 'waste' }, 1)}
                         draggable
-                        onDragStart={handleDragStart({ kind: 'waste' }, 1)}
+                        onDragStart={(e) => startDrag(e, { kind: 'waste' }, 1)}
                         onDragEnd={handleDragEnd}
                       />
                     ) : (
@@ -238,21 +367,29 @@ export function SolitaireTable({
                   <div className="sol-row">
                     {state.cells.map((card, i) => (
                       card ? (
-                        <div key={i} onDragOver={handleDragOver} onDrop={handleDrop({ kind: 'cell', index: i })}>
+                        <div
+                          key={i}
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop({ kind: 'cell', index: i })}
+                        >
                           <PlayingCard
                             rank={card.rank as Exclude<Rank, 'JOKER'>}
                             suit={card.suit as Exclude<Suit, 'joker'>}
                             size="tableau"
-                            onClick={() => handleClickHome({ kind: 'cell', index: i }, 1)}
+                            selected={selection?.from.kind === 'cell' && selection.from.index === i}
+                            className={isDragSource({ kind: 'cell', index: i }) ? 'sol-dragging' : undefined}
+                            onClick={() => handleCardClick({ kind: 'cell', index: i }, 1)}
                             draggable
-                            onDragStart={handleDragStart({ kind: 'cell', index: i }, 1)}
+                            onDragStart={(e) => startDrag(e, { kind: 'cell', index: i }, 1)}
                             onDragEnd={handleDragEnd}
                           />
                         </div>
                       ) : (
-                        <div
+                        <button
                           key={i}
+                          type="button"
                           className={isTarget({ kind: 'cell', index: i }) ? 'sol-slot sol-target' : 'sol-slot'}
+                          onClick={() => handleSlotClick({ kind: 'cell', index: i })}
                           onDragOver={handleDragOver}
                           onDrop={handleDrop({ kind: 'cell', index: i })}
                         />
@@ -268,26 +405,33 @@ export function SolitaireTable({
                   {state.foundations.map((foundation, i) => {
                     const suit = ['clubs', 'diamonds', 'hearts', 'spades'][i] as Exclude<Suit, 'joker'>
                     return foundation.length === 0 ? (
-                      <div
+                      <button
                         key={i}
+                        type="button"
                         className={isTarget({ kind: 'foundation', index: i }) ? 'sol-slot sol-target' : 'sol-slot'}
+                        onClick={() => handleSlotClick({ kind: 'foundation', index: i })}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop({ kind: 'foundation', index: i })}
                       >
-                        <span style={{ fontSize: 40, opacity: 0.45, color: suitColor(suit) }}>
+                        <span style={{ fontSize: 30, opacity: 0.45, color: suitColor(suit) }}>
                           {suitGlyph(suit)}
                         </span>
-                      </div>
+                      </button>
                     ) : (
                       <div key={i} onDragOver={handleDragOver} onDrop={handleDrop({ kind: 'foundation', index: i })}>
                         <PlayingCard
                           rank={foundation[foundation.length - 1].rank as Exclude<Rank, 'JOKER'>}
                           suit={foundation[foundation.length - 1].suit as Exclude<Suit, 'joker'>}
                           size="tableau"
-                          onClick={() => handleClickHome({ kind: 'foundation', index: i }, 1)}
-                          className={isTarget({ kind: 'foundation', index: i }) ? 'sol-target' : undefined}
+                          selected={selection?.from.kind === 'foundation' && selection.from.index === i}
+                          className={
+                            isDragSource({ kind: 'foundation', index: i })
+                              ? 'sol-dragging'
+                              : (isTarget({ kind: 'foundation', index: i }) ? 'sol-target' : undefined)
+                          }
+                          onClick={() => handleCardClick({ kind: 'foundation', index: i }, 1)}
                           draggable
-                          onDragStart={handleDragStart({ kind: 'foundation', index: i }, 1)}
+                          onDragStart={(e) => startDrag(e, { kind: 'foundation', index: i }, 1)}
                           onDragEnd={handleDragEnd}
                         />
                       </div>
@@ -310,7 +454,13 @@ export function SolitaireTable({
                     onDrop={handleDrop(colLoc)}
                   >
                     {column.length === 0 ? (
-                      <div className={isTarget(colLoc) ? 'sol-slot sol-target' : 'sol-slot'} />
+                      <button
+                        type="button"
+                        className={isTarget(colLoc) ? 'sol-slot sol-target' : 'sol-slot'}
+                        onClick={() => handleSlotClick(colLoc)}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop(colLoc)}
+                      />
                     ) : (
                       column.map((card, cardIndex) => {
                         const down = faceDownCount(colIndex)
@@ -337,10 +487,15 @@ export function SolitaireTable({
                                 rank={card.rank as Exclude<Rank, 'JOKER'>}
                                 suit={card.suit as Exclude<Suit, 'joker'>}
                                 size="tableau"
-                                onClick={() => handleClickHome(cardLoc, cardsFromHere)}
-                                className={isTarget(cardLoc) && isTopCard ? 'sol-target' : undefined}
+                                selected={selection?.from.kind === 'tableau' && selection.from.index === colIndex && selection.count === cardsFromHere}
+                                className={
+                                  isDragSource(cardLoc, cardsFromHere)
+                                    ? 'sol-dragging'
+                                    : (isTarget(cardLoc) && isTopCard ? 'sol-target' : undefined)
+                                }
+                                onClick={() => handleCardClick(cardLoc, cardsFromHere, isTopCard)}
                                 draggable
-                                onDragStart={handleDragStart(cardLoc, cardsFromHere)}
+                                onDragStart={(e) => startDrag(e, cardLoc, cardsFromHere)}
                                 onDragEnd={handleDragEnd}
                               />
                             )}
@@ -357,6 +512,9 @@ export function SolitaireTable({
       </div>
 
       {rulesOpen && <SolitaireRulesOverlay mode={state.mode} onClose={() => setRulesOpen(false)} />}
+
+      {/* Off-screen mount point for the native drag image — see startDrag. */}
+      <div ref={ghostRef} style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }} aria-hidden="true" />
     </div>
   )
 }
