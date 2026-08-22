@@ -171,6 +171,11 @@ const UNO_DEAL_HOLD_BUFFER_MS = 700
 // human's own turns.
 const SKIPBO_DEAL_HOLD_BUFFER_MS = 700
 const MT_ACTION_MS = 1100
+// Yahtzee was reusing bare BASE_MS across its 3-roll/2-hold/1-score turn shape, which measured at
+// ~4.6s per bot turn against a human averaging ~10-13s per turn on the same table (see spec/
+// console-timing audit) — the bot felt like it was "always my turn" instead of a real opponent
+// taking its time. Sized so a full turn lands close to that human average, not just above BASE_MS.
+const YAHTZEE_ACTION_MS = 2000
 // train-horn runs 3.6s. Any action that opens a train (pass-open OR a dead
 // draw — both honk, see MexicanTrainTable's `action.opened !== null` sound
 // gate) needs the next action held off long enough that the horn finishes.
@@ -3376,14 +3381,16 @@ export default function App() {
 
   async function runYahtzeeBot(seatId: string, key: string) {
     const pace = roomRef.current!.botPace
-    await wait(BASE_MS * pace)
+    await wait(YAHTZEE_ACTION_MS * pace)
     if (stale(key)) return
     let state = hostApply({ type: 'yahtzeeRoll' }, seatId)
     if (!state) return
     while (state.yahtzee.rollsLeft > 0 && !stale(key)) {
-      await wait(BASE_MS * pace * 0.6)
+      await wait(YAHTZEE_ACTION_MS * pace * 0.6)
       if (stale(key)) return
-      const holdIds = decideYahtzeeHold(state.yahtzee.dice, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
+      const holdIds = decideYahtzeeHold(
+        state.yahtzee.dice, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty, state.yahtzee.rollsLeft,
+      )
       let cur = state
       // yahtzeeToggleHold flips sel — only toggle dice whose CURRENT hold state disagrees with
       // the decision, or a die correctly held from the previous roll gets un-held by mistake.
@@ -3394,14 +3401,17 @@ export default function App() {
         cur = next
       }
       state = cur
-      await wait(BASE_MS * pace)
+      // Holding every die means a reroll changes nothing — skip straight to scoring instead of
+      // burning a full pause-and-reroll cycle watching dice that won't move.
+      if (holdIds.size === state.yahtzee.dice.length) break
+      await wait(YAHTZEE_ACTION_MS * pace)
       if (stale(key)) return
       const rolled = hostApply({ type: 'yahtzeeRoll' }, seatId)
       if (!rolled) return
       state = rolled
     }
     if (stale(key)) return
-    await wait(BASE_MS * pace * 0.6)
+    await wait(YAHTZEE_ACTION_MS * pace * 0.6)
     if (stale(key)) return
     const vals = state.yahtzee.dice.map((d) => d.val)
     const category = decideYahtzeeCategory(vals, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
