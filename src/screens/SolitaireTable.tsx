@@ -65,6 +65,13 @@ export function SolitaireTable({
   // before a drop ever happens. This ref updates synchronously in the same
   // tick as dragstart, so the native handlers below never see a stale value.
   const dragFromRef = useRef<{ from: SolitaireLoc; count: number } | null>(null)
+  // Chrome aborts a drag outright if its source element goes invisible before
+  // the drag session finishes initializing — hiding the source synchronously
+  // in the dragstart handler (via .sol-dragging, driven by `dragFrom` state)
+  // killed every drag before it began. Deferring that one state update by a
+  // tick lets Chrome finish starting the drag first; the ref above is what
+  // actually gates drop logic, so this delay never touches functionality.
+  const dragRevealTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (dealId !== introShownForDealIdRef.current) {
@@ -209,13 +216,25 @@ export function SolitaireTable({
 
     setSelection(null)
     dragFromRef.current = { from, count }
-    setDragFrom({ from, count })
+    if (dragRevealTimeoutRef.current !== null) window.clearTimeout(dragRevealTimeoutRef.current)
+    dragRevealTimeoutRef.current = window.setTimeout(() => {
+      dragRevealTimeoutRef.current = null
+      setDragFrom({ from, count })
+    }, 0)
   }
 
-  const handleDragEnd = () => {
+  const clearDrag = () => {
+    if (dragRevealTimeoutRef.current !== null) {
+      window.clearTimeout(dragRevealTimeoutRef.current)
+      dragRevealTimeoutRef.current = null
+    }
     dragFromRef.current = null
     setDragFrom(null)
     ghostRef.current?.replaceChildren()
+  }
+
+  const handleDragEnd = () => {
+    clearDrag()
   }
 
   // Always allow the drop — every element this is attached to is one of our
@@ -235,9 +254,7 @@ export function SolitaireTable({
     // dragged card(s) to a different parent in the tree (a different tableau
     // column), which React remounts rather than relocates, so the source
     // element's own dragend may never bubble to a listener that still exists.
-    dragFromRef.current = null
-    setDragFrom(null)
-    ghostRef.current?.replaceChildren()
+    clearDrag()
   }
 
   // Is this rendered card one of the ones currently being dragged (and so
