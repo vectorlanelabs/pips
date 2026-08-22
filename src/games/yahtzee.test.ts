@@ -218,18 +218,73 @@ describe('decideYahtzeeHold — expected-value search (medium/hard)', () => {
     const hold = decideYahtzeeHold(dice, {}, 'easy')
     expect(heldIds(dice, hold)).toEqual([1, 2, 3, 4])
   })
+
+  it('two rerolls left plays more aggressively than one reroll left, given the same dice', () => {
+    // [3,3,6,3,1] (three 3s + a 6 + a 1): with only ONE reroll left it's worth locking in a
+    // narrower straight-chase bet (hold the 3 and the 6, reroll 3 dice hoping for e.g. 2,4,5).
+    // With TWO rerolls left there's room for a broader, more valuable bet — hold just the single
+    // 3 and reroll 4 dice chasing three/four/five of a kind instead. Depth should change the call.
+    const dice = [dieAt(0, 3), dieAt(1, 3), dieAt(2, 6), dieAt(3, 3), dieAt(4, 1)]
+    const oneRerollLeft = decideYahtzeeHold(dice, {}, 'medium', 1)
+    const twoRerollsLeft = decideYahtzeeHold(dice, {}, 'medium', 2)
+    expect(heldIds(dice, oneRerollLeft)).toEqual([3, 6])
+    expect(heldIds(dice, twoRerollsLeft)).toEqual([3])
+  })
+
+  describe('hard-only upper-bonus awareness', () => {
+    it('upper section behind pace → hard holds the pair of 6s (biggest bonus payoff), medium does not', () => {
+      // Card: only ones/twos filled, way under the pace needed for the 63-point bonus. Medium
+      // (no bonus awareness) chases the pair worth more on its own (2+4); hard recognizes the
+      // pair of 6s is worth more toward securing the bonus and holds that instead.
+      const card = { ones: 1, twos: 2 }
+      const dice = [dieAt(0, 6), dieAt(1, 4), dieAt(2, 2), dieAt(3, 1), dieAt(4, 6)]
+      const medium = decideYahtzeeHold(dice, card, 'medium', 2)
+      const hard = decideYahtzeeHold(dice, card, 'hard', 2)
+      expect(heldIds(dice, medium)).toEqual([2, 4])
+      expect(heldIds(dice, hard)).toEqual([6, 6])
+    })
+
+    it('bonus already secured → hard stops caring, matches medium', () => {
+      // Upper section already at 63+, so there's nothing left to protect — hard's bonus pressure
+      // should drop to zero and it should land on the same call as medium.
+      const card = { ones: 3, twos: 6, threes: 9, fours: 12, fives: 15, sixes: 18 } // upperTotal = 63
+      const dice = [dieAt(0, 4), dieAt(1, 4), dieAt(2, 4), dieAt(3, 4), dieAt(4, 2)]
+      const medium = decideYahtzeeHold(dice, card, 'medium', 2)
+      const hard = decideYahtzeeHold(dice, card, 'hard', 2)
+      expect(heldIds(dice, hard)).toEqual(heldIds(dice, medium))
+    })
+
+    it('bonus already mathematically out of reach → hard stops caring, matches medium', () => {
+      // Every upper box but ones is already filled with a low score; even a perfect ones=5 can't
+      // reach 63, so hard's bonus pressure should drop out entirely.
+      const card = { twos: 0, threes: 0, fours: 0, fives: 0, sixes: 0 }
+      const dice = [dieAt(0, 4), dieAt(1, 4), dieAt(2, 4), dieAt(3, 4), dieAt(4, 2)]
+      const medium = decideYahtzeeHold(dice, card, 'medium', 2)
+      const hard = decideYahtzeeHold(dice, card, 'hard', 2)
+      expect(heldIds(dice, hard)).toEqual(heldIds(dice, medium))
+    })
+  })
 })
 
 describe('decideYahtzeeCategory — tie-break between equal-scoring categories', () => {
-  it('four of a kind ties threeKind/chance on raw score → picks the rarer fourKind box', () => {
+  it('medium: four of a kind ties threeKind/chance on raw score → picks the rarer fourKind box', () => {
     // [4,4,4,4,2]: threeKind, fourKind, and chance all score 18 — fourKind is the
     // hardest of the three to satisfy again, so it should win the tie.
     expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'medium')).toBe('fourKind')
-    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'hard')).toBe('fourKind')
   })
 
-  it('fourKind already filled → falls back to threeKind over chance', () => {
-    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], { fourKind: 18 }, 'medium')).toBe('threeKind')
+  it('hard: the same roll instead favors fours, once upper-bonus pressure is in play', () => {
+    // fourKind scores higher raw (18 vs 16) and has lower opportunity cost than fours, but hard
+    // also weighs fours' contribution toward the 63-point upper bonus (still reachable from an
+    // empty card), which tips the balance — a real behavior difference from medium, not a bug.
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'hard')).toBe('fours')
+  })
+
+  it('fourKind already filled → opportunity cost prefers the upper box over the tied threeKind/chance', () => {
+    // fours=16 raw but a LOW opportunity cost (matching one specific face again is rare); threeKind
+    // and chance both raw=18 but have much higher opportunity cost (a random future roll is fairly
+    // likely to satisfy either), so taking fours now beats saving it for a below-average future turn.
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], { fourKind: 18 }, 'medium')).toBe('fours')
   })
 
   it('yahtzee still outranks fourKind on a five-of-a-kind tie', () => {
