@@ -120,6 +120,12 @@
   box-shadow: 0 6px 0 var(--_selected-shadow);
 }
 
+/* Every tableau-size card in the app is Solitaire's own, and every one of
+   them is draggable — signal that instead of the base class's plain pointer. */
+.playing-card--tableau:not(:disabled) {
+  cursor: grab;
+}
+
 /* ===================================================================
    Content — corner (hand top-left + discard top-left)
    =================================================================== */

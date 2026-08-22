@@ -54,6 +54,10 @@ export interface PlayingCardProps {
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
+  /** Native HTML5 drag-and-drop — currently used only by Solitaire's tableau. */
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent<HTMLButtonElement>) => void
+  onDragEnd?: () => void
 }
 
 export function PlayingCard({
@@ -66,6 +70,9 @@ export function PlayingCard({
   className,
   style,
   onClick,
+  draggable,
+  onDragStart,
+  onDragEnd,
 }: PlayingCardProps) {
   const cls = [
     'playing-card',
@@ -150,6 +157,9 @@ export function PlayingCard({
       style={cardStyle}
       onClick={onClick}
       disabled={!onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       aria-label={ariaLabel}
     >
       {renderContent()}
