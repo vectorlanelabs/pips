@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/solitaire/state'
+import { SPIDER_FAMILY } from '../card-games/solitaire/state'
 import { applyAnyMove as applyMove, autoCompleteAnyMoves as autoCompleteMoves, findAnyFoundationMove as findFoundationMove, anyLegalDestinations as legalDestinations } from '../card-games/solitaire/dispatch'
 import { hasAnyLegalMove } from '../card-games/solitaire/shared'
 import type { Rank, Suit } from '../card-engine/cards'
@@ -21,6 +22,10 @@ const FACE_DOWN_OFFSET = 15
 const FACE_UP_OFFSET = 36
 const CARD_WIDTH = 75
 const CARD_HEIGHT = 105
+
+function isSpiderMode(mode: SolitaireState['mode']): boolean {
+  return (SPIDER_FAMILY as string[]).includes(mode)
+}
 
 export interface SolitaireTableProps {
   localName: string
@@ -374,7 +379,7 @@ export function SolitaireTable({
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn pill-small" onClick={onUndo} disabled={!canUndo}>Undo</button>
-          {state.mode !== 'spider' && (
+          {!isSpiderMode(state.mode) && (
             <button type="button" className="btn pill-small" onClick={handleAutoPlay} disabled={autoMoves.length === 0}>Auto-play</button>
           )}
           <button type="button" className="btn pill-small" onClick={onDealAgain}>Deal again</button>
@@ -492,7 +497,7 @@ export function SolitaireTable({
                 </div>
               )}
 
-              {state.mode === 'spider' ? (
+              {isSpiderMode(state.mode) ? (
                 <div className="sol-group">
                   <div className="sol-caption">completed runs</div>
                   <div className="sol-pill">
@@ -558,7 +563,7 @@ export function SolitaireTable({
                 return (
                   <div
                     key={colIndex}
-                    className={state.mode === 'spider' ? 'sol-column sol-column--spider' : 'sol-column'}
+                    className={isSpiderMode(state.mode) ? 'sol-column sol-column--spider' : 'sol-column'}
                     onDragOver={handleDragOver}
                     onDrop={handleDrop(colLoc)}
                   >

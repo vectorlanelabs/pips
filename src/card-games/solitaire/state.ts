@@ -3,11 +3,17 @@ import { dealKlondike } from './klondike.ts'
 import { dealFreeCell } from './freecell.ts'
 import { dealSpider } from './spider.ts'
 
-export type SolitaireMode = 'klondike' | 'klondike3' | 'freecell' | 'spider'
+export type SolitaireMode = 'klondike' | 'klondike3' | 'freecell' | 'spider' | 'spider1'
 
 // Modes that deal from a stock into a shared waste pile, one column-independent
 // pile at a time (as opposed to spider's "deal one card to every column").
 export const KLONDIKE_FAMILY: readonly SolitaireMode[] = ['klondike', 'klondike3']
+
+// Modes sharing spider's rules engine (applySpiderMove/spiderLegalDestinations)
+// — they differ only in how many suits the 104-card deck uses (1 = easiest,
+// since any descending run is then guaranteed same-suit and always movable
+// as a whole; 2 is the common default difficulty).
+export const SPIDER_FAMILY: readonly SolitaireMode[] = ['spider', 'spider1']
 
 export function tableauColumns(mode: SolitaireMode): number {
   switch (mode) {
@@ -17,6 +23,7 @@ export function tableauColumns(mode: SolitaireMode): number {
     case 'freecell':
       return 8
     case 'spider':
+    case 'spider1':
       return 10
   }
 }
@@ -60,6 +67,6 @@ export function createSolitaireGame(mode: SolitaireMode, seed: number): Solitair
   } else if (mode === 'freecell') {
     return dealFreeCell(seed)
   } else {
-    return dealSpider(seed)
+    return dealSpider(seed, mode)
   }
 }

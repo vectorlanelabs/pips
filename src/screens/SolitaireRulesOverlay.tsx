@@ -50,6 +50,18 @@ const RULES: Record<SolitaireMode, { intro: string; bullets: string[] }> = {
       'Win by clearing all eight runs. Undo is unlimited. Deal again starts a fresh shuffle.',
     ],
   },
+  spider1: {
+    intro: 'The easiest Spider: one suit only, so every run you build is automatically movable as a whole.',
+    bullets: [
+      'Deal: ten columns — the first four get six cards, the rest five, only the top card of each face up. The remaining 50 cards are the stock.',
+      'Every card is the same suit, so any descending run — however you built it — can always be picked up and moved together.',
+      'Any card or run can move into an empty column.',
+      'Stock: click to deal one card face up onto every column at once — blocked if any column is empty. There is no waste and no reshuffle; the stock is a fixed 5 deals.',
+      'A complete run from King down to Ace clears itself off the tableau automatically the moment you finish it.',
+      'Click a card to select it, then click where it goes — or skip the two clicks and just drag it there instead. There\'s no foundation shortcut or Auto-play here since completed runs clear on their own.',
+      'Win by clearing all eight runs. Undo is unlimited. Deal again starts a fresh shuffle.',
+    ],
+  },
 }
 
 export function SolitaireRulesOverlay({

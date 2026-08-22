@@ -9,7 +9,8 @@ export const SOLITAIRE_MODE_LABELS: Record<SolitaireMode, string> = {
   klondike: 'Klondike (Draw 1)',
   klondike3: 'Klondike (Draw 3)',
   freecell: 'FreeCell',
-  spider: 'Spider',
+  spider: 'Spider (2 Suit)',
+  spider1: 'Spider (1 Suit)',
 }
 
 const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
@@ -17,6 +18,7 @@ const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
   klondike3: 'Seven columns, draw three at a time from the stock — only the last one drawn is playable.',
   freecell: 'Eight columns, every card face up, four free cells to park cards in.',
   spider: 'Ten columns, two suits, no free cells or foundations — build full King-to-Ace runs to clear them.',
+  spider1: 'The easiest Spider: one suit only, so any descending run is always safe to move as a whole.',
 }
 
 export interface SolitaireRoomProps {
