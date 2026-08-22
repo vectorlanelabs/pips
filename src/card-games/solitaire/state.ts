@@ -1,22 +1,42 @@
 import type { Card } from '../../card-engine/cards.ts'
 import { dealKlondike } from './klondike.ts'
 import { dealFreeCell } from './freecell.ts'
+import { dealSpider } from './spider.ts'
 
-export type SolitaireMode = 'klondike' | 'freecell'
+export type SolitaireMode = 'klondike' | 'klondike3' | 'freecell' | 'spider'
+
+// Modes that deal from a stock into a shared waste pile, one column-independent
+// pile at a time (as opposed to spider's "deal one card to every column").
+export const KLONDIKE_FAMILY: readonly SolitaireMode[] = ['klondike', 'klondike3']
+
+export function tableauColumns(mode: SolitaireMode): number {
+  switch (mode) {
+    case 'klondike':
+    case 'klondike3':
+      return 7
+    case 'freecell':
+      return 8
+    case 'spider':
+      return 10
+  }
+}
 
 export interface SolitaireState {
   mode: SolitaireMode
   seed: number
-  tableau: Card[][]        // klondike: 7 columns; freecell: 8. index 0 = bottom, last = top
+  tableau: Card[][]        // klondike(3): 7 columns; freecell: 8; spider: 10. index 0 = bottom, last = top
   faceUp: number[]         // per column: how many cards at the TOP (end) of the column are face up.
-                           // freecell: always equals tableau[i].length. klondike: ≥1 whenever the
-                           // column is non-empty (the rules never leave a face-down top card).
-  foundations: Card[][]    // exactly 4, in SUITS order: [clubs, diamonds, hearts, spades]. index 0 = A
-  stock: Card[]            // klondike only (freecell: []). last = top
-  waste: Card[]            // klondike only (freecell: []). last = top
-  cells: (Card | null)[]   // freecell only: exactly 4. klondike: []
+                           // freecell: always equals tableau[i].length. klondike(3)/spider: ≥1 whenever
+                           // the column is non-empty (the rules never leave a face-down top card).
+  foundations: Card[][]    // klondike(3)/freecell: exactly 4, in SUITS order, index 0 = A. spider: grows
+                           // up to 8 as complete same-suit K→A runs are cleared off the tableau, one
+                           // array per cleared run — order and length beyond 8 have no meaning.
+  stock: Card[]            // klondike(3): the draw pile, last = top. spider: the un-dealt reserve, dealt
+                           // ACROSS all columns at once rather than into a waste. freecell: unused ([]).
+  waste: Card[]            // klondike(3) only. last = top. freecell/spider: unused ([]).
+  cells: (Card | null)[]   // freecell only: exactly 4. klondike(3)/spider: unused ([]).
   moves: number            // successful DRAW + MOVE count
-  won: boolean             // every foundation holds 13
+  won: boolean             // klondike(3)/freecell: every foundation holds 13. spider: 8 completed runs.
 }
 
 export type SolitaireLoc =
@@ -26,7 +46,8 @@ export type SolitaireLoc =
   | { kind: 'cell'; index: number }
 
 export type SolitaireMove =
-  | { type: 'DRAW' }                                                  // klondike only
+  | { type: 'DRAW' }                                                  // klondike(3): stock -> waste.
+                                                                        // spider: deal one row across all columns.
   | { type: 'MOVE'; from: SolitaireLoc; to: SolitaireLoc; count: number }
 
 export type MoveOutcome =
@@ -34,9 +55,11 @@ export type MoveOutcome =
   | { ok: false; reason: string }
 
 export function createSolitaireGame(mode: SolitaireMode, seed: number): SolitaireState {
-  if (mode === 'klondike') {
-    return dealKlondike(seed)
-  } else {
+  if (mode === 'klondike' || mode === 'klondike3') {
+    return dealKlondike(seed, mode)
+  } else if (mode === 'freecell') {
     return dealFreeCell(seed)
+  } else {
+    return dealSpider(seed)
   }
 }

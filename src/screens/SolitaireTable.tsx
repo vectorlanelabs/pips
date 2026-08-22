@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/solitaire/state'
-import { applyMove, autoCompleteMoves, findFoundationMove, legalDestinations } from '../card-games/solitaire/shared'
+import { applyAnyMove as applyMove, autoCompleteAnyMoves as autoCompleteMoves, findAnyFoundationMove as findFoundationMove, anyLegalDestinations as legalDestinations } from '../card-games/solitaire/dispatch'
 import type { Rank, Suit } from '../card-engine/cards'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
@@ -345,7 +345,9 @@ export function SolitaireTable({
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn pill-small" onClick={onUndo} disabled={!canUndo}>Undo</button>
-          <button type="button" className="btn pill-small" onClick={handleAutoPlay} disabled={autoMoves.length === 0}>Auto-play</button>
+          {state.mode !== 'spider' && (
+            <button type="button" className="btn pill-small" onClick={handleAutoPlay} disabled={autoMoves.length === 0}>Auto-play</button>
+          )}
           <button type="button" className="btn pill-small" onClick={onDealAgain}>Deal again</button>
         </div>
       </div>
@@ -361,7 +363,7 @@ export function SolitaireTable({
         ) : (
           <>
             <div className="sol-top">
-              {state.mode === 'klondike' ? (
+              {state.mode === 'klondike' || state.mode === 'klondike3' ? (
                 <div className="sol-row" style={{ gap: 16 }}>
                   <div className="sol-group">
                     <div className="sol-caption">stock {state.stock.length}</div>
@@ -393,7 +395,7 @@ export function SolitaireTable({
                     )}
                   </div>
                 </div>
-              ) : (
+              ) : state.mode === 'freecell' ? (
                 <div className="sol-group">
                   <div className="sol-caption">free cells</div>
                   <div className="sol-row">
@@ -429,48 +431,69 @@ export function SolitaireTable({
                     ))}
                   </div>
                 </div>
+              ) : (
+                <div className="sol-group">
+                  <div className="sol-caption">stock {state.stock.length}</div>
+                  <CardBack
+                    size="pile"
+                    design={cardBack}
+                    canDraw={state.stock.length > 0}
+                    empty={state.stock.length === 0}
+                    ariaLabel={state.stock.length === 0 ? 'Stock pile (empty)' : 'Stock pile — deals one card to every column'}
+                    onClick={tryStock}
+                  />
+                </div>
               )}
 
-              <div className="sol-group">
-                <div className="sol-caption">foundations</div>
-                <div className="sol-row">
-                  {state.foundations.map((foundation, i) => {
-                    const suit = ['clubs', 'diamonds', 'hearts', 'spades'][i] as Exclude<Suit, 'joker'>
-                    return foundation.length === 0 ? (
-                      <button
-                        key={i}
-                        type="button"
-                        className={isTarget({ kind: 'foundation', index: i }) ? 'sol-slot sol-target' : 'sol-slot'}
-                        onClick={() => handleSlotClick({ kind: 'foundation', index: i })}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop({ kind: 'foundation', index: i })}
-                      >
-                        <span style={{ fontSize: 30, opacity: 0.45, color: suitColor(suit) }}>
-                          {suitGlyph(suit)}
-                        </span>
-                      </button>
-                    ) : (
-                      <div key={i} onDragOver={handleDragOver} onDrop={handleDrop({ kind: 'foundation', index: i })}>
-                        <PlayingCard
-                          rank={foundation[foundation.length - 1].rank as Exclude<Rank, 'JOKER'>}
-                          suit={foundation[foundation.length - 1].suit as Exclude<Suit, 'joker'>}
-                          size="tableau"
-                          selected={selection?.from.kind === 'foundation' && selection.from.index === i}
-                          className={
-                            isDragSource({ kind: 'foundation', index: i })
-                              ? 'sol-dragging'
-                              : (isTarget({ kind: 'foundation', index: i }) ? 'sol-target' : undefined)
-                          }
-                          onClick={() => handleCardClick({ kind: 'foundation', index: i }, 1)}
-                          draggable
-                          onDragStart={(e) => startDrag(e, { kind: 'foundation', index: i }, 1)}
-                          onDragEnd={handleDragEnd}
-                        />
-                      </div>
-                    )
-                  })}
+              {state.mode === 'spider' ? (
+                <div className="sol-group">
+                  <div className="sol-caption">completed runs</div>
+                  <div className="sol-pill">
+                    <span style={{ fontWeight: 700 }}>{state.foundations.length} / 8</span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="sol-group">
+                  <div className="sol-caption">foundations</div>
+                  <div className="sol-row">
+                    {state.foundations.map((foundation, i) => {
+                      const suit = ['clubs', 'diamonds', 'hearts', 'spades'][i] as Exclude<Suit, 'joker'>
+                      return foundation.length === 0 ? (
+                        <button
+                          key={i}
+                          type="button"
+                          className={isTarget({ kind: 'foundation', index: i }) ? 'sol-slot sol-target' : 'sol-slot'}
+                          onClick={() => handleSlotClick({ kind: 'foundation', index: i })}
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop({ kind: 'foundation', index: i })}
+                        >
+                          <span style={{ fontSize: 30, opacity: 0.45, color: suitColor(suit) }}>
+                            {suitGlyph(suit)}
+                          </span>
+                        </button>
+                      ) : (
+                        <div key={i} onDragOver={handleDragOver} onDrop={handleDrop({ kind: 'foundation', index: i })}>
+                          <PlayingCard
+                            rank={foundation[foundation.length - 1].rank as Exclude<Rank, 'JOKER'>}
+                            suit={foundation[foundation.length - 1].suit as Exclude<Suit, 'joker'>}
+                            size="tableau"
+                            selected={selection?.from.kind === 'foundation' && selection.from.index === i}
+                            className={
+                              isDragSource({ kind: 'foundation', index: i })
+                                ? 'sol-dragging'
+                                : (isTarget({ kind: 'foundation', index: i }) ? 'sol-target' : undefined)
+                            }
+                            onClick={() => handleCardClick({ kind: 'foundation', index: i }, 1)}
+                            draggable
+                            onDragStart={(e) => startDrag(e, { kind: 'foundation', index: i }, 1)}
+                            onDragEnd={handleDragEnd}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="sol-status">{getStatusLine()}</div>
@@ -481,7 +504,7 @@ export function SolitaireTable({
                 return (
                   <div
                     key={colIndex}
-                    className="sol-column"
+                    className={state.mode === 'spider' ? 'sol-column sol-column--spider' : 'sol-column'}
                     onDragOver={handleDragOver}
                     onDrop={handleDrop(colLoc)}
                   >

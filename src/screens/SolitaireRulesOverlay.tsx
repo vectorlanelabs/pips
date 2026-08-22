@@ -15,6 +15,18 @@ const RULES: Record<SolitaireMode, { intro: string; bullets: string[] }> = {
       'Undo is unlimited. Deal again starts a fresh shuffle.',
     ],
   },
+  klondike3: {
+    intro: 'Same Klondike, tighter stock — draw three at a time and only the last one drawn is in play.',
+    bullets: [
+      'Deal: seven columns, one to seven cards, only the top card face up. The rest is the stock.',
+      'Stock: click to turn up to three cards onto the waste at once. Only the top (most recently drawn) card is playable — dig through the other two by drawing again. When the stock runs out, click it again to flip the waste back over.',
+      'Tableau: stack cards in descending order, alternating red and black. Move any face-up run as a unit.',
+      'Only a King (or a run starting with one) can move into an empty column.',
+      'Click a card to select it, then click where it goes — or skip the two clicks and just drag it there instead. Click a selected card again to send it straight to its foundation. Cards can come back off a foundation if you need them.',
+      'Auto-play lights up once every card is face up and the stock and waste are empty — it finishes off every remaining safe move for you.',
+      'Undo is unlimited. Deal again starts a fresh shuffle.',
+    ],
+  },
   freecell: {
     intro: 'Every card is face up from the start — FreeCell is a game of pure planning.',
     bullets: [
@@ -24,6 +36,18 @@ const RULES: Record<SolitaireMode, { intro: string; bullets: string[] }> = {
       'Click a card to select it, then click where it goes — or skip the two clicks and just drag it there instead. Click a selected card again to send it straight to its foundation.',
       'Auto-play lights up once there’s a safe move to make — FreeCell deals every card face up, so it’s often available early.',
       'Undo is unlimited. Deal again starts a fresh shuffle.',
+    ],
+  },
+  spider: {
+    intro: 'Ten columns, two suits, one goal: build eight complete King-to-Ace runs.',
+    bullets: [
+      'Deal: ten columns — the first four get six cards, the rest five, only the top card of each face up. The remaining 50 cards are the stock.',
+      'Tableau: any card can stack on a card one rank higher, regardless of suit. But you can only pick up and move a multi-card run if every card in it is the same suit in strict descending order.',
+      'Any card or run can move into an empty column.',
+      'Stock: click to deal one card face up onto every column at once — blocked if any column is empty. There is no waste and no reshuffle; the stock is a fixed 5 deals.',
+      'A complete same-suit run from King down to Ace clears itself off the tableau automatically the moment you finish it.',
+      'Click a card to select it, then click where it goes — or skip the two clicks and just drag it there instead. There\'s no foundation shortcut or Auto-play here since completed runs clear on their own.',
+      'Win by clearing all eight runs. Undo is unlimited. Deal again starts a fresh shuffle.',
     ],
   },
 }

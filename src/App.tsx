@@ -115,7 +115,7 @@ import { SkipBoRoom } from './screens/SkipBoRoom'
 
 // ---- Solitaire (single-player local session) ----
 import { createSolitaireGame, type SolitaireState, type SolitaireMode, type SolitaireMove } from './card-games/solitaire/state'
-import { applyMove as applySolitaireMove } from './card-games/solitaire/shared'
+import { applyAnyMove as applySolitaireMove } from './card-games/solitaire/dispatch'
 import { SolitaireRoom } from './screens/SolitaireRoom'
 import { SolitaireTable } from './screens/SolitaireTable'
 import { SolitaireResults } from './screens/SolitaireResults'
