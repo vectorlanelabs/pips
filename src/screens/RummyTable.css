@@ -144,7 +144,14 @@
   border-radius: 16px;
   padding: 12px 14px;
   background: #fff;
-  transition: background 0.2s, border-color 0.2s;
+  transition: border-color 0.2s;
+}
+
+/* 2- and 3-player games (1–2 opponents): each opponent tile spans half the
+   table width instead of the quarter-width cap meant for 4+ opponents, so
+   a lone opponent isn't left scrunched into a small corner tile. */
+.rummy-opp-tile--wide {
+  max-width: calc((100% - var(--rummy-opp-gap)) / 2);
 }
 
 .rummy-opp-tile-top {
@@ -183,15 +190,11 @@
   letter-spacing: 0.05em;
 }
 
-/* Active (current player) tile is filled with the seat color — matching the
-   turn-chip treatment — and the hidden-hand label / dot border lighten to
-   read on the fill. */
-.rummy-opp-tile--turn .rummy-opp-tile-count {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.rummy-opp-tile--turn .rummy-seat-dot {
-  border-color: rgba(255, 255, 255, 0.85);
+/* Active (current player) tile gets an outlined border in the seat's color —
+   a filled background reads as too loud/hard to read against colored seat
+   inks, so the border alone carries the "it's their turn" signal. */
+.rummy-opp-tile--turn {
+  border-width: 4px;
 }
 
 .rummy-opp-tile-hand {

@@ -39,8 +39,10 @@ export interface RummyTableProps {
 
 // ---- Local helpers ----
 
+// Alternates black/red (spades, hearts, clubs, diamonds) rather than grouping
+// the two red suits together, so a suit-sorted hand reads black-red-black-red.
 const SUIT_ORDER: Record<Suit, number> = {
-  spades: 0, hearts: 1, diamonds: 2, clubs: 3,
+  spades: 0, hearts: 1, clubs: 2, diamonds: 3,
   joker: 4,
 }
 
@@ -645,18 +647,13 @@ export function RummyTable({
             return (
               <div
                 key={seatId}
-                className={`rummy-opp-tile${isTurn ? ' rummy-opp-tile--turn' : ''}`}
-                style={isTurn ? { background: seatColor, borderColor: seatColor, color: '#fff' } : undefined}
+                className={`rummy-opp-tile${opponentIds.length <= 2 ? ' rummy-opp-tile--wide' : ''}${isTurn ? ' rummy-opp-tile--turn' : ''}`}
+                style={isTurn ? { borderColor: seatColor } : undefined}
               >
                 <div className="rummy-opp-tile-top">
-                  <span
-                    className="rummy-seat-dot"
-                    style={isTurn
-                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
-                      : { background: seatColor }}
-                  />
-                  <span className="rummy-opp-name" style={isTurn ? undefined : { color: seatColor }}>{seatName}</span>
-                  {isTurn && <span className="rummy-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
+                  <span className="rummy-seat-dot" style={{ background: seatColor }} />
+                  <span className="rummy-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                  {isTurn && <span className="rummy-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
                 </div>
                 <div className="rummy-opp-tile-hand">
                   {fanCount > 0 && (
