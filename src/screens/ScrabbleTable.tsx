@@ -446,7 +446,9 @@ export function ScrabbleTable({
               <div className="scr-hand-section">
                 <div className="scr-hand-header">
                   <div className="scr-hand-label">Your hand</div>
-                  <span className="scr-hand-stats">{myRack.length} tiles</span>
+                  <span className="scr-hand-stats">
+                    {publicState.scores[localPlayerId] ?? 0} pts · {myRack.length} tiles
+                  </span>
                 </div>
                 <div className="scr-hand-row">
                   {myRack.map((tile) => {
