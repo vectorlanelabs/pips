@@ -19,6 +19,7 @@ export function Room({
   onOpenRules: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const max = GAME_MAX_SEATS[room.game]
   const rows: (Seat | null)[] = [...room.seats]
   while (rows.length < 2) rows.push(null)
@@ -28,6 +29,12 @@ export function Room({
     navigator.clipboard?.writeText(url).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 1800)
+  }
+
+  function copyCode() {
+    navigator.clipboard?.writeText(room.code).catch(() => {})
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 1800)
   }
 
   return (
@@ -44,10 +51,15 @@ export function Room({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 380px', maxWidth: 460 }}>
-          <div style={{ background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 6px 0 var(--ink)', padding: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Give them this code</div>
+          <button
+            type="button"
+            onClick={copyCode}
+            aria-label="Copy room code"
+            style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 6px 0 var(--ink)', padding: 20 }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{codeCopied ? 'Copied!' : 'Give them this code'}</div>
             <div style={{ fontSize: 'clamp(26px,4.5vw,38px)', fontWeight: 700, letterSpacing: '-0.02em' }}>{room.code}</div>
-          </div>
+          </button>
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>

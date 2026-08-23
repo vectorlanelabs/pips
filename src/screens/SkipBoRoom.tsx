@@ -27,6 +27,7 @@ export function SkipBoRoom({
   onLeave,
 }: SkipBoRoomProps) {
   const [copied, setCopied] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
 
   function copyLink() {
@@ -34,6 +35,12 @@ export function SkipBoRoom({
     navigator.clipboard?.writeText(url).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 1800)
+  }
+
+  function copyCode() {
+    navigator.clipboard?.writeText(code).catch(() => {})
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 1800)
   }
 
   const hostName = seats.find((s) => s.isHost)?.name ?? 'the host'
@@ -70,10 +77,15 @@ export function SkipBoRoom({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 380px', maxWidth: 460 }}>
-          <div style={{ background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 6px 0 var(--ink)', padding: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Give them this code</div>
+          <button
+            type="button"
+            onClick={copyCode}
+            aria-label="Copy room code"
+            style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 6px 0 var(--ink)', padding: 20 }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{codeCopied ? 'Copied!' : 'Give them this code'}</div>
             <div style={{ fontSize: 'clamp(26px,4.5vw,38px)', fontWeight: 700, letterSpacing: '-0.02em' }}>{code}</div>
-          </div>
+          </button>
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
