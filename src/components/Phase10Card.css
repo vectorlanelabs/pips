@@ -2,13 +2,6 @@
    Phase10Card & Phase10CardBack — Phase 10 card-visual components
    =================================================================== */
 
-/* ---- Local custom properties (scoped to .phase10-card, not shared) ---- */
-
-.phase10-card {
-  --_selected-shadow: #e0a800;
-  --_group-shadow-default: #b7e6d1;
-}
-
 /* ===================================================================
    Phase10Card — base
    =================================================================== */
@@ -47,24 +40,24 @@
 .phase10-card--hand {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
-/* Hover: lift 9 px (only visible when not selected — selected rules below win on specificity) */
+/* Hover: a slight lift — tuned to the thin card frame, not the app's usual
+   hard-shadow gap. */
 .phase10-card--hand:hover:not(:disabled) {
-  transform: translateY(-9px);
+  transform: translateY(-2px);
 }
 
-/* Selected: yellow border, darker shadow, higher lift.
-   The :hover combinator ensures the selected transform wins over the plain hover above. */
+/* Selected: yellow border carries the signal; shadow deepens slightly. */
 .phase10-card--hand.phase10-card--selected,
 .phase10-card--hand.phase10-card--selected:hover {
   border-color: var(--yellow);
-  box-shadow: 0 6px 0 var(--_selected-shadow);
-  transform: translateY(-18px);
+  box-shadow: var(--card-shadow-selected);
+  transform: translateY(-4px);
 }
 
 /* ===================================================================
@@ -83,10 +76,10 @@
 .phase10-card--group {
   width: 36px;
   height: 52px;
-  border-radius: 8px;
-  border-width: 3px;
+  border-radius: 3px;
+  border-width: 1px;
   border-color: var(--card-owner-color, var(--green-text));
-  box-shadow: 0 3px 0 var(--card-owner-shadow, var(--_group-shadow-default));
+  box-shadow: var(--card-shadow);
 }
 
 /* ===================================================================
@@ -96,10 +89,10 @@
 .phase10-card--discard {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
 /* ===================================================================
@@ -185,8 +178,8 @@
 .phase10-card-back--fan {
   width: 30px;
   height: 44px;
-  border-radius: 7px;
-  border-width: 2px;
+  border-radius: 3px;
+  border-width: 1px;
   border-color: var(--ink);
 }
 
@@ -197,10 +190,10 @@
 .phase10-card-back--stock {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--ink);
+  box-shadow: var(--card-deck-shadow);
 }
 
 /* Turn-highlight: border turns yellow */
@@ -210,5 +203,5 @@
 
 /* Hover lift (stock only) */
 .phase10-card-back--stock:hover:not(:disabled) {
-  transform: translateY(-6px);
+  transform: translateY(-2px);
 }

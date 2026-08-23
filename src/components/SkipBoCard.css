@@ -36,23 +36,23 @@
 .skipbo-card--hand {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
-  box-shadow: 0 6px 0 var(--grey-border);
+  border-radius: 6px;
+  border-width: 2px;
+  box-shadow: var(--card-shadow);
 }
 
 .skipbo-card--hand:hover:not(:disabled) {
-  transform: translateY(-9px);
+  transform: translateY(-2px);
 }
 
-/* Selected: spec 41's pink ring (#be185d) with a darker shadow tone — same
-   select-then-confirm treatment as PlayingCard / Phase10Card / UnoCard, but
-   Skip-Bo's ring color is locked by the spec rather than the sibling yellow. */
+/* Selected: spec 41's pink ring (#be185d) — same select-then-confirm
+   treatment as PlayingCard / Phase10Card / UnoCard, but Skip-Bo's ring
+   color is locked by the spec rather than the sibling yellow. */
 .skipbo-card--hand.skipbo-card--selected,
 .skipbo-card--hand.skipbo-card--selected:hover {
   border-color: #be185d;
-  box-shadow: 0 6px 0 #8f0f47;
-  transform: translateY(-18px);
+  box-shadow: var(--card-shadow-selected);
+  transform: translateY(-4px);
 }
 
 /* ===================================================================
@@ -70,9 +70,9 @@
 .skipbo-card--tile {
   width: 44px;
   height: 62px;
-  border-radius: 9px;
-  border-width: 3px;
-  box-shadow: 0 4px 0 var(--grey-border);
+  border-radius: 4px;
+  border-width: 1px;
+  box-shadow: var(--card-shadow);
 }
 
 /* Selected tile (stockpile top / discard-pile top): same pink ring, shallower
@@ -80,8 +80,8 @@
 .skipbo-card--tile.skipbo-card--selected,
 .skipbo-card--tile.skipbo-card--selected:hover {
   border-color: #be185d;
-  box-shadow: 0 4px 0 #8f0f47;
-  transform: translateY(-6px);
+  box-shadow: var(--card-shadow-selected);
+  transform: translateY(-2px);
 }
 
 /* ===================================================================
@@ -206,8 +206,8 @@
 .skipbo-card-back--fan {
   width: 30px;
   height: 44px;
-  border-radius: 7px;
-  border-width: 2px;
+  border-radius: 3px;
+  border-width: 1px;
 }
 
 /* ===================================================================
@@ -217,13 +217,13 @@
 .skipbo-card-back--stock {
   width: 56px;
   height: 78px;
-  border-radius: 11px;
-  border-width: 3px;
-  box-shadow: 0 5px 0 var(--ink);
+  border-radius: 5px;
+  border-width: 2px;
+  box-shadow: var(--card-deck-shadow);
 }
 
 .skipbo-card-back--stock:hover:not(:disabled) {
-  transform: translateY(-6px);
+  transform: translateY(-2px);
 }
 
 /* Turn-highlight: border turns yellow — the same class-swap mechanic as

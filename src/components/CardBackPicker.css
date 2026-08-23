@@ -6,21 +6,16 @@
 }
 
 /* Double the normal 56 × 78 stock size — this is the one place a card back
-   is shown large enough to actually judge the design by. A straight 2x of
-   the stock chrome (border-width AND radius) over-rounded the corners badly
-   enough to clip the artwork's own corner ornaments once shown this big, so
-   border/radius here are NOT scaled off the small stock size — they're sized
-   the way an actual card at this scale reads (radius ~10% of width, border
-   thin enough that background-size:cover isn't fighting a fat inset), while
-   keeping the app's hard offset-shadow language (no blur) instead of a 2x
-   shadow slab. */
+   is shown large enough to actually judge the design by. Frame sized to the
+   card-surface spec (border ~3% of width, radius ~9%, soft deck shadow),
+   not scaled off the small stock chrome. */
 .card-back-picker .card-back--stock {
   flex: none;
   width: 112px;
   height: 156px;
-  border-radius: 12px;
-  border-width: 4px;
-  box-shadow: 0 6px 0 var(--ink);
+  border-radius: 10px;
+  border-width: 3px;
+  box-shadow: var(--card-deck-shadow);
 }
 
 .card-back-select {

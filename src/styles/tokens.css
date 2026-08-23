@@ -31,6 +31,14 @@
   --ttt-color: var(--amber);
   --hangman-color: var(--coral);
   --connect4-color: var(--blue);
+
+  /* Card surfaces (Rummy/Phase10/Uno/Skip-Bo/Solitaire) are the one exception
+     to the app's hard offset-shadow language — full-bleed printed art reads
+     better with a soft, thin frame than the neobrutalist block shadow every
+     other component uses. Buttons/panels/chips/etc. keep the hard shadow. */
+  --card-shadow: 0 2px 5px rgba(23, 23, 58, 0.18);
+  --card-shadow-selected: 0 2px 6px rgba(23, 23, 58, 0.25);
+  --card-deck-shadow: 0 3px 8px rgba(23, 23, 58, 0.3);
 }
 
 * {
