@@ -120,7 +120,7 @@ function dealRound(
   return { hands, stock, discardPile }
 }
 
-export function createRummyGame(playerIds: string[], seed: number, cardBack = 'classic'): RummySession {
+export function createRummyGame(playerIds: string[], seed: number, cardBack = 'pips_default'): RummySession {
   const rng = createRng(seed)
   const { hands, stock, discardPile } = dealRound(playerIds, rng)
   const turn = createTurnState<RummyPhase>(playerIds, 'draw')
