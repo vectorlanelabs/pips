@@ -196,6 +196,21 @@ function generateMovesInDirection(
 
       const anchorPosInWord = (isHorizontal ? anchorCol : anchorRow) - startPos
 
+      // The window [startPos, startPos + wordLen) must be the FULL contiguous
+      // run, not an arbitrary slice of it — if it abuts another occupied cell
+      // just outside either edge, the real word once applied (extractWords in
+      // rules.ts extends to the full run) would be longer than what's being
+      // validated here, so this window must be skipped rather than checked.
+      const beforePos = startPos - 1
+      const afterPos = startPos + wordLen
+      const beforeOccupied = isHorizontal
+        ? beforePos >= 0 && board[anchorRow][beforePos] !== null
+        : beforePos >= 0 && board[beforePos][anchorCol] !== null
+      const afterOccupied = isHorizontal
+        ? afterPos <= 14 && board[anchorRow][afterPos] !== null
+        : afterPos <= 14 && board[afterPos][anchorCol] !== null
+      if (beforeOccupied || afterOccupied) continue
+
       // Extract fixed board tiles and identify empty slots that need filling
       const wordSlots: Array<{ pos: number; letter: string | null; row: number; col: number }> = []
       for (let i = 0; i < wordLen; i++) {
