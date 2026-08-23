@@ -23,6 +23,7 @@ function emptyState(mode: 'klondike' | 'freecell'): SolitaireState {
     stock: [],
     waste: [],
     cells: mode === 'freecell' ? [null, null, null, null] : [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }

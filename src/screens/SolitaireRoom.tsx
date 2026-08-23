@@ -11,6 +11,7 @@ export const SOLITAIRE_MODE_LABELS: Record<SolitaireMode, string> = {
   freecell: 'FreeCell',
   spider: 'Spider (2 Suit)',
   spider1: 'Spider (1 Suit)',
+  pyramid: 'Pyramid',
 }
 
 const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
@@ -19,6 +20,7 @@ const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
   freecell: 'Eight columns, every card face up, four free cells to park cards in.',
   spider: 'Ten columns, two suits, no free cells or foundations — build full King-to-Ace runs to clear them.',
   spider1: 'The easiest Spider: one suit only, so any descending run is always safe to move as a whole.',
+  pyramid: 'A 28-card triangle — pair exposed cards that add up to 13 to clear them. Kings clear alone.',
 }
 
 export interface SolitaireRoomProps {

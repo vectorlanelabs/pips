@@ -164,3 +164,22 @@
 .sol-dragging {
   visibility: hidden;
 }
+
+/*
+  Pyramid's own play area — a triangle instead of columns, so it gets its
+  own fixed-size container rather than reusing .sol-tableau/.sol-column.
+  Cards overlap by ROW_STEP(40px)/COL_STEP(60px), same "don't resize as you
+  play" reasoning as .sol-column: 6 * 40 + 105 = 345 tall, 6 * 60 + 75 = 435
+  wide (the base row's 7-card spread).
+*/
+.sol-pyramid {
+  position: relative;
+  width: 435px;
+  max-width: 100%;
+  height: 345px;
+  margin: 0 auto;
+}
+
+.sol-covered {
+  opacity: 0.45;
+}

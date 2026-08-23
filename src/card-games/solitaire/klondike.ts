@@ -39,6 +39,7 @@ export function dealKlondike(seed: number, mode: 'klondike' | 'klondike3' = 'klo
     stock,
     waste: [],
     cells: [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }

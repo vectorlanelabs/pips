@@ -1,6 +1,6 @@
 // Path segment per game, used as /pips/<segment>. Engine + legacy alike.
 export type RoutedGame = 'farkle' | 'yahtzee' | 'ttt' | 'hangman'
-  | 'connect4' | 'rummy' | 'phase10' | 'battleship' | 'dominoes' | 'wahoo' | 'checkers' | 'mexican-train' | 'chess' | 'uno' | 'skipbo' | 'solitaire' | 'scrabble' | 'pyramid'
+  | 'connect4' | 'rummy' | 'phase10' | 'battleship' | 'dominoes' | 'wahoo' | 'checkers' | 'mexican-train' | 'chess' | 'uno' | 'skipbo' | 'solitaire' | 'scrabble'
 
 export const GAME_SEGMENTS: Record<RoutedGame, string> = {
   farkle: 'farkle',
@@ -20,7 +20,6 @@ export const GAME_SEGMENTS: Record<RoutedGame, string> = {
   skipbo: 'skipbo',
   solitaire: 'solitaire',
   scrabble: 'scrabble',
-  pyramid: 'pyramid',
 }
 
 const SEGMENT_SET = new Set<string>(Object.values(GAME_SEGMENTS))

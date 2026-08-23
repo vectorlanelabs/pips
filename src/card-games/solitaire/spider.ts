@@ -60,6 +60,7 @@ export function dealSpider(seed: number, mode: 'spider' | 'spider1' = 'spider'):
     stock,
     waste: [],
     cells: [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }
@@ -127,6 +128,10 @@ export function applySpiderMove(state: SolitaireState, move: SolitaireMove): Mov
         won: foundations.length === 8,
       },
     }
+  }
+
+  if (move.type !== 'MOVE') {
+    return { ok: false, reason: 'unsupported move type for spider' }
   }
 
   const { from, to, count } = move

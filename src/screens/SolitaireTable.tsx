@@ -3,6 +3,7 @@ import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/
 import { SPIDER_FAMILY } from '../card-games/solitaire/state'
 import { applyAnyMove as applyMove, autoCompleteAnyMoves as autoCompleteMoves, findAnyFoundationMove as findFoundationMove, anyLegalDestinations as legalDestinations } from '../card-games/solitaire/dispatch'
 import { hasAnyLegalMove } from '../card-games/solitaire/shared'
+import { PYRAMID_ROWS, isExposed } from '../card-games/solitaire/pyramid'
 import type { Rank, Suit } from '../card-engine/cards'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
@@ -23,8 +24,21 @@ const FACE_UP_OFFSET = 36
 const CARD_WIDTH = 75
 const CARD_HEIGHT = 105
 
+// Pyramid's cards overlap slightly within and between rows — see
+// SolitaireTable.css's .sol-pyramid for the matching fixed container size.
+const PYRAMID_COL_STEP = 60
+const PYRAMID_ROW_STEP = 40
+
 function isSpiderMode(mode: SolitaireState['mode']): boolean {
   return (SPIDER_FAMILY as string[]).includes(mode)
+}
+
+function pyramidCardPosition(row: number, col: number) {
+  return {
+    left: `calc(50% + ${(col - row / 2) * PYRAMID_COL_STEP}px - ${CARD_WIDTH / 2}px)`,
+    top: row * PYRAMID_ROW_STEP,
+    zIndex: PYRAMID_ROWS - row,
+  }
 }
 
 export interface SolitaireTableProps {
@@ -114,6 +128,8 @@ export function SolitaireTable({
         isValid = state.cells[from.index] !== null
       } else if (from.kind === 'foundation') {
         isValid = state.foundations[from.index].length > 0
+      } else if (from.kind === 'pyramid') {
+        isValid = isExposed(state, from)
       }
 
       if (!isValid) {
@@ -169,7 +185,8 @@ export function SolitaireTable({
   const isSameLocation = (a: SolitaireLoc, b: SolitaireLoc): boolean => {
     if (a.kind !== b.kind) return false
     if (a.kind === 'waste') return true
-    return (a as Exclude<SolitaireLoc, { kind: 'waste' }>).index === (b as Exclude<SolitaireLoc, { kind: 'waste' }>).index
+    if (a.kind === 'pyramid' && b.kind === 'pyramid') return a.row === b.row && a.col === b.col
+    return (a as Exclude<SolitaireLoc, { kind: 'waste' | 'pyramid' }>).index === (b as Exclude<SolitaireLoc, { kind: 'waste' | 'pyramid' }>).index
   }
 
   const faceDownCount = (col: number) => state.tableau[col].length - state.faceUp[col]
@@ -194,7 +211,9 @@ export function SolitaireTable({
       } else if (loc.kind === 'tableau' && !isTop) {
         setSelection({ from: loc, count })
       } else if (isTop || loc.kind !== 'tableau') {
-        const move: SolitaireMove = { type: 'MOVE', from: selection.from, to: loc, count: selection.count }
+        const move: SolitaireMove = state.mode === 'pyramid'
+          ? { type: 'REMOVE_PAIR', a: selection.from, b: loc }
+          : { type: 'MOVE', from: selection.from, to: loc, count: selection.count }
         const result = applyMove(state, move)
         if (result.ok) {
           tryMove(move)
@@ -283,7 +302,11 @@ export function SolitaireTable({
     e.preventDefault()
     const from = dragFromRef.current
     if (!from) return
-    tryMove({ type: 'MOVE', from: from.from, to, count: from.count })
+    tryMove(
+      state.mode === 'pyramid'
+        ? { type: 'REMOVE_PAIR', a: from.from, b: to }
+        : { type: 'MOVE', from: from.from, to, count: from.count },
+    )
     // Clear here rather than waiting on dragend: a successful drop can move the
     // dragged card(s) to a different parent in the tree (a different tableau
     // column), which React remounts rather than relocates, so the source
@@ -304,7 +327,20 @@ export function SolitaireTable({
 
   const getStatusLine = (): string => {
     if (state.won) {
-      return `You won in ${state.moves} moves!`
+      return state.mode === 'pyramid' ? `You cleared the pyramid in ${state.moves} moves!` : `You won in ${state.moves} moves!`
+    }
+    if (state.mode === 'pyramid') {
+      if (dragFrom) {
+        return 'Drop it on a card that adds up to 13.'
+      }
+      if (selection) {
+        const homeMove = findFoundationMove(state, selection.from)
+        if (homeMove) {
+          return 'Click it again to remove it.'
+        }
+        return 'Click a card that adds up to 13 with it — or just drag it there.'
+      }
+      return 'Click a card to select it, then click one that adds up to 13 — or just drag it there. Kings clear alone.'
     }
     if (dragFrom) {
       const cell = state.mode === 'freecell' ? ', or a free cell' : ''
@@ -342,12 +378,14 @@ export function SolitaireTable({
   const targets = activeSource ? legalDestinations(state, activeSource.from, activeSource.count) : []
   const isTarget = (loc: SolitaireLoc): boolean => {
     for (const target of targets) {
-      if (target.kind === loc.kind) {
-        if (loc.kind === 'waste') {
-          return true
-        } else if ((loc as Exclude<SolitaireLoc, { kind: 'waste' }>).index === (target as Exclude<SolitaireLoc, { kind: 'waste' }>).index) {
-          return true
-        }
+      if (target.kind !== loc.kind) continue
+      if (loc.kind === 'waste') return true
+      if (loc.kind === 'pyramid' && target.kind === 'pyramid') {
+        if (loc.row === target.row && loc.col === target.col) return true
+        continue
+      }
+      if ((loc as Exclude<SolitaireLoc, { kind: 'waste' | 'pyramid' }>).index === (target as Exclude<SolitaireLoc, { kind: 'waste' | 'pyramid' }>).index) {
+        return true
       }
     }
     return false
@@ -379,7 +417,7 @@ export function SolitaireTable({
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn pill-small" onClick={onUndo} disabled={!canUndo}>Undo</button>
-          {!isSpiderMode(state.mode) && (
+          {!isSpiderMode(state.mode) && state.mode !== 'pyramid' && (
             <button type="button" className="btn pill-small" onClick={handleAutoPlay} disabled={autoMoves.length === 0}>Auto-play</button>
           )}
           <button type="button" className="btn pill-small" onClick={onDealAgain}>Deal again</button>
@@ -390,14 +428,15 @@ export function SolitaireTable({
         {showDealIntro ? (
           <DealIntro
             others={[]}
-            yourHandSize={state.tableau.length}
+            yourHandSize={state.mode === 'pyramid' ? state.pyramidRows.flat().length : state.tableau.length}
+            maxFlights={state.mode === 'pyramid' ? 28 : undefined}
             renderCardBack={(p) => <CardBack {...p} design={cardBack} />}
             onComplete={() => setShowDealIntro(false)}
           />
         ) : (
           <>
             <div className="sol-top">
-              {state.mode === 'klondike' || state.mode === 'klondike3' ? (
+              {state.mode === 'klondike' || state.mode === 'klondike3' || state.mode === 'pyramid' ? (
                 <div className="sol-row" style={{ gap: 16 }}>
                   <div className="sol-group">
                     <div className="sol-caption">stock {state.stock.length}</div>
@@ -497,7 +536,14 @@ export function SolitaireTable({
                 </div>
               )}
 
-              {isSpiderMode(state.mode) ? (
+              {state.mode === 'pyramid' ? (
+                <div className="sol-group">
+                  <div className="sol-caption">cards left</div>
+                  <div className="sol-pill">
+                    <span style={{ fontWeight: 700 }}>{state.pyramidRows.flat().filter((c) => c !== null).length}</span>
+                  </div>
+                </div>
+              ) : isSpiderMode(state.mode) ? (
                 <div className="sol-group">
                   <div className="sol-caption">completed runs</div>
                   <div className="sol-pill">
@@ -557,6 +603,49 @@ export function SolitaireTable({
               </div>
             )}
 
+            {state.mode === 'pyramid' ? (
+              <div
+                className="sol-pyramid"
+                onDragOver={handleDragOver}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  clearDrag()
+                }}
+              >
+                {state.pyramidRows.map((row, rowIndex) =>
+                  row.map((card, colIndex) => {
+                    if (!card) return null
+                    const loc: SolitaireLoc = { kind: 'pyramid', row: rowIndex, col: colIndex }
+                    const exposed = isExposed(state, loc)
+                    const pos = pyramidCardPosition(rowIndex, colIndex)
+                    return (
+                      <div
+                        key={card.id}
+                        style={{ position: 'absolute', left: pos.left, top: pos.top, zIndex: pos.zIndex }}
+                        onDragOver={exposed ? handleDragOver : undefined}
+                        onDrop={exposed ? handleDrop(loc) : undefined}
+                      >
+                        <PlayingCard
+                          rank={card.rank as Exclude<Rank, 'JOKER'>}
+                          suit={card.suit as Exclude<Suit, 'joker'>}
+                          size="tableau"
+                          selected={!!selection && selection.from.kind === 'pyramid' && isSameLocation(selection.from, loc)}
+                          className={[
+                            !exposed && 'sol-covered',
+                            exposed && isDragSource(loc) && 'sol-dragging',
+                            exposed && isTarget(loc) && 'sol-target',
+                          ].filter(Boolean).join(' ') || undefined}
+                          onClick={exposed ? () => handleCardClick(loc, 1) : undefined}
+                          draggable={exposed}
+                          onDragStart={exposed ? (e) => startDrag(e, loc, 1) : undefined}
+                          onDragEnd={exposed ? handleDragEnd : undefined}
+                        />
+                      </div>
+                    )
+                  }),
+                )}
+              </div>
+            ) : (
             <div className="sol-tableau">
               {state.tableau.map((column, colIndex) => {
                 const colLoc: SolitaireLoc = { kind: 'tableau', index: colIndex }
@@ -621,6 +710,7 @@ export function SolitaireTable({
                 )
               })}
             </div>
+            )}
           </>
         )}
       </div>

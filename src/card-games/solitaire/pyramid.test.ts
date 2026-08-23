@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { createStandardDeck } from '../../card-engine/deck.ts'
 import type { Card, Suit, Rank } from '../../card-engine/cards.ts'
-import type { PyramidState, PyramidLoc } from './state.ts'
-import { dealPyramid, applyMove, isExposed, legalPartners, rankValue, PYRAMID_ROWS } from './state.ts'
+import type { SolitaireState, SolitaireLoc } from './state.ts'
+import { dealPyramid, applyPyramidMove, isExposed, pyramidLegalDestinations, pyramidKingMove, rankValue, PYRAMID_ROWS } from './pyramid.ts'
 
 function findCardInDeck(suit: Suit, rank: Rank): Card {
   const deck = createStandardDeck()
@@ -15,7 +15,7 @@ function findCardInDeck(suit: Suit, rank: Rank): Card {
 // (row 0 = 1 slot, row 1 = 2 slots, ... row 6 = 7 slots). Any unspecified
 // trailing slots are left null (already removed) so tests can set up partial
 // pyramids without listing all 28 cards.
-function buildState(spec: { rows?: (string | null)[][]; stock?: string[]; waste?: string[] }): PyramidState {
+function buildState(spec: { rows?: (string | null)[][]; stock?: string[]; waste?: string[] }): SolitaireState {
   const parseCard = (s: string): Card => {
     const suitMap: Record<string, Suit> = { '♠': 'spades', '♣': 'clubs', '♥': 'hearts', '♦': 'diamonds' }
     const suit = Object.entries(suitMap).find(([sym]) => s.includes(sym))?.[1] || 'spades'
@@ -23,7 +23,7 @@ function buildState(spec: { rows?: (string | null)[][]; stock?: string[]; waste?
     return findCardInDeck(suit, rank as Rank)
   }
 
-  const pyramid: (Card | null)[][] = []
+  const pyramidRows: (Card | null)[][] = []
   for (let row = 0; row < PYRAMID_ROWS; row++) {
     const specRow = spec.rows?.[row] ?? []
     const rowCards: (Card | null)[] = []
@@ -31,14 +31,19 @@ function buildState(spec: { rows?: (string | null)[][]; stock?: string[]; waste?
       const cell = specRow[col]
       rowCards.push(cell ? parseCard(cell) : null)
     }
-    pyramid.push(rowCards)
+    pyramidRows.push(rowCards)
   }
 
   return {
+    mode: 'pyramid',
     seed: 0,
-    pyramid,
+    tableau: [],
+    faceUp: [],
+    foundations: [],
     stock: (spec.stock ?? []).map(parseCard),
     waste: (spec.waste ?? []).map(parseCard),
+    cells: [],
+    pyramidRows,
     moves: 0,
     won: false,
   }
@@ -47,8 +52,8 @@ function buildState(spec: { rows?: (string | null)[][]; stock?: string[]; waste?
 describe('dealPyramid', () => {
   it('deals 7 rows of 1..7 cards and a 24-card stock', () => {
     const state = dealPyramid(42)
-    expect(state.pyramid).toHaveLength(7)
-    state.pyramid.forEach((row, i) => expect(row).toHaveLength(i + 1))
+    expect(state.pyramidRows).toHaveLength(7)
+    state.pyramidRows.forEach((row, i) => expect(row).toHaveLength(i + 1))
     expect(state.stock).toHaveLength(24)
     expect(state.waste).toEqual([])
     expect(state.won).toBe(false)
@@ -56,7 +61,7 @@ describe('dealPyramid', () => {
 
   it('every card is unique and all 52 are accounted for', () => {
     const state = dealPyramid(7)
-    const all = [...state.pyramid.flat(), ...state.stock]
+    const all = [...state.pyramidRows.flat(), ...state.stock]
     expect(all).toHaveLength(52)
     expect(new Set(all.map((c) => c!.id)).size).toBe(52)
   })
@@ -65,8 +70,8 @@ describe('dealPyramid', () => {
     const a = dealPyramid(11)
     const b = dealPyramid(11)
     const c = dealPyramid(12)
-    expect(a.pyramid).toEqual(b.pyramid)
-    expect(a.pyramid).not.toEqual(c.pyramid)
+    expect(a.pyramidRows).toEqual(b.pyramidRows)
+    expect(a.pyramidRows).not.toEqual(c.pyramidRows)
   })
 })
 
@@ -111,46 +116,46 @@ describe('isExposed', () => {
   })
 })
 
-describe('applyMove — REMOVE_KING', () => {
+describe('applyPyramidMove — REMOVE_KING', () => {
   it('removes an exposed King alone', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', 'K♠']] })
-    const result = applyMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 6, col: 6 } })
+    const result = applyPyramidMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 6, col: 6 } })
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.state.pyramid[6][6]).toBeNull()
+      expect(result.state.pyramidRows[6][6]).toBeNull()
       expect(result.state.moves).toBe(1)
     }
   })
 
   it('rejects a non-King', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']] })
-    const result = applyMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 6, col: 6 } })
+    const result = applyPyramidMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 6, col: 6 } })
     expect(result.ok).toBe(false)
   })
 
   it('rejects a King that is not exposed', () => {
     const state = buildState({ rows: [['K♠'], ['2♠', '3♠']] })
-    const result = applyMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 0, col: 0 } })
+    const result = applyPyramidMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 0, col: 0 } })
     expect(result.ok).toBe(false)
   })
 })
 
-describe('applyMove — REMOVE_PAIR', () => {
+describe('applyPyramidMove — REMOVE_PAIR', () => {
   it('removes two exposed cards summing to 13', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']] })
-    const a: PyramidLoc = { kind: 'pyramid', row: 6, col: 3 } // 5
-    const b: PyramidLoc = { kind: 'pyramid', row: 6, col: 6 } // 8 -> 5+8=13
-    const result = applyMove(state, { type: 'REMOVE_PAIR', a, b })
+    const a: SolitaireLoc = { kind: 'pyramid', row: 6, col: 3 } // 5
+    const b: SolitaireLoc = { kind: 'pyramid', row: 6, col: 6 } // 8 -> 5+8=13
+    const result = applyPyramidMove(state, { type: 'REMOVE_PAIR', a, b })
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.state.pyramid[6][3]).toBeNull()
-      expect(result.state.pyramid[6][6]).toBeNull()
+      expect(result.state.pyramidRows[6][3]).toBeNull()
+      expect(result.state.pyramidRows[6][6]).toBeNull()
     }
   })
 
   it('rejects ranks that do not sum to 13', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']] })
-    const result = applyMove(state, {
+    const result = applyPyramidMove(state, {
       type: 'REMOVE_PAIR',
       a: { kind: 'pyramid', row: 6, col: 0 },
       b: { kind: 'pyramid', row: 6, col: 1 },
@@ -160,15 +165,15 @@ describe('applyMove — REMOVE_PAIR', () => {
 
   it('rejects pairing a location with itself', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']] })
-    const loc: PyramidLoc = { kind: 'pyramid', row: 6, col: 0 }
-    const result = applyMove(state, { type: 'REMOVE_PAIR', a: loc, b: loc })
+    const loc: SolitaireLoc = { kind: 'pyramid', row: 6, col: 0 }
+    const result = applyPyramidMove(state, { type: 'REMOVE_PAIR', a: loc, b: loc })
     expect(result.ok).toBe(false)
   })
 
   it('rejects a pair where one card is not exposed', () => {
     const state = buildState({ rows: [['A♠'], ['2♠', 'Q♠']] })
     // A♠(1) + Q♠(12) = 13, but row0's card rests on both row1 cards, neither removed yet
-    const result = applyMove(state, {
+    const result = applyPyramidMove(state, {
       type: 'REMOVE_PAIR',
       a: { kind: 'pyramid', row: 0, col: 0 },
       b: { kind: 'pyramid', row: 1, col: 1 },
@@ -178,24 +183,23 @@ describe('applyMove — REMOVE_PAIR', () => {
 
   it('allows pairing the waste top with an exposed pyramid card', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']], waste: ['9♠'] })
-    // 8♠(8) + 9♠? wait 8+? need sum13, waste is 9 -> need pyramid card of 4
-    const result = applyMove(state, {
+    const result = applyPyramidMove(state, {
       type: 'REMOVE_PAIR',
       a: { kind: 'waste' },
-      b: { kind: 'pyramid', row: 6, col: 2 }, // 4♠
+      b: { kind: 'pyramid', row: 6, col: 2 }, // 4♠, 4+9=13
     })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.state.waste).toEqual([])
-      expect(result.state.pyramid[6][2]).toBeNull()
+      expect(result.state.pyramidRows[6][2]).toBeNull()
     }
   })
 })
 
-describe('applyMove — DRAW', () => {
+describe('applyPyramidMove — DRAW', () => {
   it('moves the top stock card to the waste', () => {
     const state = buildState({ stock: ['5♠', '9♠'] })
-    const result = applyMove(state, { type: 'DRAW' })
+    const result = applyPyramidMove(state, { type: 'DRAW' })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.state.waste.map((c) => c.rank)).toEqual(['9'])
@@ -205,7 +209,7 @@ describe('applyMove — DRAW', () => {
 
   it('reshuffles the waste back into the stock when the stock is empty', () => {
     const state = buildState({ waste: ['5♠', '9♠'] })
-    const result = applyMove(state, { type: 'DRAW' })
+    const result = applyPyramidMove(state, { type: 'DRAW' })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.state.waste).toEqual([])
@@ -214,7 +218,7 @@ describe('applyMove — DRAW', () => {
   })
 
   it('rejects drawing when both stock and waste are empty', () => {
-    const result = applyMove(buildState({}), { type: 'DRAW' })
+    const result = applyPyramidMove(buildState({}), { type: 'DRAW' })
     expect(result.ok).toBe(false)
   })
 })
@@ -222,29 +226,43 @@ describe('applyMove — DRAW', () => {
 describe('win condition', () => {
   it('is won once every pyramid slot is null', () => {
     const withKing = buildState({ rows: [['K♠']] })
-    const result = applyMove(withKing, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 0, col: 0 } })
+    const result = applyPyramidMove(withKing, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 0, col: 0 } })
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.state.won).toBe(true)
   })
 })
 
-describe('legalPartners', () => {
+describe('pyramidLegalDestinations', () => {
   it('lists only exposed locations that sum to 13 with the given card', () => {
     const state = buildState({
       rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']],
       waste: ['9♠'],
     })
-    const partners = legalPartners(state, { kind: 'pyramid', row: 6, col: 2 }) // 4♠, needs 9
+    const partners = pyramidLegalDestinations(state, { kind: 'pyramid', row: 6, col: 2 }) // 4♠, needs 9
     expect(partners).toEqual([{ kind: 'waste' }])
   })
 
   it('returns nothing for a King (no partner exists)', () => {
     const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', 'K♠']] })
-    expect(legalPartners(state, { kind: 'pyramid', row: 6, col: 6 })).toEqual([])
+    expect(pyramidLegalDestinations(state, { kind: 'pyramid', row: 6, col: 6 })).toEqual([])
   })
 
   it('returns nothing for a card that is not exposed', () => {
     const state = buildState({ rows: [['A♠'], ['2♠', 'Q♠']] })
-    expect(legalPartners(state, { kind: 'pyramid', row: 0, col: 0 })).toEqual([])
+    expect(pyramidLegalDestinations(state, { kind: 'pyramid', row: 0, col: 0 })).toEqual([])
+  })
+})
+
+describe('pyramidKingMove', () => {
+  it('returns the REMOVE_KING move for an exposed King', () => {
+    const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', 'K♠']] })
+    const loc: SolitaireLoc = { kind: 'pyramid', row: 6, col: 6 }
+    expect(pyramidKingMove(state, loc)).toEqual({ type: 'REMOVE_KING', loc })
+  })
+
+  it('returns null for a non-King or a King that is not exposed', () => {
+    const state = buildState({ rows: [['K♠'], ['2♠', '3♠']] })
+    expect(pyramidKingMove(state, { kind: 'pyramid', row: 0, col: 0 })).toBeNull()
+    expect(pyramidKingMove(state, { kind: 'pyramid', row: 1, col: 0 })).toBeNull()
   })
 })

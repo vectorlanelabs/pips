@@ -29,6 +29,7 @@ function buildState(spec: {
     stock: [],
     waste: [],
     cells: [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }

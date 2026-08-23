@@ -29,6 +29,7 @@ function buildState(spec: {
     stock: [],
     waste: [],
     cells: [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }
@@ -420,7 +421,7 @@ describe('Klondike', () => {
     expect(move).not.toBeNull()
     if (!move) return
     expect(move.type).toBe('MOVE')
-    if (move.type === 'DRAW') return
+    if (move.type !== 'MOVE') return
     expect(move.to.kind).toBe('foundation')
   })
 

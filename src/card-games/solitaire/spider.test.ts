@@ -24,6 +24,7 @@ function buildState(spec: { tableau: string[][]; stock?: string[]; foundations?:
     stock: (spec.stock ?? []).map(parseCard),
     waste: [],
     cells: [],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }

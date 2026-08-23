@@ -53,10 +53,16 @@ export function topOf(cards: Card[]): Card | undefined {
 }
 
 function locKey(loc: SolitaireLoc): string {
-  return loc.kind === 'waste' ? 'waste' : `${loc.kind}:${loc.index}`
+  if (loc.kind === 'waste') return 'waste'
+  if (loc.kind === 'pyramid') return `pyramid:${loc.row},${loc.col}`
+  return `${loc.kind}:${loc.index}`
 }
 
 export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutcome {
+  if (move.type !== 'DRAW' && move.type !== 'MOVE') {
+    return { ok: false, reason: 'unsupported move type for this mode' }
+  }
+
   if (move.type === 'DRAW') {
     if (!isKlondikeFamily(state.mode)) {
       return { ok: false, reason: 'DRAW only in klondike' }
@@ -95,7 +101,7 @@ export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutco
     return { ok: false, reason: 'from and to must be different' }
   }
 
-  if (to.kind === 'waste') {
+  if (to.kind === 'waste' || to.kind === 'pyramid') {
     return { ok: false, reason: 'nothing moves onto the waste' }
   }
 

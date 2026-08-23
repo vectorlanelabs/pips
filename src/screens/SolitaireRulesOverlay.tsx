@@ -62,6 +62,18 @@ const RULES: Record<SolitaireMode, { intro: string; bullets: string[] }> = {
       'Win by clearing all eight runs. Undo is unlimited. Deal again starts a fresh shuffle.',
     ],
   },
+  pyramid: {
+    intro: 'Clear all 28 cards out of the pyramid by pairing exposed cards that add up to 13.',
+    bullets: [
+      'Deal: 7 rows in a triangle (1 card at the top, 7 along the base — 28 total), all face up. The other 24 cards are the stock.',
+      'A card is exposed once both cards it rests on — the two just below it — are gone. The base row is always exposed.',
+      'Remove any two exposed cards whose ranks add up to 13 (A=1, J=11, Q=12). A King is worth 13 all on its own, so it clears alone.',
+      'The waste pile\'s top card counts as exposed too, so it can pair with an exposed pyramid card.',
+      'Stock: click to turn one card onto the waste. When the stock runs out, click it again to flip the waste back over — as many passes as you like.',
+      'Click a card to select it, then click one that adds up to 13 with it — or skip the two clicks and just drag it there instead. Click a selected King again to clear it.',
+      'Undo is unlimited. Deal again starts a fresh shuffle.',
+    ],
+  },
 }
 
 export function SolitaireRulesOverlay({

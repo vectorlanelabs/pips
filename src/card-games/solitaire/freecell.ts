@@ -30,6 +30,7 @@ export function dealFreeCell(seed: number): SolitaireState {
     stock: [],
     waste: [],
     cells: [null, null, null, null],
+    pyramidRows: [],
     moves: 0,
     won: false,
   }
