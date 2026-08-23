@@ -425,9 +425,9 @@ export function SkipBoTable({
                       : undefined}
                   >
                     {top ? (
-                      <SkipBoCard card={top} size="tile" />
+                      <SkipBoCard card={top} size="hand" />
                     ) : (
-                      <span className="sb-empty-tile" />
+                      <span className="sb-empty-tile sb-empty-tile--hand" />
                     )}
                   </div>
                 </div>

@@ -194,6 +194,14 @@
   box-sizing: border-box;
 }
 
+/* Build piles show hand-size cards (see .sb-build-slot below), so an empty
+   pile's placeholder matches that size too. */
+.sb-empty-tile--hand {
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+}
+
 /* ---- Building piles band ---- */
 
 .sb-build-band {
@@ -229,7 +237,7 @@
 }
 
 .sb-build-slot {
-  min-height: 62px;
+  min-height: 100px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -264,9 +272,20 @@
 /* Reserve hover-lift space above the draw card so it doesn't clip */
 .sb-draw-slot {
   padding-top: 10px;
-  min-height: 78px;
+  min-height: 100px;
   display: flex;
   align-items: flex-start;
+}
+
+/* The shared draw pile is hand-size too (see .sb-hand-fan's .skipbo-card--hand) —
+   scoped to this slot only, so opponents'/your own stockpile-top and discard-top
+   tiles (still 'tile' size) are untouched. */
+.sb-draw-slot .skipbo-card-back--stock {
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
+  box-shadow: 0 6px 0 var(--ink);
 }
 
 /* ---- Your side ---- */
