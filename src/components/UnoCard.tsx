@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import type { UnoCard, UnoColor } from '../card-games/uno/deck.ts'
-import { findCardBack, cardBackImageStyle } from './cardBacks'
+import { findCardBack, cardBackImageStyle, DEFAULT_CARD_BACK } from './cardBacks'
 import './UnoCard.css'
 
 // ---- UnoCardFace ----
@@ -150,7 +150,9 @@ export function UnoCardBack({
   // is wired; the gold "may draw" ring is a CSS modifier class swap, not a
   // separately-rendered ring element. The explicit `disabled` ORs in on top.
   const isDisabled = disabled || !onClick
-  const backDef = findCardBack(design)
+  // Every card back is a real image — an unrecognized/missing id still
+  // resolves to a real image (the default's), never a plain-color fallback.
+  const backDef = findCardBack(design) ?? findCardBack(DEFAULT_CARD_BACK)
 
   const cls = [
     'uno-card-back',

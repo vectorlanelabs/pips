@@ -346,14 +346,3 @@
    CardBack — decorative mark (stock only) — 19 px yellow rounded square
    =================================================================== */
 
-.card-back__mark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 19px;
-  height: 19px;
-  border-radius: 4px;
-  background: var(--yellow);
-}
-

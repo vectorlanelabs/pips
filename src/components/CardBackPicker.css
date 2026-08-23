@@ -9,19 +9,8 @@
   flex: none;
 }
 
-.card-back-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 4px 0 8px; /* room for the stock card's 5px drop shadow */
-}
-
-.card-back-swatch {
-  outline: 3px solid transparent;
-  outline-offset: 2px;
-  border-radius: 11px;
-}
-
-.card-back-swatch--selected {
-  outline-color: var(--yellow);
+.card-back-select {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
 }

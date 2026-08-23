@@ -1,6 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
-import { findCardBack, cardBackImageStyle } from './cardBacks'
+import { findCardBack, cardBackImageStyle, DEFAULT_CARD_BACK } from './cardBacks'
 import './SkipBoCard.css'
 
 // ---- Skip-Bo number colour lookup ----
@@ -123,7 +123,9 @@ export function SkipBoCardBack({
   style,
   onClick,
 }: SkipBoCardBackProps): JSX.Element {
-  const backDef = findCardBack(design)
+  // Every card back is a real image — an unrecognized/missing id still
+  // resolves to a real image (the default's), never a plain-color fallback.
+  const backDef = findCardBack(design) ?? findCardBack(DEFAULT_CARD_BACK)
   const cls = [
     'skipbo-card-back',
     `skipbo-card-back--${size}`,
