@@ -352,137 +352,140 @@ export function ScrabbleTable({
           />
         ) : (
           <>
-            {/* Opponent rail */}
-            <div className="scr-opp-rail">
-          {opponentIds.map((oppId) => {
-            const isOppTurn = currentPlayer(publicState.turn) === oppId
-            const oppScore = publicState.scores[oppId] ?? 0
-            const oppRackCount = publicState.handCounts[oppId] ?? 0
-            const oppName = opponentNames?.[oppId] ?? 'Opponent'
-            const oppColor = opponentColors?.[oppId] ?? BRAND
+            {/* Board (left column on wide viewports) */}
+            <div className="scr-board-col">
+              <div className="scr-board">
+                {boardCells.map(({ row, col, cell, staged, premium, isCenter }) => (
+                  <div
+                    key={`${row}-${col}`}
+                    className={`scr-board-cell${
+                      cell || staged ? ' scr-board-cell--occupied' : ''
+                    }${!cell && !staged && premium !== 'none' ? ` scr-board-cell--${premium}` : ''}${
+                      isCenter ? ' scr-board-cell--center' : ''
+                    }`}
+                    onClick={() => handleBoardCellClick(row, col)}
+                  >
+                    {cell || staged ? (
+                      <div
+                        className={`scr-tile-face${
+                          (cell?.isBlank || (staged && myRack.find((t) => t.id === staged.tileId)?.letter === ''))
+                            ? ' scr-tile-face--blank'
+                            : ''
+                        }`}
+                      >
+                        {(cell?.letter || staged?.letter || '').toUpperCase()}
+                        <span className="scr-tile-points">
+                          {(() => {
+                            if (staged) {
+                              const tile = myRack.find((t) => t.id === staged.tileId)
+                              return tile?.points ?? 0
+                            }
+                            return cell?.letter
+                              ? {
+                                  A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
+                                  K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
+                                  U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
+                                }[cell.letter] ?? 0
+                              : 0
+                          })()}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="scr-premium-label">
+                        {isCenter ? '' : premium !== 'none' ? premium : ''}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-            return (
-              <div
-                key={oppId}
-                className={`scr-opp-tile${isOppTurn ? ' scr-opp-tile--turn' : ''}`}
-                style={
-                  isOppTurn
-                    ? {
-                        background: oppColor,
-                        color: '#fff',
-                        borderColor: oppColor,
+            {/* Sidebar (right column on wide viewports): opponents, status, hand, actions */}
+            <div className="scr-sidebar">
+              <div className="scr-opp-rail">
+                {opponentIds.map((oppId) => {
+                  const isOppTurn = currentPlayer(publicState.turn) === oppId
+                  const oppScore = publicState.scores[oppId] ?? 0
+                  const oppRackCount = publicState.handCounts[oppId] ?? 0
+                  const oppName = opponentNames?.[oppId] ?? 'Opponent'
+                  const oppColor = opponentColors?.[oppId] ?? BRAND
+
+                  return (
+                    <div
+                      key={oppId}
+                      className={`scr-opp-tile${isOppTurn ? ' scr-opp-tile--turn' : ''}`}
+                      style={
+                        isOppTurn
+                          ? {
+                              background: oppColor,
+                              color: '#fff',
+                              borderColor: oppColor,
+                            }
+                          : {}
                       }
-                    : {}
-                }
-              >
-                <div className="scr-opp-tile-top">
-                  <span className="scr-seat-dot" style={{ background: oppColor }} />
-                  <span className="scr-opp-name">{oppName}</span>
-                  {isOppTurn && <span className="scr-turn-tag" style={{ background: oppColor }}>Turn</span>}
+                    >
+                      <div className="scr-opp-tile-top">
+                        <span className="scr-seat-dot" style={{ background: oppColor }} />
+                        <span className="scr-opp-name">{oppName}</span>
+                        {isOppTurn && <span className="scr-turn-tag" style={{ background: oppColor }}>Turn</span>}
+                      </div>
+                      <div className="scr-opp-tile-score">
+                        <span className="scr-opp-tile-count">{oppScore} pts · {oppRackCount} tiles</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Status block */}
+              <div className="scr-status-block">
+                <div className="scr-status-event">{eventLine}</div>
+                <div className="scr-status-prompt">{promptLine}</div>
+              </div>
+
+              {/* Hand */}
+              <div className="scr-hand-section">
+                <div className="scr-hand-header">
+                  <div className="scr-hand-label">Your hand</div>
+                  <span className="scr-hand-stats">{myRack.length} tiles</span>
                 </div>
-                <div className="scr-opp-tile-score">
-                  <span className="scr-opp-tile-count">{oppScore} pts · {oppRackCount} tiles</span>
+                <div className="scr-hand-row">
+                  {myRack.map((tile) => {
+                    const isSelected = selectedTileId === tile.id
+                    const isStaged = stagedPlacements.some((p) => p.tileId === tile.id)
+                    const isExchangeSelected = selectedExchangeTileIds.has(tile.id)
+                    const canSelect = canAct && !isExchanging
+
+                    return (
+                      <button
+                        key={tile.id}
+                        type="button"
+                        className={`scr-hand-tile${isSelected ? ' scr-hand-tile--selected' : ''}${
+                          tile.letter === '' ? ' scr-hand-tile--blank' : ''
+                        }`}
+                        onClick={() => handleRackTileClick(tile.id)}
+                        style={
+                          isExchanging && isExchangeSelected
+                            ? { background: 'var(--yellow)', borderColor: 'var(--ink)' }
+                            : isStaged
+                              ? { opacity: 0.5 }
+                              : {}
+                        }
+                        disabled={isStaged || (!canSelect && !isExchanging) || (isExchanging && !canAct)}
+                        aria-label={`${tile.letter || 'blank'} tile${isSelected ? ', selected' : ''}${
+                          isStaged ? ', placed' : ''
+                        }`}
+                      >
+                        {(tile.letter || '').toUpperCase()}
+                        <span className="scr-hand-tile-points">{tile.points}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-            )
-          })}
-        </div>
 
-        {/* Status block */}
-        <div className="scr-status-block">
-          <div className="scr-status-event">{eventLine}</div>
-          <div className="scr-status-prompt">{promptLine}</div>
-        </div>
-
-        {/* Board */}
-        <div className="scr-board">
-          {boardCells.map(({ row, col, cell, staged, premium, isCenter }) => (
-            <div
-              key={`${row}-${col}`}
-              className={`scr-board-cell${
-                cell || staged ? ' scr-board-cell--occupied' : ''
-              }${!cell && !staged && premium !== 'none' ? ` scr-board-cell--${premium}` : ''}${
-                isCenter ? ' scr-board-cell--center' : ''
-              }`}
-              onClick={() => handleBoardCellClick(row, col)}
-            >
-              {cell || staged ? (
-                <div
-                  className={`scr-tile-face${
-                    (cell?.isBlank || (staged && myRack.find((t) => t.id === staged.tileId)?.letter === ''))
-                      ? ' scr-tile-face--blank'
-                      : ''
-                  }`}
-                >
-                  {(cell?.letter || staged?.letter || '').toUpperCase()}
-                  <span className="scr-tile-points">
-                    {(() => {
-                      if (staged) {
-                        const tile = myRack.find((t) => t.id === staged.tileId)
-                        return tile?.points ?? 0
-                      }
-                      return cell?.letter
-                        ? {
-                            A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
-                            K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
-                            U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
-                          }[cell.letter] ?? 0
-                        : 0
-                    })()}
-                  </span>
-                </div>
-              ) : (
-                <span className="scr-premium-label">
-                  {isCenter ? '' : premium !== 'none' ? premium : ''}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Hand */}
-        <div className="scr-hand-section">
-          <div className="scr-hand-header">
-            <div className="scr-hand-label">Your hand</div>
-            <span className="scr-hand-stats">{myRack.length} tiles</span>
-          </div>
-          <div className="scr-hand-row">
-            {myRack.map((tile) => {
-              const isSelected = selectedTileId === tile.id
-              const isStaged = stagedPlacements.some((p) => p.tileId === tile.id)
-              const isExchangeSelected = selectedExchangeTileIds.has(tile.id)
-              const canSelect = canAct && !isExchanging
-
-              return (
-                <button
-                  key={tile.id}
-                  type="button"
-                  className={`scr-hand-tile${isSelected ? ' scr-hand-tile--selected' : ''}${
-                    tile.letter === '' ? ' scr-hand-tile--blank' : ''
-                  }`}
-                  onClick={() => handleRackTileClick(tile.id)}
-                  style={
-                    isExchanging && isExchangeSelected
-                      ? { background: 'var(--yellow)', borderColor: 'var(--ink)' }
-                      : isStaged
-                        ? { opacity: 0.5 }
-                        : {}
-                  }
-                  disabled={isStaged || (!canSelect && !isExchanging) || (isExchanging && !canAct)}
-                  aria-label={`${tile.letter || 'blank'} tile${isSelected ? ', selected' : ''}${
-                    isStaged ? ', placed' : ''
-                  }`}
-                >
-                  {(tile.letter || '').toUpperCase()}
-                  <span className="scr-hand-tile-points">{tile.points}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="scr-actions">
+              {/* Actions */}
+              <div className="scr-actions">
           {!isExchanging && stagedPlacements.length > 0 && (
             <>
               <button
@@ -537,6 +540,7 @@ export function ScrabbleTable({
             </button>
           )}
         </div>
+            </div>
           </>
         )}
       </div>
