@@ -634,7 +634,6 @@ export function SolitaireTable({
                           size="tableau"
                           selected={!!selection && selection.from.kind === 'pyramid' && isSameLocation(selection.from, loc)}
                           className={[
-                            !exposed && 'sol-covered',
                             exposed && isDragSource(loc) && 'sol-dragging',
                             exposed && isTarget(loc) && 'sol-target',
                           ].filter(Boolean).join(' ') || undefined}
