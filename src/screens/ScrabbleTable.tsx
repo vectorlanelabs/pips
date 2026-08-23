@@ -335,12 +335,6 @@ export function ScrabbleTable({
         setTurnSoundEnabled={setTurnSoundEnabled}
       />
 
-      <div className="scr-code-chip">
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>
-          Scrabble · {code}
-        </span>
-      </div>
-
       {notice && <div className="scr-error-banner">{notice}</div>}
 
       <div className="scr-table-card">
@@ -387,13 +381,7 @@ export function ScrabbleTable({
                   {isOppTurn && <span className="scr-turn-tag" style={{ background: oppColor }}>Turn</span>}
                 </div>
                 <div className="scr-opp-tile-score">
-                  <span className="scr-opp-tile-count">{oppScore} points</span>
-                </div>
-                <div className="scr-opp-tile-hand">
-                  {Array.from({ length: oppRackCount }, (_, i) => (
-                    <ScrabbleTileBack key={i} size="fan" />
-                  ))}
-                  <span className="scr-opp-tile-count">{oppRackCount} tiles</span>
+                  <span className="scr-opp-tile-count">{oppScore} pts · {oppRackCount} tiles</span>
                 </div>
               </div>
             )
