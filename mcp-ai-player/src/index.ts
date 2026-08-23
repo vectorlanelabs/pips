@@ -40,6 +40,14 @@ function makeCallbacks(): AiPlayerCallbacks {
     },
     onDisconnected() {
       handle = null
+      // Optional standalone lifecycle: when running as a one-room player process
+      // (PIPS_EXIT_ON_DISCONNECT=1), exit cleanly when the host goes away rather
+      // than idling. Left off by default so a persistent MCP server (loaded by a
+      // harness) can keep serving future join_room calls.
+      if (process.env.PIPS_EXIT_ON_DISCONNECT === '1') {
+        console.error('[pips] disconnected — room ended; exiting')
+        setTimeout(() => process.exit(0), 300)
+      }
     },
   }
 }
