@@ -1727,7 +1727,7 @@ export default function App() {
     const opponentId = dominoesOpponentIdRef.current
     if (opponentId && opponentId !== 'bot') {
       const guestSnap = deriveSnapshot(session.session, opponentId)
-      dominoesHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+      dominoesHostRef.current?.sendTo(opponentId, { revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
     }
   }
 
