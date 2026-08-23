@@ -1,6 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
-import { findCardBack, cardBackImageStyle } from './cardBacks'
+import { findCardBack, cardBackImageStyle, DEFAULT_CARD_BACK } from './cardBacks'
 import './Phase10Card.css'
 
 // ---- Phase 10 color lookup (exported for M4 reuse in non-card UI, e.g. a color-coded phase requirement icon) ----
@@ -143,7 +143,9 @@ export function Phase10CardBack({
   style,
   onClick,
 }: Phase10CardBackProps): JSX.Element {
-  const backDef = findCardBack(design)
+  // Every card back is a real image — an unrecognized/missing id still
+  // resolves to a real image (the default's), never a plain-color fallback.
+  const backDef = findCardBack(design) ?? findCardBack(DEFAULT_CARD_BACK)
   const cls = [
     'phase10-card-back',
     `phase10-card-back--${size}`,

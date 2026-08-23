@@ -17,29 +17,25 @@ export function CardBackPicker({
         Card back
         {!onSelect && hostName && <span style={{ fontWeight: 500, color: 'var(--muted-text)' }}> · {hostName} picks</span>}
       </div>
-      {onSelect ? (
-        <div className="card-back-grid" role="radiogroup" aria-label="Card back">
-          {CARD_BACKS.map((def) => (
-            <CardBack
-              key={def.id}
-              size="stock"
-              design={def.id}
-              ariaLabel={def.name}
-              role="radio"
-              ariaChecked={def.id === cardBack}
-              className={def.id === cardBack ? 'card-back-swatch card-back-swatch--selected' : 'card-back-swatch'}
-              onClick={() => onSelect(def.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="card-back-picker">
-          <CardBack size="stock" design={cardBack} />
+      <div className="card-back-picker">
+        <CardBack size="stock" design={cardBack} />
+        {onSelect ? (
+          <select
+            className="input select-chevron card-back-select"
+            aria-label="Card back"
+            value={cardBack}
+            onChange={(e) => onSelect(e.target.value)}
+          >
+            {CARD_BACKS.map((def) => (
+              <option key={def.id} value={def.id}>{def.name}</option>
+            ))}
+          </select>
+        ) : (
           <span style={{ fontSize: 17, fontWeight: 600 }}>
             {findCardBack(cardBack)?.name ?? 'Pips Default'}
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

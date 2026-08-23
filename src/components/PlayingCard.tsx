@@ -1,5 +1,5 @@
 import type { Suit, Rank } from '../card-engine/cards'
-import { findCardBack, cardBackImageStyle } from './cardBacks'
+import { findCardBack, cardBackImageStyle, DEFAULT_CARD_BACK } from './cardBacks'
 import './PlayingCard.css'
 
 // ---- Suit helpers (exported for M4 reuse in status-line, etc.) ----
@@ -178,21 +178,20 @@ export interface CardBackProps {
   canDraw?: boolean
   /** Stock only: renders an empty outline instead of a full pile when the stock has run out. */
   empty?: boolean
-  /** Design id from components/cardBacks.ts. Omitted or unknown → the plain violet dot back. */
+  /** Design id from components/cardBacks.ts. Omitted or unknown → DEFAULT_CARD_BACK's image. */
   design?: string
   /** Overrides the default aria-label (e.g. a 'pile' reused as a stock draw pile). */
   ariaLabel?: string
-  /** CardBackPicker's grid sets these so the swatches read as a real radiogroup. */
-  role?: string
-  ariaChecked?: boolean
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
 }
 
-export function CardBack({ size, canDraw, empty, design, ariaLabel, role, ariaChecked, className, style, onClick }: CardBackProps) {
+export function CardBack({ size, canDraw, empty, design, ariaLabel, className, style, onClick }: CardBackProps) {
   const isEmpty = (size === 'stock' || size === 'pile') && empty
-  const backDef = findCardBack(design)
+  // Every card back is a real image — no plain-CSS fallback design — so an
+  // unrecognized/missing id still resolves to a real image (the default's).
+  const backDef = findCardBack(design) ?? findCardBack(DEFAULT_CARD_BACK)
   const cls = [
     'card-back',
     `card-back--${size}`,
@@ -211,11 +210,7 @@ export function CardBack({ size, canDraw, empty, design, ariaLabel, role, ariaCh
       style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={!onClick}
-      role={role}
-      aria-checked={ariaChecked}
       aria-label={ariaLabel ?? (size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card')}
-    >
-      {!backDef && size === 'stock' && !empty && <span className="card-back__mark" />}
-    </button>
+    />
   )
 }
