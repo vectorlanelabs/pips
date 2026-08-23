@@ -9,6 +9,7 @@ const DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', medium: 
 
 export function Room({
   room, isHost, onAddBot, onSetDifficulty, onStart, onLeave, onOpenRules,
+  pendingAgentJoins, onAcceptAgentJoin, onDeclineAgentJoin,
 }: {
   room: RoomState
   isHost: boolean
@@ -17,6 +18,9 @@ export function Room({
   onStart: () => void
   onLeave: () => void
   onOpenRules: () => void
+  pendingAgentJoins: { guestId: string; name: string }[]
+  onAcceptAgentJoin: (guestId: string) => void
+  onDeclineAgentJoin: (guestId: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const max = GAME_MAX_SEATS[room.game]
@@ -41,6 +45,26 @@ export function Room({
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
         </div>
       </div>
+
+      {isHost && pendingAgentJoins.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+          {pendingAgentJoins.map((req) => (
+            <div
+              key={req.guestId}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+                background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 20, boxShadow: '0 6px 0 var(--ink)', padding: '14px 20px',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 16 }}>🤖 {req.name} wants to join as an AI player</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn btn-coral" onClick={() => onAcceptAgentJoin(req.guestId)}>Accept</button>
+                <button type="button" className="btn btn-ghost" onClick={() => onDeclineAgentJoin(req.guestId)}>Decline</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 380px', maxWidth: 460 }}>
@@ -108,7 +132,7 @@ export function Room({
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 18 }}>{seat.name}{seat.isHost ? ' (you)' : ''}</div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted-text)' }}>
-                      {seat.isHost ? 'Host' : seat.bot ? 'House' : 'Guest'}
+                      {seat.isHost ? 'Host' : seat.bot ? 'House' : seat.agent ? 'AI' : 'Guest'}
                     </div>
                   </div>
                 </div>

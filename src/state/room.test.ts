@@ -236,3 +236,18 @@ describe('connect4', () => {
     expect(room.connect4.wins).toEqual({ h1: 0, g1: 0 })
   })
 })
+
+describe('addSeat — agent flag', () => {
+  it('marks a seat as an AI player without marking it as a house bot', () => {
+    const room = addSeat(makeRoom('TEST-5', 'farkle', 'Host', 'h1'), 'a1', 'Hermes', false, true)
+    const seat = room.seats.find((s) => s.id === 'a1')!
+    expect(seat.agent).toBe(true)
+    expect(seat.bot).toBe(false)
+  })
+
+  it('defaults agent to false for an ordinary guest', () => {
+    const room = addSeat(makeRoom('TEST-6', 'farkle', 'Host', 'h1'), 'g1', 'Guest', false)
+    const seat = room.seats.find((s) => s.id === 'g1')!
+    expect(seat.agent).toBe(false)
+  })
+})

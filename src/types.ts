@@ -67,6 +67,7 @@ export interface Seat {
   id: string
   name: string
   bot: boolean
+  agent?: boolean
   isHost: boolean
   color: string
   initials: string

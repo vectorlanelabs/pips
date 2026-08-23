@@ -24,7 +24,7 @@ export function generateCode(): string {
   return `${word}-${num}`
 }
 
-export function makeSeat(id: string, name: string, bot: boolean, isHost: boolean, seatIdx: number): Seat {
+export function makeSeat(id: string, name: string, bot: boolean, isHost: boolean, seatIdx: number, agent = false): Seat {
   const initials = name
     .trim()
     .split(/\s+/)
@@ -33,7 +33,7 @@ export function makeSeat(id: string, name: string, bot: boolean, isHost: boolean
     .join('')
     .toUpperCase() || '?'
   return {
-    id, name, bot, isHost,
+    id, name, bot, agent, isHost,
     color: SEAT_PALETTE[seatIdx % SEAT_PALETTE.length],
     initials,
     score: 0, farkles: 0, best: 0,
@@ -110,9 +110,9 @@ function reconcileScores(scores: Record<string, number>, seats: Seat[]): Record<
   return next
 }
 
-export function addSeat(state: RoomState, id: string, name: string, bot: boolean): RoomState {
+export function addSeat(state: RoomState, id: string, name: string, bot: boolean, agent = false): RoomState {
   if (state.seats.length >= GAME_MAX_SEATS[state.game]) return state
-  const seat = makeSeat(id, name, bot, false, state.seats.length)
+  const seat = makeSeat(id, name, bot, false, state.seats.length, agent)
   return withNewSeats(state, [...state.seats, seat])
 }
 

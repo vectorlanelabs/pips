@@ -216,6 +216,7 @@ export default function App() {
   const [role, setRole] = useState<'host' | 'guest' | null>(null)
   const [localSeatId, setLocalSeatId] = useState<string | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [pendingAgentJoins, setPendingAgentJoins] = useState<{ guestId: string; name: string }[]>([])
 
   // ---- Rummy ----
   const [rummyRole, setRummyRole] = useState<'host' | 'guest' | null>(null)
@@ -638,7 +639,11 @@ export default function App() {
     setLocalSeatId(hostId)
     setError(null)
     hostRef.current = createHost<RoomState, Action>(code, {
-      onJoin(guestId, guestName) {
+      onJoin(guestId, guestName, agent) {
+        if (agent) {
+          setPendingAgentJoins((prev) => [...prev, { guestId, name: guestName }])
+          return
+        }
         const next = addSeat(roomRef.current!, guestId, guestName, false)
         roomRef.current = next
         setRoom(next)
@@ -648,6 +653,7 @@ export default function App() {
         hostApply(action, guestId)
       },
       onLeave(guestId) {
+        setPendingAgentJoins((prev) => prev.filter((j) => j.guestId !== guestId))
         const prev = roomRef.current!
         let next = removeSeat(prev, guestId)
         if (next.turnIdx >= next.seats.length) next = { ...next, turnIdx: 0 }
@@ -659,6 +665,21 @@ export default function App() {
         setError(message)
       },
     })
+  }
+
+  function acceptAgentJoin(guestId: string) {
+    const req = pendingAgentJoins.find((j) => j.guestId === guestId)
+    if (!req || !roomRef.current) return
+    setPendingAgentJoins((prev) => prev.filter((j) => j.guestId !== guestId))
+    const next = addSeat(roomRef.current, guestId, req.name, false, true)
+    roomRef.current = next
+    setRoom(next)
+    hostRef.current?.broadcast(next)
+  }
+
+  function declineAgentJoin(guestId: string) {
+    setPendingAgentJoins((prev) => prev.filter((j) => j.guestId !== guestId))
+    hostRef.current?.reject(guestId, 'Declined by host')
   }
 
   function startGuest(code: string) {
@@ -4127,6 +4148,9 @@ export default function App() {
             onStart={() => dispatch({ type: 'startGame' })}
             onLeave={resetToEntry}
             onOpenRules={() => setRulesOpen(true)}
+            pendingAgentJoins={isHost ? pendingAgentJoins : []}
+            onAcceptAgentJoin={acceptAgentJoin}
+            onDeclineAgentJoin={declineAgentJoin}
           />
         )}
         {room.screen === 'farkle' && (

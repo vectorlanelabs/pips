@@ -1,7 +1,7 @@
 import Peer, { type DataConnection } from 'peerjs'
 import { assertWireSafe } from '../engine/sync'
 
-type GuestToHost<TAction> = { kind: 'join'; name: string } | { kind: 'action'; action: TAction }
+type GuestToHost<TAction> = { kind: 'join'; name: string; agent?: boolean } | { kind: 'action'; action: TAction }
 type HostToGuest<TState> = { kind: 'state'; state: TState } | { kind: 'rejected'; reason: string }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -13,7 +13,7 @@ export function peerIdForCode(code: string): string {
 }
 
 export interface HostCallbacks<_TState, TAction> {
-  onJoin: (guestId: string, name: string) => void
+  onJoin: (guestId: string, name: string, agent: boolean) => void
   onAction: (guestId: string, action: TAction) => void
   onLeave: (guestId: string) => void
   onError?: (message: string) => void
@@ -36,7 +36,7 @@ export function createHost<TState, TAction>(code: string, callbacks: HostCallbac
     conns.set(conn.peer, conn)
     conn.on('data', (raw) => {
       if (!isRecord(raw)) return
-      if (raw.kind === 'join' && typeof raw.name === 'string') callbacks.onJoin(conn.peer, raw.name)
+      if (raw.kind === 'join' && typeof raw.name === 'string') callbacks.onJoin(conn.peer, raw.name, raw.agent === true)
       else if (raw.kind === 'action' && isRecord(raw.action)) callbacks.onAction(conn.peer, raw.action as TAction)
     })
     conn.on('close', () => {
