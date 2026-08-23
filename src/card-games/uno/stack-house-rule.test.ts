@@ -51,6 +51,7 @@ function buildGame(config: {
   const discardPile = addCards(createDiscardPile<UnoCard>(), config.discard ?? cards('uno-9'))
   const stock = addCards(createPublicZone<UnoCard>('stock', 'private'), config.stock ?? cards('uno-13', 'uno-38', 'uno-63'))
   const publicState: UnoPublicState = {
+    cardBack: 'pips_default',
     stage: config.stage ?? 'play',
     turn,
     seatOrder: players,

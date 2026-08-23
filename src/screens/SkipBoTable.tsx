@@ -328,7 +328,7 @@ export function SkipBoTable({
           <DealIntro
             others={others}
             yourHandSize={5}
-            renderCardBack={(p) => <SkipBoCardBack {...p} />}
+            renderCardBack={(p) => <SkipBoCardBack {...p} design={publicState.cardBack} />}
             onComplete={() => setShowIntro(false)}
             maxFlights={hand.length + others.reduce((s, o) => s + o.handSize, 0)}
           />
@@ -369,6 +369,7 @@ export function SkipBoTable({
                         <SkipBoCardBack
                           key={i}
                           size="fan"
+                          design={publicState.cardBack}
                           style={{ marginLeft: i === 0 ? 0 : -15 }}
                         />
                       ))}
@@ -437,7 +438,7 @@ export function SkipBoTable({
           <div className="sb-draw-group">
             <div className="sb-draw-caption">draw {publicState.drawCount}</div>
             <div className="sb-draw-slot">
-              <SkipBoCardBack size="stock" />
+              <SkipBoCardBack size="stock" design={publicState.cardBack} />
             </div>
             <div className="sb-used-caption">used {publicState.usedCount}</div>
           </div>

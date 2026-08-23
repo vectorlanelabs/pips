@@ -155,6 +155,7 @@ function buildSession(config: {
   }
 
   const publicState: Phase10PublicState = {
+    cardBack: 'pips_default',
     turn,
     seatOrder,
     discardPile,

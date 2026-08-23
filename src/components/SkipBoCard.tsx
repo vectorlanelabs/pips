@@ -1,5 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './SkipBoCard.css'
 
 // ---- Skip-Bo number colour lookup ----
@@ -107,6 +108,8 @@ export interface SkipBoCardBackProps {
   size: SkipBoCardBackSize
   /** When true the stock border turns yellow signalling the player may draw. Ignored for fan. */
   canDraw?: boolean
+  /** Design id from components/cardBacks.ts. Omitted or unknown → plain navy. */
+  design?: string
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
@@ -115,10 +118,12 @@ export interface SkipBoCardBackProps {
 export function SkipBoCardBack({
   size,
   canDraw,
+  design,
   className,
   style,
   onClick,
 }: SkipBoCardBackProps): JSX.Element {
+  const backDef = findCardBack(design)
   const cls = [
     'skipbo-card-back',
     `skipbo-card-back--${size}`,
@@ -127,19 +132,16 @@ export function SkipBoCardBack({
   ]
     .filter(Boolean)
     .join(' ')
+  const imageStyle: React.CSSProperties = backDef ? cardBackImageStyle(backDef) : {}
 
   return (
     <button
       type="button"
       className={cls}
-      style={style}
+      style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={!onClick}
       aria-label={size === 'stock' ? 'Stock pile' : 'Face-down card'}
-    >
-      <span className="skipbo-card-back__badge">
-        <span className="skipbo-card-back__mark">SB</span>
-      </span>
-    </button>
+    />
   )
 }

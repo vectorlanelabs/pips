@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { SKIPBO_MAX_SEATS, SKIPBO_MIN_SEATS } from '../card-games/skipbo/state'
 import { SkipBoRulesOverlay } from './SkipBoRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import { CardBackPicker } from '../components/CardBackPicker'
 
 export interface SkipBoRoomProps {
   code: string
@@ -9,6 +10,8 @@ export interface SkipBoRoomProps {
   isHost: boolean
   seats: { name: string; isBot: boolean; isHost: boolean }[]  // host first, join order
   notice?: string | null
+  cardBack: string                          // host's current pick (guests see it read-only)
+  onSelectCardBack: (id: string) => void    // host-only
   onAddHouseBot: () => void       // host-only
   onStartGame: () => void         // host-only
   onLeave: () => void
@@ -22,6 +25,8 @@ export function SkipBoRoom({
   isHost,
   seats,
   notice,
+  cardBack,
+  onSelectCardBack,
   onAddHouseBot,
   onStartGame,
   onLeave,
@@ -89,6 +94,12 @@ export function SkipBoRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
+
+          <CardBackPicker
+            cardBack={cardBack}
+            onSelect={isHost ? onSelectCardBack : undefined}
+            hostName={!isHost ? hostName : undefined}
+          />
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

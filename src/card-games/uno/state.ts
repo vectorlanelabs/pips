@@ -46,6 +46,8 @@ export interface UnoPublicState {
   matchWinnerId: string | null
   lastAction: UnoLastAction | null
   houseRules: Record<UnoHouseRuleKey, boolean>   // per-match settings, chosen at game creation; carried through START_NEXT_ROUND unchanged
+  cardBack: string                       // host-chosen card-back design id (see components/cardBacks.ts);
+                                          // cosmetic only, but every seat must render the same back.
 }
 
 export interface UnoPrivateState {
@@ -177,6 +179,7 @@ export function createUnoGame(
   seatOrder: string[],
   seed: number,
   houseRules?: Partial<Record<UnoHouseRuleKey, boolean>>,
+  cardBack = 'pips_default',
 ): UnoSession {
   const rng = createRng(seed)
   const { hands, stock, discardPile, activeColor } = dealUnoRound(seatOrder, rng)
@@ -208,6 +211,7 @@ export function createUnoGame(
     matchWinnerId: null,
     lastAction: null,
     houseRules: resolveHouseRules(houseRules),
+    cardBack,
   }
   return { session: createHostSession(publicState, privateStates), stock, rng }
 }

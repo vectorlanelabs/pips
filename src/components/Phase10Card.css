@@ -165,19 +165,13 @@
 
 .phase10-card-back {
   position: relative;
-  /* Flat ink back per PHASE10.md — an earlier rainbow-striped version was
-     tried and rejected as hard to read at fan size. */
   background: var(--ink);
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease;
   font-family: 'Fredoka', system-ui, sans-serif;
-  font-weight: 700;
-  color: var(--yellow);
   padding: 0;
   margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: none;
   border-style: solid;
   appearance: none;
@@ -186,15 +180,6 @@
 
 .phase10-card-back:disabled {
   cursor: default;
-  pointer-events: none;
-}
-
-/* Thin yellow keyline inset 3px (PHASE10.md: "inset 3-5px") */
-.phase10-card-back::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border: 1.5px solid rgba(255, 210, 63, 0.55);
   pointer-events: none;
 }
 
@@ -208,11 +193,6 @@
   border-radius: 7px;
   border-width: 2px;
   border-color: var(--ink);
-}
-
-/* Keyline radius = outer radius − 3px inset, so the frame stays parallel */
-.phase10-card-back--fan::after {
-  border-radius: 4px;
 }
 
 /* ===================================================================
@@ -232,10 +212,6 @@
   box-shadow: 0 5px 0 var(--ink);
 }
 
-.phase10-card-back--stock::after {
-  border-radius: 8px;
-}
-
 /* Turn-highlight: border turns yellow */
 .phase10-card-back--stock.phase10-card-back--can-draw {
   border-color: var(--yellow);
@@ -244,21 +220,4 @@
 /* Hover lift (stock only) */
 .phase10-card-back--stock:hover:not(:disabled) {
   transform: translateY(-6px);
-}
-
-/* ===================================================================
-   Phase10CardBack — "10" mark (both sizes)
-   =================================================================== */
-
-.phase10-card-back__mark {
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.phase10-card-back--fan .phase10-card-back__mark {
-  font-size: 9px;
-}
-
-.phase10-card-back--stock .phase10-card-back__mark {
-  font-size: 16px;
 }

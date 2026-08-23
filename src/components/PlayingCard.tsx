@@ -1,4 +1,5 @@
 import type { Suit, Rank } from '../card-engine/cards'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './PlayingCard.css'
 
 // ---- Suit helpers (exported for M4 reuse in status-line, etc.) ----
@@ -177,53 +178,44 @@ export interface CardBackProps {
   canDraw?: boolean
   /** Stock only: renders an empty outline instead of a full pile when the stock has run out. */
   empty?: boolean
-  /** Design id from components/cardBacks.ts. Omitted or unknown → the classic violet dot back. */
+  /** Design id from components/cardBacks.ts. Omitted or unknown → the plain violet dot back. */
   design?: string
   /** Overrides the default aria-label (e.g. a 'pile' reused as a stock draw pile). */
   ariaLabel?: string
+  /** CardBackPicker's grid sets these so the swatches read as a real radiogroup. */
+  role?: string
+  ariaChecked?: boolean
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
 }
 
-const SUIT_MEDALLION_GLYPHS: { glyph: string; suit: Suit; pos: React.CSSProperties }[] = [
-  { glyph: '♠', suit: 'spades', pos: { left: '50%', top: '36%' } },
-  { glyph: '♥', suit: 'hearts', pos: { left: '64%', top: '50%' } },
-  { glyph: '♦', suit: 'diamonds', pos: { left: '50%', top: '64%' } },
-  { glyph: '♣', suit: 'clubs', pos: { left: '36%', top: '50%' } },
-]
-
-export function CardBack({ size, canDraw, empty, design, ariaLabel, className, style, onClick }: CardBackProps) {
+export function CardBack({ size, canDraw, empty, design, ariaLabel, role, ariaChecked, className, style, onClick }: CardBackProps) {
   const isEmpty = (size === 'stock' || size === 'pile') && empty
-  const styled = design && design !== 'classic' ? design : null
+  const backDef = findCardBack(design)
   const cls = [
     'card-back',
     `card-back--${size}`,
-    styled && `card-back--d-${styled}`,
     canDraw && 'card-back--can-draw',
     isEmpty && 'card-back--empty',
     className,
   ]
     .filter(Boolean)
     .join(' ')
+  const imageStyle: React.CSSProperties = backDef && !isEmpty ? cardBackImageStyle(backDef) : {}
 
   return (
     <button
       type="button"
       className={cls}
-      style={style}
+      style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={!onClick}
+      role={role}
+      aria-checked={ariaChecked}
       aria-label={ariaLabel ?? (size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card')}
     >
-      {!styled && size === 'stock' && !empty && <span className="card-back__mark" />}
-      {styled === 'suit-medallion' && !isEmpty && (
-        <span className="card-back__medallion" aria-hidden="true">
-          {SUIT_MEDALLION_GLYPHS.map((g) => (
-            <span key={g.suit} style={{ ...g.pos, color: suitColor(g.suit) }}>{g.glyph}</span>
-          ))}
-        </span>
-      )}
+      {!backDef && size === 'stock' && !empty && <span className="card-back__mark" />}
     </button>
   )
 }

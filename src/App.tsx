@@ -133,7 +133,7 @@ type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
 type Phase10View =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
 type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
@@ -148,10 +148,10 @@ type MTView =
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
 type ChessView = { revision: number; publicState: ChessPublicState; opponentName: string }
 type UnoView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty; cardBack: string }
   | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
 type SkipBoView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
 type ScrabbleView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
@@ -226,6 +226,8 @@ export default function App() {
   const [rummyNotice, setRummyNotice] = useState<string | null>(null)
   const [rummyStarted, setRummyStarted] = useState(false)
   const [rummySeats, setRummySeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  // Despite the name, this is the ONE shared card-back preference for every card game
+  // (Rummy, Solitaire, Phase10, Uno, Skip-Bo) — see setCardBackPreference below.
   const [rummyCardBack, setRummyCardBack] = useState(savedCardBack)
 
   // ---- Phase 10 ----
@@ -1227,6 +1229,24 @@ export default function App() {
     rummyBroadcast()
   }
 
+  function phase10SetCardBack(id: string) {
+    if (phase10Role !== 'host' || phase10StartedRef.current) return
+    setCardBackPreference(id)
+    phase10Broadcast()
+  }
+
+  function unoSetCardBack(id: string) {
+    if (unoRole !== 'host' || unoStartedRef.current) return
+    setCardBackPreference(id)
+    unoBroadcast()
+  }
+
+  function skipBoSetCardBack(id: string) {
+    if (skipBoRole !== 'host' || skipBoStartedRef.current) return
+    setCardBackPreference(id)
+    skipBoBroadcast()
+  }
+
   // ---- End Rummy helpers ----
 
   // ---- Solitaire helpers ----
@@ -1282,6 +1302,7 @@ export default function App() {
       const view: Phase10View = {
         kind: 'lobby',
         roster: phase10SeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === phase10LocalPlayerIdRef.current })),
+        cardBack: rummyCardBackRef.current,
       }
       setPhase10View(view)
       phase10HostRef.current?.broadcast(view)
@@ -1389,7 +1410,7 @@ export default function App() {
     if (seats.length < PHASE10_MIN_SEATS || seats.length > PHASE10_MAX_SEATS) return
     const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    phase10SessionRef.current = createPhase10Game(playerIds, seed)
+    phase10SessionRef.current = createPhase10Game(playerIds, seed, rummyCardBackRef.current)
     phase10NamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     phase10StartedRef.current = true
     setPhase10Started(true)
@@ -1489,7 +1510,7 @@ export default function App() {
     const prevRevision = phase10SessionRef.current.session.revision
     const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createPhase10Game(playerIds, seed)
+    const next = createPhase10Game(playerIds, seed, ps.cardBack)
     next.session = { ...next.session, revision: prevRevision + 1 }
     phase10SessionRef.current = next
     phase10Broadcast()
@@ -2800,6 +2821,7 @@ export default function App() {
         roster: unoSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === unoLocalPlayerIdRef.current })),
         houseRules: { ...unoHouseRulesRef.current },
         difficulty: unoDifficultyRef.current,
+        cardBack: rummyCardBackRef.current,
       }
       setUnoView(view)
       unoHostRef.current?.broadcast(view)
@@ -2953,7 +2975,7 @@ export default function App() {
       ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
     }
     const seed = Math.floor(Math.random() * 2147483647)
-    unoSessionRef.current = createUnoGame(playerIds, seed, unoHouseRulesRef.current)
+    unoSessionRef.current = createUnoGame(playerIds, seed, unoHouseRulesRef.current, rummyCardBackRef.current)
     unoNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     unoStartedRef.current = true
     setUnoStarted(true)
@@ -3082,7 +3104,7 @@ export default function App() {
     const prevRevision = unoSessionRef.current.session.revision
     const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createUnoGame(playerIds, seed, ps.houseRules)
+    const next = createUnoGame(playerIds, seed, ps.houseRules, ps.cardBack)
     next.session = { ...next.session, revision: prevRevision + 1 }
     unoSessionRef.current = next
     unoWindowKeyRef.current = null
@@ -3198,6 +3220,7 @@ export default function App() {
       const view: SkipBoView = {
         kind: 'lobby',
         roster: skipBoSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === skipBoLocalPlayerIdRef.current })),
+        cardBack: rummyCardBackRef.current,
       }
       setSkipBoView(view)
       skipBoHostRef.current?.broadcast(view)
@@ -3303,7 +3326,7 @@ export default function App() {
     if (seats.length < SKIPBO_MIN_SEATS || seats.length > SKIPBO_MAX_SEATS) return
     const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    skipBoSessionRef.current = createSkipBoGame(playerIds, seed)
+    skipBoSessionRef.current = createSkipBoGame(playerIds, seed, rummyCardBackRef.current)
     skipBoNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     // Hold bots until every client's DealIntro (5 starting-hand cards per seat,
     // stockpiles are not animated) has played out, plus latency slack.
@@ -3411,7 +3434,7 @@ export default function App() {
     const prevRevision = skipBoSessionRef.current.session.revision
     const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createSkipBoGame(playerIds, seed)
+    const next = createSkipBoGame(playerIds, seed, ps.cardBack)
     next.session = { ...next.session, revision: prevRevision + 1 }
     skipBoSessionRef.current = next
     skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
@@ -4296,6 +4319,9 @@ export default function App() {
     const roster = phase10Role === 'host'
       ? phase10Seats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === phase10LocalPlayerId }))
       : (phase10View?.kind === 'lobby' ? phase10View.roster : [])
+    const phase10ViewCardBack = phase10Role === 'host'
+      ? rummyCardBack
+      : (phase10View?.kind === 'lobby' ? phase10View.cardBack : DEFAULT_CARD_BACK)
     return (
       <Phase10Room
         code={phase10Code}
@@ -4303,6 +4329,8 @@ export default function App() {
         isHost={phase10Role === 'host'}
         seats={roster}
         notice={phase10Notice ?? error}
+        cardBack={phase10ViewCardBack}
+        onSelectCardBack={phase10SetCardBack}
         onAddHouseBot={addPhase10HouseBot}
         onStartGame={phase10Start}
         onLeave={resetToEntry}
@@ -4790,6 +4818,9 @@ export default function App() {
     const viewDifficulty = unoRole === 'host'
       ? unoDifficulty
       : (unoView?.kind === 'lobby' ? unoView.difficulty : 'medium')
+    const unoViewCardBack = unoRole === 'host'
+      ? rummyCardBack
+      : (unoView?.kind === 'lobby' ? unoView.cardBack : DEFAULT_CARD_BACK)
     return (
       <UnoRoom
         code={unoCode}
@@ -4799,6 +4830,8 @@ export default function App() {
         notice={unoNotice ?? error}
         houseRules={viewHouseRules}
         difficulty={viewDifficulty}
+        cardBack={unoViewCardBack}
+        onSelectCardBack={unoSetCardBack}
         onAddHouseBot={addUnoHouseBot}
         onToggleHouseRule={unoToggleHouseRule}
         onSetDifficulty={unoSetDifficulty}
@@ -4894,6 +4927,9 @@ export default function App() {
     const roster = skipBoRole === 'host'
       ? skipBoSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === skipBoLocalPlayerId }))
       : (skipBoView?.kind === 'lobby' ? skipBoView.roster : [])
+    const skipBoViewCardBack = skipBoRole === 'host'
+      ? rummyCardBack
+      : (skipBoView?.kind === 'lobby' ? skipBoView.cardBack : DEFAULT_CARD_BACK)
     return (
       <SkipBoRoom
         code={skipBoCode}
@@ -4901,6 +4937,8 @@ export default function App() {
         isHost={skipBoRole === 'host'}
         seats={roster}
         notice={skipBoNotice ?? error}
+        cardBack={skipBoViewCardBack}
+        onSelectCardBack={skipBoSetCardBack}
         onAddHouseBot={addSkipBoHouseBot}
         onStartGame={skipBoStart}
         onLeave={resetToEntry}

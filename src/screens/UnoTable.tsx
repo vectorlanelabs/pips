@@ -569,7 +569,7 @@ export function UnoTable({
             others={others}
             yourHandSize={hand.length}
             shuffleSound="shuffle"
-            renderCardBack={(p) => <UnoCardBack {...p} />}
+            renderCardBack={(p) => <UnoCardBack {...p} design={publicState.cardBack} />}
             onComplete={() => setShowIntro(false)}
             // Default cap (10) truncates well short of a real deal once seat
             // count × UNO_HAND_SIZE (7) grows past a couple of players — the
@@ -668,7 +668,7 @@ export function UnoTable({
                   <div className="uno-opp-tile-bottom">
                     <div className="uno-opp-stack">
                       {Array.from({ length: stackCount }, (_, i) => (
-                        <UnoCardBack key={i} size="small" />
+                        <UnoCardBack key={i} size="small" design={publicState.cardBack} />
                       ))}
                     </div>
                     <span className="uno-opp-count">{count} cards</span>
@@ -694,6 +694,7 @@ export function UnoTable({
                 <div className="uno-stock-card-wrapper">
                   <UnoCardBack
                     size="stock"
+                    design={publicState.cardBack}
                     onClick={canDraw ? onDraw : undefined}
                     disabled={!canDraw}
                   />
@@ -780,6 +781,7 @@ export function UnoTable({
                     <UnoCardBack
                       key={card.id}
                       size="hand"
+                      design={publicState.cardBack}
                       onClick={() => handleReveal(card.id)}
                     />
                   )

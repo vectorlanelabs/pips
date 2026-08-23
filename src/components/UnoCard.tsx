@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { UnoCard, UnoColor } from '../card-games/uno/deck.ts'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './UnoCard.css'
 
 // ---- UnoCardFace ----
@@ -114,23 +115,25 @@ export function UnoCardFace({
 
 // ---- UnoCardBack ----
 //
-// Dark ink card with a red diagonal band and the Pips two-dot mark tilted
-// across it — an original mark, explicitly not a reproduction of any
-// commercial card game's back. `stock` (the draw pile) is the only
-// interactive size: the caller wires an onClick when drawing is legal and the
-// border turns gold via a class swap (Phase10CardBack's canDraw mechanic);
-// `fan`/`small` are static face-down displays, and `hand` is a face-down card
-// inside the player's OWN fan (the forced-draw reveal gate) — clickable to
-// reveal.
+// `stock` (the draw pile) is the only interactive size: the caller wires an
+// onClick when drawing is legal and the border turns gold via a class swap
+// (Phase10CardBack's canDraw mechanic); `fan`/`small` are static face-down
+// displays, and `hand` is a face-down card inside the player's OWN fan (the
+// forced-draw reveal gate) — clickable to reveal. The art itself comes from
+// the shared card-back registry (components/cardBacks.ts) — same design id,
+// same images, as every other card game's back.
 
 export function UnoCardBack({
   size,
+  design,
   onClick,
   disabled,
   style,
   className,
 }: {
   size: 'fan' | 'stock' | 'small' | 'hand'
+  /** Design id from components/cardBacks.ts. Omitted or unknown → plain ink. */
+  design?: string
   onClick?: () => void
   /**
    * Stock only. Explicit "draw is not legal right now" signal, separate from
@@ -147,6 +150,7 @@ export function UnoCardBack({
   // is wired; the gold "may draw" ring is a CSS modifier class swap, not a
   // separately-rendered ring element. The explicit `disabled` ORs in on top.
   const isDisabled = disabled || !onClick
+  const backDef = findCardBack(design)
 
   const cls = [
     'uno-card-back',
@@ -156,21 +160,16 @@ export function UnoCardBack({
   ]
     .filter(Boolean)
     .join(' ')
+  const imageStyle: React.CSSProperties = backDef ? cardBackImageStyle(backDef) : {}
 
   return (
     <button
       type="button"
       className={cls}
-      style={style}
+      style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={isDisabled}
       aria-label={size === 'stock' ? 'Stock pile' : 'Face-down card'}
-    >
-      <span className="uno-card-back__band" />
-      <span className="uno-card-back__mark">
-        <span className="uno-card-back__dot" />
-        <span className="uno-card-back__dot" />
-      </span>
-    </button>
+    />
   )
 }

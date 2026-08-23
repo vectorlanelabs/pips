@@ -63,6 +63,7 @@ function buildSession(config: {
   }
 
   const publicState: SkipBoPublicState = {
+    cardBack: 'pips_default',
     turn,
     seatOrder,
     stockCounts,
