@@ -1,45 +1,24 @@
 import { useState } from 'react'
-import type { SolitaireMode } from '../card-games/solitaire/state'
-import { SolitaireRulesOverlay } from './SolitaireRulesOverlay'
-import { SOLITAIRE_COLOR } from './SolitaireTable'
+import { PyramidRulesOverlay } from './PyramidRulesOverlay'
+import { PYRAMID_COLOR } from './PyramidTable'
 import { Wordmark } from '../components/Wordmark'
 import { CardBackPicker } from '../components/CardBackPicker'
 
-export const SOLITAIRE_MODE_LABELS: Record<SolitaireMode, string> = {
-  klondike: 'Klondike (Draw 1)',
-  klondike3: 'Klondike (Draw 3)',
-  freecell: 'FreeCell',
-  spider: 'Spider (2 Suit)',
-  spider1: 'Spider (1 Suit)',
-}
-
-const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
-  klondike: 'Seven columns, draw one at a time from the stock, unlimited passes.',
-  klondike3: 'Seven columns, draw three at a time from the stock — only the last one drawn is playable.',
-  freecell: 'Eight columns, every card face up, four free cells to park cards in.',
-  spider: 'Ten columns, two suits, no free cells or foundations — build full King-to-Ace runs to clear them.',
-  spider1: 'The easiest Spider: one suit only, so any descending run is always safe to move as a whole.',
-}
-
-export interface SolitaireRoomProps {
+export interface PyramidRoomProps {
   localName: string
   cardBack: string
   onSelectCardBack: (id: string) => void
-  mode: SolitaireMode
-  onSelectMode: (mode: SolitaireMode) => void
   onStart: () => void
   onLeave: () => void
 }
 
-export function SolitaireRoom({
+export function PyramidRoom({
   localName,
   cardBack,
   onSelectCardBack,
-  mode,
-  onSelectMode,
   onStart,
   onLeave,
-}: SolitaireRoomProps) {
+}: PyramidRoomProps) {
   const [rulesOpen, setRulesOpen] = useState(false)
 
   return (
@@ -63,19 +42,8 @@ export function SolitaireRoom({
 
           <CardBackPicker cardBack={cardBack} onSelect={onSelectCardBack} />
 
-          <div style={{ marginTop: 22, fontWeight: 600, fontSize: 15, marginBottom: 10 }}>Game mode</div>
-          <select
-            className="input card-back-select"
-            aria-label="Game mode"
-            value={mode}
-            onChange={(e) => onSelectMode(e.target.value as SolitaireMode)}
-          >
-            {Object.entries(SOLITAIRE_MODE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-          <p style={{ marginTop: 10, fontSize: 14, color: 'var(--muted-text)' }}>
-            {MODE_DESCRIPTIONS[mode]}
+          <p style={{ marginTop: 22, fontSize: 14, color: 'var(--muted-text)' }}>
+            Clear the 28-card pyramid by pairing exposed cards that add up to 13. Kings clear alone.
           </p>
 
           <button type="button" className="btn btn-coral btn-lg" onClick={onStart} style={{ width: '100%', marginTop: 22 }}>
@@ -87,16 +55,16 @@ export function SolitaireRoom({
           <div
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: SOLITAIRE_COLOR, color: '#fff', fontWeight: 700, fontSize: 15,
+              background: PYRAMID_COLOR, color: '#fff', fontWeight: 700, fontSize: 15,
               padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
               marginBottom: 14,
             }}
           >
-            Solitaire
+            Pyramid Solitaire
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, border: '4px solid var(--ink)', borderRadius: 20, padding: '12px 16px' }}>
-            <span className="avatar" style={{ background: SOLITAIRE_COLOR }}>
+            <span className="avatar" style={{ background: PYRAMID_COLOR }}>
               {(localName[0] ?? '?').toUpperCase()}
             </span>
             <div>
@@ -104,17 +72,17 @@ export function SolitaireRoom({
                 {localName} (you)
               </div>
               <div style={{ marginTop: 4 }}>
-                <span className="chip" style={{ background: SOLITAIRE_COLOR, color: '#fff' }}>1 player</span>
+                <span className="chip" style={{ background: PYRAMID_COLOR, color: '#fff' }}>1 player</span>
               </div>
             </div>
           </div>
           <p style={{ marginTop: 16, fontSize: 15, color: 'var(--muted-text)' }}>
-            Solitaire is just you and the deck — no code to share.
+            Pyramid Solitaire is just you and the deck — no code to share.
           </p>
         </div>
       </div>
 
-      {rulesOpen && <SolitaireRulesOverlay mode={mode} onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PyramidRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

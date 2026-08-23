@@ -6,18 +6,25 @@ import type { SolitaireState, SolitaireLoc, SolitaireMove, MoveOutcome } from '.
 import { rankIndex, topOf } from './shared.ts'
 
 export const SPIDER_COLUMNS = 10
-// The two suits used for the 104-card deck. Two-suit Spider is the common
-// "medium difficulty" default — placement never cares about suit (only rank),
-// but a multi-card run can only be picked up as a unit when every card in it
-// shares one suit, so two suits still meaningfully increases the difficulty
-// over a one-suit deck (mixed-suit sequences must be walked one card at a time).
-const SPIDER_SUITS: Suit[] = ['spades', 'hearts']
+// Two-suit Spider is the common "medium difficulty" default — placement
+// never cares about suit (only rank), but a multi-card run can only be
+// picked up as a unit when every card in it shares one suit, so two suits
+// still meaningfully increases the difficulty over one suit (mixed-suit
+// sequences must be walked one card at a time). One suit is the easiest
+// variant: every card is guaranteed the same suit, so any descending run —
+// however it was built — can always be picked up as a whole unit.
+const SPIDER_SUITS: Record<'spider' | 'spider1', Suit[]> = {
+  spider: ['spades', 'hearts'],
+  spider1: ['spades'],
+}
 
-function createSpiderDeck(): Card[] {
+function createSpiderDeck(mode: 'spider' | 'spider1'): Card[] {
+  const suits = SPIDER_SUITS[mode]
+  const reps = 8 / suits.length // always 104 cards total (8 * 13), split evenly across the suits used
   const cards: Card[] = []
   let counter = 0
-  for (let rep = 0; rep < 4; rep++) {
-    for (const suit of SPIDER_SUITS) {
+  for (let rep = 0; rep < reps; rep++) {
+    for (const suit of suits) {
       for (const rank of RANKS) {
         cards.push({ id: `s${counter}`, suit, rank, deckIndex: rep })
         counter++
@@ -27,8 +34,8 @@ function createSpiderDeck(): Card[] {
   return cards
 }
 
-export function dealSpider(seed: number): SolitaireState {
-  const deck = createSpiderDeck()
+export function dealSpider(seed: number, mode: 'spider' | 'spider1' = 'spider'): SolitaireState {
+  const deck = createSpiderDeck(mode)
   const rng = createRng(seed)
   const shuffled = shuffleDeck(deck, rng)
 
@@ -45,7 +52,7 @@ export function dealSpider(seed: number): SolitaireState {
   const stock = shuffled.slice(index)
 
   return {
-    mode: 'spider',
+    mode,
     seed,
     tableau,
     faceUp,

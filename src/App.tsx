@@ -129,6 +129,12 @@ import { ScrabbleTable } from './screens/ScrabbleTable'
 import { ScrabbleResults } from './screens/ScrabbleResults'
 import { ScrabbleRoom } from './screens/ScrabbleRoom'
 
+// ---- Pyramid Solitaire (single-player local session) ----
+import { dealPyramid, applyMove as applyPyramidMove, type PyramidState, type PyramidMove } from './card-games/pyramid/state'
+import { PyramidRoom } from './screens/PyramidRoom'
+import { PyramidTable } from './screens/PyramidTable'
+import { PyramidResults } from './screens/PyramidResults'
+
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
@@ -339,6 +345,11 @@ export default function App() {
   const [scrabbleNotice, setScrabbleNotice] = useState<string | null>(null)
   const [scrabbleStarted, setScrabbleStarted] = useState(false)
   const [scrabbleSeats, setScrabbleSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
+  // ---- Pyramid Solitaire ----
+  const [pyramidOpen, setPyramidOpen] = useState(false)
+  const [pyramidHistory, setPyramidHistory] = useState<PyramidState[]>([])
+  const [pyramidDealId, setPyramidDealId] = useState(0)
 
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
@@ -568,13 +579,14 @@ export default function App() {
     if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
     if (solitaireOpen && solitaireHistory.length > 0 && !solitaireHistory[solitaireHistory.length - 1].won) return 'solitaire'
     if (scrabbleRole && scrabbleStarted && scrabbleView?.kind === 'game' && scrabbleView.publicState.stage !== 'over') return 'scrabble'
+    if (pyramidOpen && pyramidHistory.length > 0 && !pyramidHistory[pyramidHistory.length - 1].won) return 'pyramid'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, solitaireOpen, solitaireHistory, scrabbleRole, scrabbleStarted, scrabbleView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, solitaireOpen, solitaireHistory, scrabbleRole, scrabbleStarted, scrabbleView, pyramidOpen, pyramidHistory])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -608,6 +620,7 @@ export default function App() {
       case 'skipbo': startSkipBoHost(); return
       case 'solitaire': startSolitaire(); return
       case 'scrabble': startScrabbleHost(); return
+      case 'pyramid': startPyramid(); return
     }
   }
 
@@ -938,6 +951,9 @@ export default function App() {
     scrabbleNamesRef.current = {}
     scrabbleBotsHeldUntilRef.current = 0
     scrabbleDictionaryRef.current = null
+    // Pyramid Solitaire
+    setPyramidOpen(false)
+    setPyramidHistory([])
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -1252,6 +1268,36 @@ export default function App() {
   }
 
   // ---- End Solitaire helpers ----
+
+  // ---- Pyramid Solitaire helpers ----
+
+  function startPyramid() {
+    writeNameCookie(name)
+    pushGameUrl('pyramid')
+    setError(null)
+    setPyramidHistory([])
+    setPyramidOpen(true)
+  }
+
+  function pyramidDeal() {
+    const seed = Math.floor(Math.random() * 2147483647)
+    setPyramidHistory([dealPyramid(seed)])
+    setPyramidDealId((n) => n + 1)
+  }
+
+  function pyramidApply(move: PyramidMove) {
+    setPyramidHistory((h) => {
+      const current = h[h.length - 1]
+      const outcome = applyPyramidMove(current, move)
+      return outcome.ok ? [...h, outcome.state] : h
+    })
+  }
+
+  function pyramidUndo() {
+    setPyramidHistory((h) => (h.length > 1 ? h.slice(0, -1) : h))
+  }
+
+  // ---- End Pyramid Solitaire helpers ----
 
   // ---- Phase 10 helpers ----
 
@@ -4071,8 +4117,8 @@ export default function App() {
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Solitaire, and Scrabble are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !solitaireOpen && !scrabbleRole) {
+  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Solitaire, Scrabble, and Pyramid Solitaire are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !solitaireOpen && !scrabbleRole && !pyramidOpen) {
     return (
       <Landing
         name={name}
@@ -4107,6 +4153,7 @@ export default function App() {
         onPickSkipBo={startSkipBoHost}
         onPickSolitaire={startSolitaire}
         onPickScrabble={startScrabbleHost}
+        onPickPyramid={startPyramid}
         error={error}
       />
     )
@@ -5030,6 +5077,44 @@ export default function App() {
         onExchange={(tileIds) => scrabbleDispatch({ type: 'EXCHANGE_TILES', tileIds })}
         onPass={() => scrabbleDispatch({ type: 'PASS' })}
         onChallenge={() => scrabbleDispatch({ type: 'CHALLENGE' })}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Pyramid Solitaire session active ----
+  if (pyramidOpen && pyramidHistory.length === 0) {
+    return (
+      <PyramidRoom
+        localName={name}
+        cardBack={rummyCardBack}
+        onSelectCardBack={setCardBackPreference}
+        onStart={pyramidDeal}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+  if (pyramidOpen) {
+    const current = pyramidHistory[pyramidHistory.length - 1]
+    if (current.won) {
+      return (
+        <PyramidResults
+          moves={current.moves}
+          onDealAgain={pyramidDeal}
+          onBackToShelf={resetToEntry}
+        />
+      )
+    }
+    return (
+      <PyramidTable
+        localName={name}
+        state={current}
+        cardBack={rummyCardBack}
+        dealId={pyramidDealId}
+        canUndo={pyramidHistory.length > 1}
+        onMove={pyramidApply}
+        onUndo={pyramidUndo}
+        onDealAgain={pyramidDeal}
         onLeave={resetToEntry}
       />
     )

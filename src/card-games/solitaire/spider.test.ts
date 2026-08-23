@@ -59,6 +59,26 @@ describe('dealSpider', () => {
     expect(a.tableau).toEqual(b.tableau)
     expect(a.tableau).not.toEqual(c.tableau)
   })
+
+  it('spider1 uses a single suit, 8 copies of each rank (still 104 cards total)', () => {
+    const state = dealSpider(7, 'spider1')
+    expect(state.mode).toBe('spider1')
+    const all = [...state.tableau.flat(), ...state.stock]
+    expect(all.length).toBe(104)
+    const suits = new Set(all.map((c) => c.suit))
+    expect(suits.size).toBe(1)
+    const ids = new Set(all.map((c) => c.id))
+    expect(ids.size).toBe(104)
+  })
+
+  it('spider1: any descending run is automatically same-suit and movable as a unit', () => {
+    // spider1's engine reuse means this is really just "any run is one suit" —
+    // proven directly rather than trusting the deck composition alone.
+    const state = buildState({ tableau: [['9H'], ['8H', '7H', '6H']] })
+    state.mode = 'spider1'
+    const result = applySpiderMove(state, { type: 'MOVE', from: { kind: 'tableau', index: 1 }, to: { kind: 'tableau', index: 0 }, count: 3 })
+    expect(result.ok).toBe(true)
+  })
 })
 
 describe('applySpiderMove — tableau moves', () => {
