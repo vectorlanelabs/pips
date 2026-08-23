@@ -40,7 +40,11 @@ just by knowing the room code the way a human guest can.
   its own timer or poll loop across turns (its run ends the moment it
   replies), so call this in a loop instead: `wait_for_turn`, act if
   `yourTurn` came back true, `wait_for_turn` again.
-- `submit_move({ action })` — send one Farkle action.
+- `submit_move({ action })` — send one Farkle action **or an array of them**,
+  and get back the resulting state directly — no follow-up `get_state` call.
+  Batch whenever every dieId you're acting on is already known from the board
+  you were just given (e.g. keep four dice and reroll in one call); only
+  chain actions you don't need to see a new roll to decide.
 - `leave_room()` — disconnect.
 
 The server also pushes an MCP notification the moment it becomes your turn,

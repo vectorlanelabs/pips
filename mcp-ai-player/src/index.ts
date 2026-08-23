@@ -19,6 +19,39 @@ let wasYourTurn = false
 // what lets a chat-driven agent (which can't hold its own timer/poll loop
 // across turns) block on a single tool call instead.
 let turnWaiters: (() => void)[] = []
+// Resolvers for pending submit_move calls — see waitForBroadcasts below:
+// submit_move returns the resulting state instead of making the agent call
+// get_state separately after every action.
+let stateWaiters: (() => void)[] = []
+
+function notifyStateWaiters() {
+  for (const w of [...stateWaiters]) w()
+}
+
+// Resolves once `n` state broadcasts have arrived (or the timeout elapses).
+// The host broadcasts once per processed action, in order, over the same
+// reliable ordered channel actions are sent on — so after firing n actions
+// in a row, waiting for n broadcasts reliably lands on the result of the
+// last one, not a premature one from the first.
+function waitForBroadcasts(n: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let remaining = n
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      stateWaiters = stateWaiters.filter((w) => w !== onEach)
+      resolve(ok)
+    }
+    const onEach = () => {
+      remaining--
+      if (remaining <= 0) finish(true)
+    }
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    stateWaiters.push(onEach)
+  })
+}
 
 function requireHandle(): AiPlayerHandle {
   if (!handle) throw new Error('Not in a room — call join_room first.')
@@ -34,6 +67,7 @@ function makeCallbacks(): AiPlayerCallbacks {
     onState(state) {
       latestState = state
       onTurnCheck()
+      notifyStateWaiters()
     },
     onRejected() {
       handle = null
@@ -118,14 +152,21 @@ server.registerTool(
 server.registerTool(
   'submit_move',
   {
-    title: 'Submit a Farkle move',
-    description: 'Submit one action: roll the dice, toggle a die kept for scoring, bank your turn score, or end your turn after a bust.',
-    inputSchema: { action: farkleMoveSchema },
+    title: 'Submit a Farkle move (single or batched)',
+    description:
+      'Submit one action, or several in order, and get back the resulting state — no separate get_state call needed. ' +
+      'Batch whenever you already know every dieId you want from the board you were just given: e.g. after a roll, ' +
+      'keeping four dice and rerolling is one call — [{type:"farkleToggle",dieId},×4, {type:"farkleRoll"}] — not five. ' +
+      'Only chain actions whose targets you already know; never guess a dieId from a roll you have not seen yet.',
+    inputSchema: { action: z.union([farkleMoveSchema, z.array(farkleMoveSchema).min(1).max(10)]) },
   },
   async ({ action }) => {
     const h = requireHandle()
-    h.sendAction(parseFarkleMove(action))
-    return { content: [{ type: 'text', text: `Sent ${action.type}.` }] }
+    const actions = (Array.isArray(action) ? action : [action]).map(parseFarkleMove)
+    for (const a of actions) h.sendAction(a)
+    const arrived = await waitForBroadcasts(actions.length, 5000)
+    if (!arrived || !latestState) return { content: [{ type: 'text', text: `Sent ${actions.length} action(s), but did not hear back in time — call get_state to check.` }] }
+    return { content: [{ type: 'text', text: JSON.stringify(trimFarkleState(latestState, h.seatId)) }] }
   },
 )
 
