@@ -76,3 +76,53 @@
       verified including the mandatory 4-seat bot-pacing check), user
       said "push" — merged into `main` and pushed to `origin`. Branch/
       worktree intentionally NOT pruned yet per explicit instruction.
+
+- [ ] 2026-08-23, Scrabble polish (spec 50) — 2 of 3 real bugs fixed and
+      verified: deal-intro screen now shows the header during shuffle,
+      and the bot rewrite actually searches for real dictionary words
+      with cross-word validation instead of placing tiles in raw rack
+      order (confirmed live: played "REBEC," a real word; also passed
+      a hard performance bar — max 402ms across 120 test turns/3 seeds,
+      well under the ~900ms pacing budget, after 3 rounds catching a
+      real 11.3-second worst case and then a too-coarse time-budget
+      fix). **The third bug — the table requiring scroll on normal
+      viewports — is NOT fixed.** 4 fix rounds were attempted (vh-
+      percentage sizing: still overflowed; flexbox intrinsic sizing:
+      collapsed the board to an unusable 12px sliver while technically
+      satisfying the no-scroll metric; JS-measured sizing: overlapped/
+      broke the layout and hid the hand+action buttons entirely, worse
+      than the original bug). Reverted the layout mechanism to the
+      original safe (scrolling-required-but-fully-usable) baseline
+      rather than land a broken intermediate state. This needs either
+      a fresh, more careful attempt (possibly with tighter visual
+      iteration than a single delegated round allows) or an explicit
+      decision to accept scrolling for now — flagging rather than
+      silently continuing to burn cycles on a slice that's failed 4
+      times running.
+
+- [x] 2026-08-23, Scrabble polish follow-up — the layout/scroll item
+      above is now DONE too. Fixed personally by the lead (not
+      delegated further, per the "4 failed rounds" note above) after
+      actually reading the full component tree and doing the real
+      height math rather than guessing: root cause was `.scr-table`
+      using `min-height: 100vh` (a floor, not a ceiling) so oversized
+      content just grew past it instead of ever being constrained —
+      changed to a hard `height: 100vh`, switched `.scr-table-card`
+      from a flex column to CSS Grid (`grid-template-rows: auto auto
+      minmax(280px, 1fr) auto auto`, board in the flexible row), which
+      handles an aspect-ratio child far more predictably than flex did
+      across all 4 failed attempts. Also fixed two real, independent
+      space hogs found along the way: a `.scr-code-chip` that
+      duplicated the code `TableHeader`'s own `meta` prop already
+      shows (no sibling game has this — a real, unnoticed pattern
+      deviation, not just a space-saving hack) removed entirely; the
+      opponent tile's 3-line stacked layout (name / score / a row of
+      48px-tall tile-back fans) compacted to one line (dot, name,
+      "N pts · M tiles") since the fan visual wasn't carrying
+      information the text didn't already state. Verified live at
+      1280×800 and 1440×900, both 2-seat and 4-seat: zero scroll,
+      board a real legible size (280-321px depending on available
+      room, not collapsed), a full turn played and a bot response
+      ("WHEW" for 26) all visually confirmed correct in screenshots —
+      not just the scrollHeight number, which is exactly what burned
+      3 of the 4 prior attempts. 1214 tests / tsc / build green.
