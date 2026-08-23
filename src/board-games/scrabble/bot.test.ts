@@ -35,7 +35,7 @@ describe('Scrabble bot word search', () => {
     ])
 
     const dictionary = createMockDictionary(validWords)
-    const strategy = createScrabbleBotStrategy(dictionary)
+    const strategy = createScrabbleBotStrategy(dictionary, 'medium')
 
     // Build a board with some existing tiles
     // Place "ACT" horizontally at row 7, cols 6-8
@@ -85,6 +85,7 @@ describe('Scrabble bot word search', () => {
     const action = strategy(publicState, privateState, 'bot-1')
 
     // Verify bot plays PLACE_WORD (not PASS or EXCHANGE)
+    // Note: passing 'medium' difficulty explicitly (tests updated per spec)
     expect(action.type).toBe('PLACE_WORD')
 
     if (action.type === 'PLACE_WORD') {
@@ -136,7 +137,7 @@ describe('Scrabble bot word search', () => {
     ])
 
     const dictionary = createMockDictionary(validWords)
-    const strategy = createScrabbleBotStrategy(dictionary)
+    const strategy = createScrabbleBotStrategy(dictionary, 'medium')
 
     // Setup board with some tiles
     const board: Array<Array<BoardCell | null>> = Array(15)
@@ -215,7 +216,7 @@ describe('Scrabble bot word search', () => {
     ])
 
     const dictionary = createMockDictionary(validWords)
-    const strategy = createScrabbleBotStrategy(dictionary)
+    const strategy = createScrabbleBotStrategy(dictionary, 'medium')
 
     // Setup board
     const board: Array<Array<BoardCell | null>> = Array(15)
@@ -307,7 +308,7 @@ describe('Scrabble bot word search', () => {
     ])
 
     const dictionary = createMockDictionary(validWords)
-    const strategy = createScrabbleBotStrategy(dictionary)
+    const strategy = createScrabbleBotStrategy(dictionary, 'medium')
 
     const col = 7
     const board: Array<Array<BoardCell | null>> = Array(15)
@@ -374,5 +375,202 @@ describe('Scrabble bot word search', () => {
       const placesBuggyTile = action.tiles.some((t) => t.row === 4 && t.col === col)
       expect(placesBuggyTile).toBe(false)
     }
+  })
+
+  /**
+   * Test 5: At `easy`, the bot picks uniformly from all candidates;
+   * at `medium/hard`, the bot picks from top-5%-tie only.
+   *
+   * Setup: Empty board (bot must place through center). Rack includes both
+   * low-scoring tiles (A=1, E=1, I=1) and high-scoring tiles (Z=10, Q=10)
+   * that can form multiple valid words from center (7,7):
+   * - Low-scoring 2-letter words: AT (1 pt), AI (1 pt)
+   * - High-scoring 2-letter words: ZA (10 pts), QI (10 pts)
+   *
+   * Run easy and medium N=15 times each and verify easy's minimum score is
+   * lower (proving easy picks from all candidates, not just top 5%).
+   * Performance: empty board first-move search is ~30-50ms, 15×2 = ~1s total.
+   */
+  it('at easy, bot sometimes picks lower-scoring candidates', () => {
+    // Valid words on empty board starting from center
+    const validWords = new Set(['A', 'AT', 'AI', 'E', 'I', 'Z', 'ZA', 'Q', 'QI', 'T'])
+    const dictionary = createMockDictionary(validWords)
+
+    // Empty board: bot places first word through center (7,7)
+    const board: Array<Array<BoardCell | null>> = Array(15)
+      .fill(null)
+      .map(() => Array(15).fill(null))
+
+    // Rack with low-scoring (A, E, I, T) and high-scoring (Z, Q) tiles
+    // All can form valid 2-letter words through center
+    const rackTiles: ScrabbleTile[] = [
+      { id: 'tile-1', letter: 'A', points: 1 },  // Forms AT, AI (1 pt)
+      { id: 'tile-2', letter: 'T', points: 1 },  // Forms AT
+      { id: 'tile-3', letter: 'I', points: 1 },  // Forms AI, QI
+      { id: 'tile-4', letter: 'Z', points: 10 }, // Forms ZA (10 pts)
+      { id: 'tile-5', letter: 'Q', points: 10 }, // Forms QI (10 pts)
+      { id: 'tile-6', letter: 'E', points: 1 },
+      { id: 'tile-7', letter: 'L', points: 1 },
+    ]
+
+    const rack: Zone<ScrabbleTile> = {
+      id: 'rack-bot1',
+      ownerId: 'bot-1',
+      visibility: 'private',
+      cards: rackTiles,
+    }
+
+    const publicState: ScrabblePublicState = {
+      board,
+      turn: { playerOrder: ['bot-1'], currentIndex: 0, direction: 1, phase: 'play', turnNumber: 1 },
+      scores: { 'bot-1': 0 },
+      handCounts: { 'bot-1': 7 },
+      bagCount: 50,
+      stage: 'play',
+      consecutivePasses: 0,
+      lastPlacement: null,
+      winnerId: null,
+    }
+
+    const privateState: ScrabblePrivateState = {
+      rack,
+    }
+
+    const strategyEasy = createScrabbleBotStrategy(dictionary, 'easy')
+    const strategyMedium = createScrabbleBotStrategy(dictionary, 'medium')
+
+    // Collect scores from both strategies: N=15 each
+    const easyScores: number[] = []
+    for (let i = 0; i < 15; i++) {
+      const action = strategyEasy(publicState, privateState, 'bot-1')
+      if (action.type === 'PLACE_WORD') {
+        let score = 0
+        for (const tile of action.tiles) {
+          score += rackTiles.find((t) => t.id === tile.tileId)?.points ?? 0
+        }
+        easyScores.push(score)
+      }
+    }
+
+    const mediumScores: number[] = []
+    for (let i = 0; i < 15; i++) {
+      const action = strategyMedium(publicState, privateState, 'bot-1')
+      if (action.type === 'PLACE_WORD') {
+        let score = 0
+        for (const tile of action.tiles) {
+          score += rackTiles.find((t) => t.id === tile.tileId)?.points ?? 0
+        }
+        mediumScores.push(score)
+      }
+    }
+
+    const minEasyScore = Math.min(...easyScores)
+    const minMediumScore = Math.min(...mediumScores)
+
+    // Easy should pick lower-scoring words sometimes; medium always top 5%
+    expect(minEasyScore).toBeLessThan(minMediumScore)
+  })
+
+  /**
+   * Test 6: Challenge probability differs meaningfully between difficulty tiers.
+   *
+   * Setup: Mostly-full board with one strategic empty anchor. When the bot
+   * does NOT challenge (80% easy, 10% hard), move-generation search is cheap
+   * because anchor enumeration finds only the one anchor, not O(15²) anchors.
+   * This keeps the test runtime fast even with 40 iterations (worst-case:
+   * ~27 no-challenge + 1-2 anchor searches × 50ms avg = ~1.4s, well under 5s).
+   *
+   * Invalid lastPlacement: XY is not in dictionary, so challenge is relevant.
+   * Rack: no tiles can form valid words, so non-challenge → EXCHANGE or PASS
+   * (no expensive move search). Empty cells: only one strategic anchor so
+   * anchor enumeration is instant.
+   */
+  it('challenge rates differ meaningfully between easy and hard', () => {
+    // No valid words: forces EXCHANGE/PASS fallback if no challenge
+    const validWords = new Set<string>()
+    const dictionary = createMockDictionary(validWords)
+
+    // Mostly-full board: only one strategic empty anchor at (7,9)
+    const board: Array<Array<BoardCell | null>> = Array(15)
+      .fill(null)
+      .map((_, r) =>
+        Array(15)
+          .fill(null)
+          .map((__, c) => {
+            // Leave only (7,9) empty; rest is filler
+            if (r === 7 && c === 9) {
+              return null
+            }
+            return { letter: 'Z', isBlank: false, premiumConsumed: true }
+          }),
+      )
+
+    // Existing tiles at (7,7-8)
+    board[7][7] = { letter: 'A', isBlank: false, premiumConsumed: true }
+    board[7][8] = { letter: 'T', isBlank: false, premiumConsumed: true }
+
+    // Rack with tiles that can't form any valid words (dict is empty)
+    const rackTiles: ScrabbleTile[] = [
+      { id: 'tile-1', letter: 'X', points: 8 },
+      { id: 'tile-2', letter: 'Z', points: 10 },
+      { id: 'tile-3', letter: 'Q', points: 10 },
+      { id: 'tile-4', letter: 'J', points: 8 },
+      { id: 'tile-5', letter: 'K', points: 5 },
+      { id: 'tile-6', letter: 'V', points: 4 },
+      { id: 'tile-7', letter: 'W', points: 4 },
+    ]
+
+    const rack: Zone<ScrabbleTile> = {
+      id: 'rack-bot1',
+      ownerId: 'bot-1',
+      visibility: 'private',
+      cards: rackTiles,
+    }
+
+    // Invalid word placed by opponent
+    const invalidWord = { word: 'XY', score: 18 }
+
+    const publicState: ScrabblePublicState = {
+      board,
+      turn: { playerOrder: ['player-1', 'bot-1'], currentIndex: 1, direction: 1, phase: 'play', turnNumber: 2 },
+      scores: { 'player-1': 0, 'bot-1': 0 },
+      handCounts: { 'player-1': 7, 'bot-1': 7 },
+      bagCount: 50,
+      stage: 'play',
+      consecutivePasses: 0,
+      lastPlacement: {
+        by: 'player-1',
+        tiles: [{ tileId: 'opp-tile', row: 7, col: 8, letter: 'X', isBlank: false }],
+        words: [invalidWord],
+        totalScore: 18,
+        challengeable: true,
+      },
+      winnerId: null,
+    }
+
+    const privateState: ScrabblePrivateState = {
+      rack,
+    }
+
+    const strategyEasy = createScrabbleBotStrategy(dictionary, 'easy')
+    const strategyHard = createScrabbleBotStrategy(dictionary, 'hard')
+
+    // N=40: collects ~8 easy challenges and ~36 hard challenges (20% vs 90%)
+    // Non-challenge fallback is EXCHANGE/PASS (no move search), instant
+    const N = 40
+    let easyChallengCount = 0
+    let hardChallengeCount = 0
+
+    for (let i = 0; i < N; i++) {
+      const actionEasy = strategyEasy(publicState, privateState, 'bot-1')
+      if (actionEasy.type === 'CHALLENGE') easyChallengCount++
+
+      const actionHard = strategyHard(publicState, privateState, 'bot-1')
+      if (actionHard.type === 'CHALLENGE') hardChallengeCount++
+    }
+
+    // Hard should challenge significantly more: expect 2.5x+ difference
+    // Expected: easy ~8/40 (20%), hard ~36/40 (90%), ratio ~4.5x
+    expect(hardChallengeCount).toBeGreaterThan(easyChallengCount * 2.5)
   })
 })

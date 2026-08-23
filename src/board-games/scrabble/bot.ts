@@ -1,6 +1,7 @@
 import type { BotStrategy } from '../../engine/bot.ts'
 import type { ScrabbleAction, ScrabblePrivateState, ScrabblePublicState } from './state.ts'
 import type { ScrabbleDictionary } from './dictionary.ts'
+import type { BotDifficulty } from '../../types.ts'
 
 interface Candidate {
   action: Exclude<ScrabbleAction, { type: 'CHALLENGE' }>
@@ -23,6 +24,7 @@ interface RackTile {
 
 export function createScrabbleBotStrategy(
   dictionary: ScrabbleDictionary,
+  difficulty: BotDifficulty,
 ): BotStrategy<ScrabblePublicState, ScrabblePrivateState, ScrabbleAction> {
   return (publicState, privateState, playerId) => {
     // 1. Challenge check first
@@ -32,7 +34,11 @@ export function createScrabbleBotStrategy(
       // Check if any word is invalid
       const hasInvalid = publicState.lastPlacement.words.some((w) => !dictionary.isWord(w.word))
       if (hasInvalid) {
-        return { type: 'CHALLENGE' }
+        // Gate the challenge on difficulty-based probability
+        const challengeProbability = difficulty === 'easy' ? 0.2 : difficulty === 'medium' ? 0.55 : 0.9
+        if (Math.random() < challengeProbability) {
+          return { type: 'CHALLENGE' }
+        }
       }
     }
 
@@ -113,12 +119,18 @@ export function createScrabbleBotStrategy(
     }
 
     if (candidates.length > 0) {
-      // Sort by score descending, pick from top few
-      candidates.sort((a, b) => b.score - a.score)
-      const topScore = candidates[0].score
-      const topCandidates = candidates.filter((c) => c.score >= topScore * 0.95) // Within 5% of top
-      const picked = topCandidates[Math.floor(Math.random() * topCandidates.length)]
-      return picked.action
+      if (difficulty === 'easy') {
+        // Easy: pick uniformly at random from ALL valid candidates
+        const picked = candidates[Math.floor(Math.random() * candidates.length)]
+        return picked.action
+      } else {
+        // Medium/hard: keep existing top-5%-tie behavior unchanged
+        candidates.sort((a, b) => b.score - a.score)
+        const topScore = candidates[0].score
+        const topCandidates = candidates.filter((c) => c.score >= topScore * 0.95) // Within 5% of top
+        const picked = topCandidates[Math.floor(Math.random() * topCandidates.length)]
+        return picked.action
+      }
     }
 
     // 3. No placement: exchange or pass

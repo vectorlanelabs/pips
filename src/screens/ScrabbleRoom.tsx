@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { BotDifficulty } from '../types'
 import { SCRABBLE_MAX_SEATS, SCRABBLE_MIN_SEATS } from '../board-games/scrabble/state'
 import { ScrabbleRulesOverlay } from './ScrabbleRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
@@ -9,7 +10,9 @@ export interface ScrabbleRoomProps {
   isHost: boolean
   seats: { name: string; isBot: boolean; isHost: boolean }[]
   notice?: string | null
+  difficulty: BotDifficulty
   onAddHouseBot: () => void
+  onSetDifficulty: (d: BotDifficulty) => void
   onStartGame: () => void
   onLeave: () => void
 }
@@ -22,7 +25,9 @@ export function ScrabbleRoom({
   isHost,
   seats,
   notice,
+  difficulty,
   onAddHouseBot,
+  onSetDifficulty,
   onStartGame,
   onLeave,
 }: ScrabbleRoomProps) {
@@ -77,6 +82,31 @@ export function ScrabbleRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
+
+          <div style={{ marginTop: 22 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>House bot difficulty</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['easy', 'medium', 'hard'] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  disabled={!isHost}
+                  onClick={() => onSetDifficulty(d)}
+                  className="btn pill-small"
+                  style={{
+                    flex: 1,
+                    background: difficulty === d ? 'var(--ink)' : '#fff',
+                    color: difficulty === d ? '#fff' : 'var(--ink)',
+                  }}
+                >
+                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
+            <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13, fontWeight: 500, color: 'var(--muted-text)' }}>
+              How good a move house bots play, and how often they call a bad word.
+            </p>
+          </div>
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

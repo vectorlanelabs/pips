@@ -154,7 +154,7 @@ type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
 type ScrabbleView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
   | { kind: 'game'; revision: number; publicState: ScrabblePublicState; rack: ScrabbleTile[]; names: Record<string, string> }
 
 const BASE_MS = 900
@@ -339,6 +339,7 @@ export default function App() {
   const [scrabbleNotice, setScrabbleNotice] = useState<string | null>(null)
   const [scrabbleStarted, setScrabbleStarted] = useState(false)
   const [scrabbleSeats, setScrabbleSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [scrabbleDifficulty, setScrabbleDifficulty] = useState<BotDifficulty>('medium')
 
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
@@ -465,6 +466,7 @@ export default function App() {
   const scrabbleBotCounterRef = useRef(0)
   const scrabbleBotsHeldUntilRef = useRef(0)
   const scrabbleDictionaryRef = useRef<ScrabbleDictionary | null>(null)
+  const scrabbleDifficultyRef = useRef<BotDifficulty>('medium')
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -932,6 +934,8 @@ export default function App() {
     scrabbleStartedRef.current = false
     setScrabbleSeats([])
     scrabbleSeatsRef.current = []
+    setScrabbleDifficulty('medium')
+    scrabbleDifficultyRef.current = 'medium'
     scrabbleBotBusyRef.current = false
     scrabbleBotSeatsRef.current.clear()
     scrabbleBotCounterRef.current = 0
@@ -3425,6 +3429,7 @@ export default function App() {
       const view: ScrabbleView = {
         kind: 'lobby',
         roster: scrabbleSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === scrabbleLocalPlayerIdRef.current })),
+        difficulty: scrabbleDifficultyRef.current,
       }
       setScrabbleView(view)
       scrabbleHostRef.current?.broadcast(view)
@@ -3526,6 +3531,13 @@ export default function App() {
     scrabbleBroadcast()
   }
 
+  function scrabbleSetDifficulty(d: BotDifficulty) {
+    if (scrabbleRole !== 'host' || scrabbleStartedRef.current) return
+    scrabbleDifficultyRef.current = d
+    setScrabbleDifficulty(d)
+    scrabbleBroadcast()
+  }
+
   async function scrabbleStart() {
     if (scrabbleRole !== 'host' || scrabbleStartedRef.current) return
     const seats = scrabbleSeatsRef.current
@@ -3564,7 +3576,7 @@ export default function App() {
       if (ps.stage === 'over') return
       if (!scrabbleBotSeatsRef.current.has(botId)) return
 
-      const result = runScrabbleBotTurn(session, botId, createScrabbleBotStrategy(scrabbleDictionaryRef.current!), scrabbleDictionaryRef.current)
+      const result = runScrabbleBotTurn(session, botId, createScrabbleBotStrategy(scrabbleDictionaryRef.current!, scrabbleDifficultyRef.current), scrabbleDictionaryRef.current)
       if (!result.outcome.ok) return
       scrabbleSessionRef.current = result.session
       scrabbleBroadcast()
@@ -3618,6 +3630,7 @@ export default function App() {
       onState(view) {
         if (view.kind === 'lobby') {
           setScrabbleView(view)
+          setScrabbleDifficulty(view.difficulty)
           setScrabbleStarted(false)
           return
         }
@@ -4979,7 +4992,9 @@ export default function App() {
         isHost={scrabbleRole === 'host'}
         seats={roster}
         notice={scrabbleNotice ?? error}
+        difficulty={scrabbleDifficulty}
         onAddHouseBot={addScrabbleHouseBot}
+        onSetDifficulty={scrabbleSetDifficulty}
         onStartGame={scrabbleStart}
         onLeave={resetToEntry}
       />
