@@ -629,17 +629,18 @@ export default function App() {
   }
 
   function startHost(game: Game) {
-    const code = `${GAME_CODE_PREFIX[game]}-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    const initial = makeRoom(code, game, name.trim(), hostId)
-    roomRef.current = initial
-    setRoom(initial)
-    setRole('host')
-    writeNameCookie(name)
-    pushGameUrl(game)
-    setLocalSeatId(hostId)
     setError(null)
-    hostRef.current = createHost<RoomState, Action>(code, {
+    hostRef.current = createHost<RoomState, Action>(() => `${GAME_CODE_PREFIX[game]}-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        const initial = makeRoom(code, game, name.trim(), hostId)
+        roomRef.current = initial
+        setRoom(initial)
+        setRole('host')
+        writeNameCookie(name)
+        pushGameUrl(game)
+        setLocalSeatId(hostId)
+      },
       onJoin(guestId, guestName) {
         const next = addSeat(roomRef.current!, guestId, guestName, false)
         roomRef.current = next
@@ -1030,21 +1031,23 @@ export default function App() {
   }
 
   function startRummyHost() {
-    const code = `RM-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setRummyRole('host')
-    writeNameCookie(name)
-    pushGameUrl('rummy')
-    setRummyCode(code)
-    setRummyLocalPlayerId(hostId)
-    rummyLocalPlayerIdRef.current = hostId
-    setRummyStarted(false)
-    rummyStartedRef.current = false
-    setRummySeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    rummySeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    setRummyNotice(null)
     setError(null)
-    rummyHostRef.current = createHost<RummyView, RummyAction>(code, {
+    rummyHostRef.current = createHost<RummyView, RummyAction>(() => `RM-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setRummyRole('host')
+        writeNameCookie(name)
+        pushGameUrl('rummy')
+        setRummyCode(code)
+        setRummyLocalPlayerId(hostId)
+        rummyLocalPlayerIdRef.current = hostId
+        setRummyStarted(false)
+        rummyStartedRef.current = false
+        setRummySeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        rummySeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setRummyNotice(null)
+        rummyBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (rummyStartedRef.current) {
           rummyHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -1083,7 +1086,6 @@ export default function App() {
         setError(message)
       },
     })
-    rummyBroadcast()
   }
 
   function addRummyHouseBot() {
@@ -1310,21 +1312,23 @@ export default function App() {
   }
 
   function startPhase10Host() {
-    const code = `P10-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setPhase10Role('host')
-    writeNameCookie(name)
-    pushGameUrl('phase10')
-    setPhase10Code(code)
-    setPhase10LocalPlayerId(hostId)
-    phase10LocalPlayerIdRef.current = hostId
-    setPhase10Started(false)
-    phase10StartedRef.current = false
-    setPhase10Seats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    phase10SeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    setPhase10Notice(null)
     setError(null)
-    phase10HostRef.current = createHost<Phase10View, Phase10Action>(code, {
+    phase10HostRef.current = createHost<Phase10View, Phase10Action>(() => `P10-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setPhase10Role('host')
+        writeNameCookie(name)
+        pushGameUrl('phase10')
+        setPhase10Code(code)
+        setPhase10LocalPlayerId(hostId)
+        phase10LocalPlayerIdRef.current = hostId
+        setPhase10Started(false)
+        phase10StartedRef.current = false
+        setPhase10Seats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        phase10SeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setPhase10Notice(null)
+        phase10Broadcast()
+      },
       onJoin(guestId, guestName) {
         if (phase10StartedRef.current) {
           phase10HostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -1363,7 +1367,6 @@ export default function App() {
         setError(message)
       },
     })
-    phase10Broadcast()
   }
 
   function addPhase10HouseBot() {
@@ -1517,24 +1520,25 @@ export default function App() {
   }
 
   function startBattleshipHost() {
-    const code = `BS-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setBattleshipRole('host')
-    writeNameCookie(name)
-    pushGameUrl('battleship')
-    setBattleshipCode(code)
-    setBattleshipLocalPlayerId(hostId)
-    battleshipLocalPlayerIdRef.current = hostId
-    setBattleshipWaiting(true)
     setError(null)
-    battleshipHostRef.current = createHost<BattleshipView, BattleshipAction>(code, {
+    battleshipHostRef.current = createHost<BattleshipView, BattleshipAction>(() => `BS-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setBattleshipRole('host')
+        writeNameCookie(name)
+        pushGameUrl('battleship')
+        setBattleshipCode(code)
+        setBattleshipLocalPlayerId(hostId)
+        battleshipLocalPlayerIdRef.current = hostId
+        setBattleshipWaiting(true)
+      },
       onJoin(guestId, guestName) {
         if (battleshipSessionRef.current) {
           battleshipHostRef.current?.reject(guestId, 'That Battleship table is already full.')
           return
         }
         const seed = Math.floor(Math.random() * 2147483647)
-        battleshipSessionRef.current = createBattleshipGame([hostId, guestId], seed, battleshipVariantRef.current)
+        battleshipSessionRef.current = createBattleshipGame([battleshipLocalPlayerIdRef.current!, guestId], seed, battleshipVariantRef.current)
         setBattleshipOpponentId(guestId)
         battleshipOpponentIdRef.current = guestId
         setBattleshipOpponentName(guestName)
@@ -1707,24 +1711,25 @@ export default function App() {
   }
 
   function startDominoesHost() {
-    const code = `DM-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setDominoesRole('host')
-    writeNameCookie(name)
-    pushGameUrl('dominoes')
-    setDominoesCode(code)
-    setDominoesLocalPlayerId(hostId)
-    dominoesLocalPlayerIdRef.current = hostId
-    setDominoesWaiting(true)
     setError(null)
-    dominoesHostRef.current = createHost<DominoesView, DominoesAction>(code, {
+    dominoesHostRef.current = createHost<DominoesView, DominoesAction>(() => `DM-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setDominoesRole('host')
+        writeNameCookie(name)
+        pushGameUrl('dominoes')
+        setDominoesCode(code)
+        setDominoesLocalPlayerId(hostId)
+        dominoesLocalPlayerIdRef.current = hostId
+        setDominoesWaiting(true)
+      },
       onJoin(guestId, guestName) {
         if (dominoesSessionRef.current) {
           dominoesHostRef.current?.reject(guestId, 'That Dominoes table is already full.')
           return
         }
         const seed = Math.floor(Math.random() * 2147483647)
-        dominoesSessionRef.current = createDominoesGame([hostId, guestId], seed)
+        dominoesSessionRef.current = createDominoesGame([dominoesLocalPlayerIdRef.current!, guestId], seed)
         setDominoesOpponentId(guestId)
         dominoesOpponentIdRef.current = guestId
         setDominoesOpponentName(guestName)
@@ -1888,23 +1893,25 @@ export default function App() {
   }
 
   function startWahooHost() {
-    const code = `WH-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setWahooRole('host')
-    writeNameCookie(name)
-    pushGameUrl('wahoo')
-    setWahooCode(code)
-    setWahooLocalPlayerId(hostId)
-    wahooLocalPlayerIdRef.current = hostId
-    setWahooStarted(false)
-    wahooStartedRef.current = false
-    setWahooSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    wahooSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    wahooDroppedRef.current = []
-    setWahooDropped([])
-    setWahooNotice(null)
     setError(null)
-    wahooHostRef.current = createHost<WahooView, WahooAction>(code, {
+    wahooHostRef.current = createHost<WahooView, WahooAction>(() => `WH-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setWahooRole('host')
+        writeNameCookie(name)
+        pushGameUrl('wahoo')
+        setWahooCode(code)
+        setWahooLocalPlayerId(hostId)
+        wahooLocalPlayerIdRef.current = hostId
+        setWahooStarted(false)
+        wahooStartedRef.current = false
+        setWahooSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        wahooSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        wahooDroppedRef.current = []
+        setWahooDropped([])
+        setWahooNotice(null)
+        wahooBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (wahooStartedRef.current) {
           wahooHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -1947,7 +1954,6 @@ export default function App() {
         setError(message)
       },
     })
-    wahooBroadcast()
   }
 
   function addWahooHouseBot() {
@@ -2133,20 +2139,22 @@ export default function App() {
   }
 
   function startCheckersHost() {
-    const code = `CK-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setCheckersRole('host')
-    writeNameCookie(name)
-    pushGameUrl('checkers')
-    setCheckersCode(code)
-    setCheckersLocalPlayerId(hostId)
-    checkersLocalPlayerIdRef.current = hostId
-    setCheckersStarted(false)
-    checkersStartedRef.current = false
-    setCheckersSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    checkersSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
     setError(null)
-    checkersHostRef.current = createHost<CheckersView, CheckersAction>(code, {
+    checkersHostRef.current = createHost<CheckersView, CheckersAction>(() => `CK-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setCheckersRole('host')
+        writeNameCookie(name)
+        pushGameUrl('checkers')
+        setCheckersCode(code)
+        setCheckersLocalPlayerId(hostId)
+        checkersLocalPlayerIdRef.current = hostId
+        setCheckersStarted(false)
+        checkersStartedRef.current = false
+        setCheckersSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        checkersSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        checkersBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (checkersStartedRef.current) {
           checkersHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -2185,7 +2193,6 @@ export default function App() {
         setError(message)
       },
     })
-    checkersBroadcast()
   }
 
   function addCheckersHouseBot() {
@@ -2364,23 +2371,25 @@ export default function App() {
   }
 
   function startMTHost() {
-    const code = `MT-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setMTRole('host')
-    writeNameCookie(name)
-    pushGameUrl('mexican-train')
-    setMTCode(code)
-    setMTLocalPlayerId(hostId)
-    mtLocalPlayerIdRef.current = hostId
-    setMTStarted(false)
-    mtStartedRef.current = false
-    setMTSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    mtSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    mtDroppedRef.current = []
-    setMTDropped([])
-    setMTNotice(null)
     setError(null)
-    mtHostRef.current = createHost<MTView, MTAction>(code, {
+    mtHostRef.current = createHost<MTView, MTAction>(() => `MT-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setMTRole('host')
+        writeNameCookie(name)
+        pushGameUrl('mexican-train')
+        setMTCode(code)
+        setMTLocalPlayerId(hostId)
+        mtLocalPlayerIdRef.current = hostId
+        setMTStarted(false)
+        mtStartedRef.current = false
+        setMTSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        mtSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        mtDroppedRef.current = []
+        setMTDropped([])
+        setMTNotice(null)
+        mtBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (mtStartedRef.current) {
           mtHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -2423,7 +2432,6 @@ export default function App() {
         setError(message)
       },
     })
-    mtBroadcast()
   }
 
   function addMTHouseBot() {
@@ -2601,24 +2609,25 @@ export default function App() {
   }
 
   function startChessHost() {
-    const code = `CH-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setChessRole('host')
-    writeNameCookie(name)
-    pushGameUrl('chess')
-    setChessCode(code)
-    setChessLocalPlayerId(hostId)
-    chessLocalPlayerIdRef.current = hostId
-    setChessWaiting(true)
     setError(null)
-    chessHostRef.current = createHost<ChessView, ChessAction>(code, {
+    chessHostRef.current = createHost<ChessView, ChessAction>(() => `CH-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setChessRole('host')
+        writeNameCookie(name)
+        pushGameUrl('chess')
+        setChessCode(code)
+        setChessLocalPlayerId(hostId)
+        chessLocalPlayerIdRef.current = hostId
+        setChessWaiting(true)
+      },
       onJoin(guestId, guestName) {
         if (chessSessionRef.current) {
           chessHostRef.current?.reject(guestId, 'That Chess table is already full.')
           return
         }
         const seed = Math.floor(Math.random() * 2147483647)
-        chessSessionRef.current = createChessGame([hostId, guestId], chessDifficultyRef.current, seed)
+        chessSessionRef.current = createChessGame([chessLocalPlayerIdRef.current!, guestId], chessDifficultyRef.current, seed)
         setChessOpponentId(guestId)
         chessOpponentIdRef.current = guestId
         setChessOpponentName(guestName)
@@ -2831,29 +2840,31 @@ export default function App() {
   }
 
   function startUnoHost() {
-    const code = `UN-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setUnoRole('host')
-    writeNameCookie(name)
-    pushGameUrl('uno')
-    setUnoCode(code)
-    setUnoLocalPlayerId(hostId)
-    unoLocalPlayerIdRef.current = hostId
-    setUnoStarted(false)
-    unoStartedRef.current = false
-    setUnoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    unoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    unoDroppedRef.current = []
-    setUnoDropped([])
-    setUnoNotice(null)
-    setUnoHouseRules(resolveHouseRules())
-    unoHouseRulesRef.current = resolveHouseRules()
-    unoDifficultyRef.current = 'medium'
-    setUnoDifficulty('medium')
-    unoWindowKeyRef.current = null
-    unoReflexGenRef.current = 0
     setError(null)
-    unoHostRef.current = createHost<UnoView, UnoAction>(code, {
+    unoHostRef.current = createHost<UnoView, UnoAction>(() => `UN-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setUnoRole('host')
+        writeNameCookie(name)
+        pushGameUrl('uno')
+        setUnoCode(code)
+        setUnoLocalPlayerId(hostId)
+        unoLocalPlayerIdRef.current = hostId
+        setUnoStarted(false)
+        unoStartedRef.current = false
+        setUnoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        unoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        unoDroppedRef.current = []
+        setUnoDropped([])
+        setUnoNotice(null)
+        setUnoHouseRules(resolveHouseRules())
+        unoHouseRulesRef.current = resolveHouseRules()
+        unoDifficultyRef.current = 'medium'
+        setUnoDifficulty('medium')
+        unoWindowKeyRef.current = null
+        unoReflexGenRef.current = 0
+        unoBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (unoStartedRef.current) {
           unoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -2896,7 +2907,6 @@ export default function App() {
         setError(message)
       },
     })
-    unoBroadcast()
   }
 
   function addUnoHouseBot() {
@@ -3218,21 +3228,23 @@ export default function App() {
   }
 
   function startSkipBoHost() {
-    const code = `SB-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setSkipBoRole('host')
-    writeNameCookie(name)
-    pushGameUrl('skipbo')
-    setSkipBoCode(code)
-    setSkipBoLocalPlayerId(hostId)
-    skipBoLocalPlayerIdRef.current = hostId
-    setSkipBoStarted(false)
-    skipBoStartedRef.current = false
-    setSkipBoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    skipBoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    setSkipBoNotice(null)
     setError(null)
-    skipBoHostRef.current = createHost<SkipBoView, SkipBoAction>(code, {
+    skipBoHostRef.current = createHost<SkipBoView, SkipBoAction>(() => `SB-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setSkipBoRole('host')
+        writeNameCookie(name)
+        pushGameUrl('skipbo')
+        setSkipBoCode(code)
+        setSkipBoLocalPlayerId(hostId)
+        skipBoLocalPlayerIdRef.current = hostId
+        setSkipBoStarted(false)
+        skipBoStartedRef.current = false
+        setSkipBoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        skipBoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setSkipBoNotice(null)
+        skipBoBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (skipBoStartedRef.current) {
           skipBoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -3271,7 +3283,6 @@ export default function App() {
         setError(message)
       },
     })
-    skipBoBroadcast()
   }
 
   function addSkipBoHouseBot() {
@@ -3460,23 +3471,25 @@ export default function App() {
   }
 
   function startScrabbleHost() {
-    const code = `SCR-${generateCode()}`
-    const hostId = peerIdForCode(code)
-    setScrabbleRole('host')
-    writeNameCookie(name)
-    pushGameUrl('scrabble')
-    setScrabbleCode(code)
-    setScrabbleLocalPlayerId(hostId)
-    scrabbleLocalPlayerIdRef.current = hostId
-    setScrabbleStarted(false)
-    scrabbleStartedRef.current = false
-    setScrabbleSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
-    scrabbleSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
-    setScrabbleNotice(null)
     setError(null)
     // Fire-and-forget dictionary loading (no blocking on room creation)
     loadDictionary().then(d => { scrabbleDictionaryRef.current = d }).catch(() => {})
-    scrabbleHostRef.current = createHost<ScrabbleView, ScrabbleAction>(code, {
+    scrabbleHostRef.current = createHost<ScrabbleView, ScrabbleAction>(() => `SCR-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setScrabbleRole('host')
+        writeNameCookie(name)
+        pushGameUrl('scrabble')
+        setScrabbleCode(code)
+        setScrabbleLocalPlayerId(hostId)
+        scrabbleLocalPlayerIdRef.current = hostId
+        setScrabbleStarted(false)
+        scrabbleStartedRef.current = false
+        setScrabbleSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        scrabbleSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setScrabbleNotice(null)
+        scrabbleBroadcast()
+      },
       onJoin(guestId, guestName) {
         if (scrabbleStartedRef.current) {
           scrabbleHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
@@ -3516,7 +3529,6 @@ export default function App() {
         setError(message)
       },
     })
-    scrabbleBroadcast()
   }
 
   function addScrabbleHouseBot() {

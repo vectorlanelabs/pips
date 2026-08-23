@@ -13,6 +13,7 @@ export function peerIdForCode(code: string): string {
 }
 
 export interface HostCallbacks<_TState, TAction> {
+  onReady: (code: string) => void
   onJoin: (guestId: string, name: string) => void
   onAction: (guestId: string, action: TAction) => void
   onLeave: (guestId: string) => void
@@ -26,24 +27,53 @@ export interface HostHandle<TState> {
   destroy: () => void
 }
 
-export function createHost<TState, TAction>(code: string, callbacks: HostCallbacks<TState, TAction>): HostHandle<TState> {
-  const peer = new Peer(peerIdForCode(code))
+// codeGenerator is called again on each retry, so a fresh code (and thus a
+// fresh peer ID) is generated per attempt. onReady only fires once
+// registration with the signaling broker actually succeeds, so callers must
+// not commit a room code to UI state before then.
+export function createHost<TState, TAction>(
+  codeGenerator: () => string,
+  callbacks: HostCallbacks<TState, TAction>,
+): HostHandle<TState> {
   const conns = new Map<string, DataConnection>()
+  let peer: Peer
+  let destroyed = false
 
-  peer.on('error', (err) => callbacks.onError?.(err.message))
+  function attempt() {
+    const code = codeGenerator()
+    const thisPeer = new Peer(peerIdForCode(code))
+    peer = thisPeer
 
-  peer.on('connection', (conn) => {
-    conns.set(conn.peer, conn)
-    conn.on('data', (raw) => {
-      if (!isRecord(raw)) return
-      if (raw.kind === 'join' && typeof raw.name === 'string') callbacks.onJoin(conn.peer, raw.name)
-      else if (raw.kind === 'action' && isRecord(raw.action)) callbacks.onAction(conn.peer, raw.action as TAction)
+    thisPeer.on('open', () => {
+      if (destroyed) { thisPeer.destroy(); return }
+      callbacks.onReady(code)
     })
-    conn.on('close', () => {
-      conns.delete(conn.peer)
-      callbacks.onLeave(conn.peer)
+
+    thisPeer.on('error', (err) => {
+      if (destroyed) return
+      if (err.type === 'unavailable-id') {
+        thisPeer.destroy()
+        attempt()
+        return
+      }
+      callbacks.onError?.(err.message)
     })
-  })
+
+    thisPeer.on('connection', (conn) => {
+      if (destroyed) return
+      conns.set(conn.peer, conn)
+      conn.on('data', (raw) => {
+        if (!isRecord(raw)) return
+        if (raw.kind === 'join' && typeof raw.name === 'string') callbacks.onJoin(conn.peer, raw.name)
+        else if (raw.kind === 'action' && isRecord(raw.action)) callbacks.onAction(conn.peer, raw.action as TAction)
+      })
+      conn.on('close', () => {
+        conns.delete(conn.peer)
+        callbacks.onLeave(conn.peer)
+      })
+    })
+  }
+  attempt()
 
   return {
     broadcast(state) {
@@ -63,6 +93,7 @@ export function createHost<TState, TAction>(code: string, callbacks: HostCallbac
       if (conn?.open) conn.send({ kind: 'rejected', reason })
     },
     destroy() {
+      destroyed = true
       conns.forEach((c) => c.close())
       peer.destroy()
     },
