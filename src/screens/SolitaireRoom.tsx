@@ -67,7 +67,7 @@ export function SolitaireRoom({
 
           <div style={{ marginTop: 22, fontWeight: 600, fontSize: 15, marginBottom: 10 }}>Game mode</div>
           <select
-            className="input card-back-select"
+            className="input select-chevron"
             aria-label="Game mode"
             value={mode}
             onChange={(e) => onSelectMode(e.target.value as SolitaireMode)}

@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import type { UnoCard, UnoColor } from '../card-games/uno/deck.ts'
-import { findCardBack } from './cardBacks'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './UnoCard.css'
 
 // ---- UnoCardFace ----
@@ -160,9 +160,7 @@ export function UnoCardBack({
   ]
     .filter(Boolean)
     .join(' ')
-  const imageStyle: React.CSSProperties = backDef
-    ? { backgroundImage: `url(${backDef.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : {}
+  const imageStyle: React.CSSProperties = backDef ? cardBackImageStyle(backDef) : {}
 
   return (
     <button

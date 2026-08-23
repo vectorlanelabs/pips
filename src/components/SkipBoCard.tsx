@@ -1,6 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
-import { findCardBack } from './cardBacks'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './SkipBoCard.css'
 
 // ---- Skip-Bo number colour lookup ----
@@ -132,9 +132,7 @@ export function SkipBoCardBack({
   ]
     .filter(Boolean)
     .join(' ')
-  const imageStyle: React.CSSProperties = backDef
-    ? { backgroundImage: `url(${backDef.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : {}
+  const imageStyle: React.CSSProperties = backDef ? cardBackImageStyle(backDef) : {}
 
   return (
     <button

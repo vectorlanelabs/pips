@@ -1,5 +1,5 @@
 import type { Suit, Rank } from '../card-engine/cards'
-import { findCardBack } from './cardBacks'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './PlayingCard.css'
 
 // ---- Suit helpers (exported for M4 reuse in status-line, etc.) ----
@@ -182,12 +182,15 @@ export interface CardBackProps {
   design?: string
   /** Overrides the default aria-label (e.g. a 'pile' reused as a stock draw pile). */
   ariaLabel?: string
+  /** CardBackPicker's grid sets these so the swatches read as a real radiogroup. */
+  role?: string
+  ariaChecked?: boolean
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
 }
 
-export function CardBack({ size, canDraw, empty, design, ariaLabel, className, style, onClick }: CardBackProps) {
+export function CardBack({ size, canDraw, empty, design, ariaLabel, role, ariaChecked, className, style, onClick }: CardBackProps) {
   const isEmpty = (size === 'stock' || size === 'pile') && empty
   const backDef = findCardBack(design)
   const cls = [
@@ -199,10 +202,7 @@ export function CardBack({ size, canDraw, empty, design, ariaLabel, className, s
   ]
     .filter(Boolean)
     .join(' ')
-  const imageStyle: React.CSSProperties =
-    backDef && !isEmpty
-      ? { backgroundImage: `url(${backDef.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : {}
+  const imageStyle: React.CSSProperties = backDef && !isEmpty ? cardBackImageStyle(backDef) : {}
 
   return (
     <button
@@ -211,6 +211,8 @@ export function CardBack({ size, canDraw, empty, design, ariaLabel, className, s
       style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={!onClick}
+      role={role}
+      aria-checked={ariaChecked}
       aria-label={ariaLabel ?? (size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card')}
     >
       {!backDef && size === 'stock' && !empty && <span className="card-back__mark" />}

@@ -1,5 +1,5 @@
 import { CardBack } from './PlayingCard'
-import { CARD_BACKS } from './cardBacks'
+import { CARD_BACKS, findCardBack } from './cardBacks'
 import './CardBackPicker.css'
 
 export function CardBackPicker({
@@ -25,6 +25,8 @@ export function CardBackPicker({
               size="stock"
               design={def.id}
               ariaLabel={def.name}
+              role="radio"
+              ariaChecked={def.id === cardBack}
               className={def.id === cardBack ? 'card-back-swatch card-back-swatch--selected' : 'card-back-swatch'}
               onClick={() => onSelect(def.id)}
             />
@@ -34,7 +36,7 @@ export function CardBackPicker({
         <div className="card-back-picker">
           <CardBack size="stock" design={cardBack} />
           <span style={{ fontSize: 17, fontWeight: 600 }}>
-            {CARD_BACKS.find((d) => d.id === cardBack)?.name ?? 'Pips Default'}
+            {findCardBack(cardBack)?.name ?? 'Pips Default'}
           </span>
         </div>
       )}

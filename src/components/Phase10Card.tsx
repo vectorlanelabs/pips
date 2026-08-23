@@ -1,6 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
-import { findCardBack } from './cardBacks'
+import { findCardBack, cardBackImageStyle } from './cardBacks'
 import './Phase10Card.css'
 
 // ---- Phase 10 color lookup (exported for M4 reuse in non-card UI, e.g. a color-coded phase requirement icon) ----
@@ -152,9 +152,7 @@ export function Phase10CardBack({
   ]
     .filter(Boolean)
     .join(' ')
-  const imageStyle: React.CSSProperties = backDef
-    ? { backgroundImage: `url(${backDef.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : {}
+  const imageStyle: React.CSSProperties = backDef ? cardBackImageStyle(backDef) : {}
 
   return (
     <button

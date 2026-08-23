@@ -226,6 +226,8 @@ export default function App() {
   const [rummyNotice, setRummyNotice] = useState<string | null>(null)
   const [rummyStarted, setRummyStarted] = useState(false)
   const [rummySeats, setRummySeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  // Despite the name, this is the ONE shared card-back preference for every card game
+  // (Rummy, Solitaire, Phase10, Uno, Skip-Bo) — see setCardBackPreference below.
   const [rummyCardBack, setRummyCardBack] = useState(savedCardBack)
 
   // ---- Phase 10 ----

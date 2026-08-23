@@ -60,3 +60,10 @@ export const CARD_BACKS: CardBackDef[] = [
 export function findCardBack(id: string | undefined): CardBackDef | undefined {
   return id ? CARD_BACKS.find((d) => d.id === id) : undefined
 }
+
+// The inline style every card-back component applies once it has resolved a
+// design — same reasoning as findCardBack above, one place to change how a
+// resolved back actually paints.
+export function cardBackImageStyle(def: CardBackDef): { backgroundImage: string; backgroundSize: string; backgroundPosition: string } {
+  return { backgroundImage: `url(${def.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+}
