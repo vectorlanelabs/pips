@@ -77,27 +77,23 @@
 }
 
 /* ===================================================================
-   PlayingCard — discard (50 × 70)
+   PlayingCard — discard (74 × 104) — same size as the hand card
    =================================================================== */
 
-/*
-   Judgment call — RUMMY.md does not specify the discard card’s border / shadow.
-   Using the same visual weight as the hand card, scaled proportionally:
-     hand   4px border + 6px shadow → 74×104
-     discard 3px border + 4px shadow → 50×70  ✓
-*/
+/* Same size as the hand card — the discard pile shows one real card, so it
+   reads as one. */
 .playing-card--discard {
-  width: 50px;
-  height: 70px;
-  border-radius: 10px;
-  border-width: 3px;
+  width: 74px;
+  height: 104px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--grey-border);
+  box-shadow: 0 6px 0 var(--grey-border);
 }
 
 .playing-card--discard.playing-card--selected {
   border-color: var(--yellow);
-  box-shadow: 0 4px 0 var(--_selected-shadow);
+  box-shadow: 0 6px 0 var(--_selected-shadow);
 }
 
 /* ===================================================================
@@ -151,25 +147,21 @@
   line-height: 1;
 }
 
-/* Discard — rank OVER suit, stacked (two lines, top-left only) */
+/* Discard — rank OVER suit, stacked (two lines, top-left only). Same size
+   as the hand card, so the same corner offset and font sizes as hand. */
 .playing-card__corner--stacked {
   flex-direction: column;
   gap: 0;
 }
 
-.playing-card--discard .playing-card__corner--stacked {
-  top: 4px;
-  left: 5px;
-}
-
 .playing-card--discard .playing-card__rank {
-  font-size: 15px;
-  line-height: 1.15;
+  font-size: 19px;
+  line-height: 1;
 }
 
 .playing-card--discard .playing-card__suit {
-  font-size: 13px;
-  line-height: 1.15;
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* Tableau — same stacked layout, 1.5× discard's corner */
@@ -202,19 +194,9 @@
   opacity: 0.85;
 }
 
-/*
-   Judgment call — RUMMY.md only specifies the discard strip's overlapped
-   top-left corner (the sliver that's visible on a covered card). It doesn't
-   say anything about the topmost, fully-visible discard card, which without
-   this looked bare next to a hand card. Scaled down proportionally from the
-   hand card's 28px glyph at the same ratio as the discard card's own
-   dimensions relative to the hand card's (50/74 ≈ 0.68 → 19px).
-*/
-.playing-card__bottom-suit--discard {
-  bottom: 4px;
-  left: 5px;
-  font-size: 19px;
-}
+/* Discard is now the same size as hand, so its bottom-suit glyph just
+   inherits the base .playing-card__bottom-suit position/size above —
+   no --discard override needed. */
 
 .playing-card__bottom-suit--tableau {
   bottom: 6px;
@@ -280,7 +262,6 @@
    =================================================================== */
 
 .card-back--fan {
-  --cb: 0.22; /* design-sheet art is drawn on a 130 × 182 card; scale factor to this size */
   width: 30px;
   height: 44px;
   border-radius: 7px;
@@ -289,17 +270,16 @@
 }
 
 /* ===================================================================
-   CardBack — stock (56 × 78) — the draw pile
+   CardBack — stock (74 × 104) — the draw pile, same size as the hand card
    =================================================================== */
 
 .card-back--stock {
-  --cb: 0.41;
-  width: 56px;
-  height: 78px;
-  border-radius: 11px;
-  border-width: 3px;
+  width: 74px;
+  height: 104px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 5px 0 var(--ink);
+  box-shadow: 0 6px 0 var(--ink);
 }
 
 /* ===================================================================
@@ -310,7 +290,6 @@
    =================================================================== */
 
 .card-back--pile {
-  --cb: 0.58;
   width: 75px;
   height: 105px;
   border-radius: 12px;
@@ -341,8 +320,4 @@
   border-color: var(--grey-border);
   box-shadow: none;
 }
-
-/* ===================================================================
-   CardBack — decorative mark (stock only) — 19 px yellow rounded square
-   =================================================================== */
 

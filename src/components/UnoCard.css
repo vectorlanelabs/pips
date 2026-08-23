@@ -62,18 +62,16 @@
 }
 
 /* ===================================================================
-   UnoCardFace — discard (50 × 70)
+   UnoCardFace — discard (70 × 100) — same size as the hand card
    =================================================================== */
 
-/* Reuses Rummy/Phase10's discard size and visual weight (50×70, 3px ink
-   border, 0 4px grey shadow) so the two games' discard slots look identical. */
 .uno-card-face--discard {
-  width: 50px;
-  height: 70px;
-  border-radius: 10px;
-  border-width: 3px;
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--grey-border);
+  box-shadow: 0 6px 0 var(--grey-border);
 }
 
 /* ===================================================================
@@ -199,29 +197,20 @@
   font-size: 14px;
 }
 
-/* Discard content scales from hand at the card-size ratio (50/70):
-   15 → 11, 24 → 17, 14 → 10. Corner offsets match Rummy's discard (4/5). */
+/* Discard is now the same size as hand, so its corner offsets and content
+   sizes just inherit the hand values above/base — no --discard override
+   needed for position; only the font sizes need to be set explicitly since
+   .uno-card-face--hand's font-size rules are hand-scoped. */
 .uno-card-face--discard .uno-card-face__corner {
-  top: 4px;
-  left: 5px;
-  font-size: 11px;
-}
-
-/* Must come after the discard corner rule above so top/left re-return to auto
-   on the rotated duplicate (same specificity, later wins). */
-.uno-card-face--discard .uno-card-face__corner--flipped {
-  top: auto;
-  right: 5px;
-  bottom: 4px;
-  left: auto;
+  font-size: 15px;
 }
 
 .uno-card-face--discard .uno-card-face__center-symbol {
-  font-size: 17px;
+  font-size: 24px;
 }
 
 .uno-card-face--discard .uno-card-face__center-label {
-  font-size: 10px;
+  font-size: 14px;
 }
 
 /* ===================================================================
@@ -288,18 +277,16 @@
 }
 
 /* ===================================================================
-   UnoCardBack — stock (56 × 78) — the draw pile
+   UnoCardBack — stock (70 × 100) — the draw pile, same size as hand
    =================================================================== */
 
-/* Reuses Rummy/Phase10's stock size and visual weight (56×78, 3px ink border,
-   0 5px ink shadow) so the two games' stock slots look identical. */
 .uno-card-back--stock {
-  width: 56px;
-  height: 78px;
-  border-radius: 11px;
-  border-width: 3px;
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 5px 0 var(--ink);
+  box-shadow: 0 6px 0 var(--ink);
 }
 
 /* Turn-highlight: the border turns gold when drawing is legal. Same class-swap

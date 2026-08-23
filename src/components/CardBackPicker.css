@@ -5,8 +5,15 @@
   padding: 4px 0 8px; /* room for the stock card's 5px drop shadow */
 }
 
+/* Double the normal 56 × 78 stock size — this is the one place a card back
+   is shown large enough to actually judge the design by. */
 .card-back-picker .card-back--stock {
   flex: none;
+  width: 112px;
+  height: 156px;
+  border-radius: 22px;
+  border-width: 6px;
+  box-shadow: 0 10px 0 var(--ink);
 }
 
 .card-back-select {

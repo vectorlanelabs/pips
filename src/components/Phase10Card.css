@@ -90,22 +90,16 @@
 }
 
 /* ===================================================================
-   Phase10Card — discard (50 × 70)
+   Phase10Card — discard (70 × 100) — same size as the hand card
    =================================================================== */
 
-/*
-   Judgment call — PHASE10.md only ever shows the top discard card (no
-   reach-in, no fanned strip) and doesn't size it. Reusing Rummy's own
-   already-made discard judgment call (50×70, 3px border, 0 4px shadow) so
-   the two games' discard slots look identical.
-*/
 .phase10-card--discard {
-  width: 50px;
-  height: 70px;
-  border-radius: 10px;
-  border-width: 3px;
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--grey-border);
+  box-shadow: 0 6px 0 var(--grey-border);
 }
 
 /* ===================================================================
@@ -121,14 +115,15 @@
   font-size: 36px;
 }
 
-/* Group/discard numbers scale down from hand at each size's card ratio:
-   hand 36px × (36/70) ≈ 18px, × (50/70) ≈ 26px. */
+/* Group numbers scale down from hand at the group card-size ratio:
+   hand 36px × (36/70) ≈ 18px. Discard is the same size as hand, so it
+   just inherits the hand number size below. */
 .phase10-card--group .phase10-card__number {
   font-size: 18px;
 }
 
 .phase10-card--discard .phase10-card__number {
-  font-size: 26px;
+  font-size: 36px;
 }
 
 .phase10-card__word {
@@ -147,7 +142,7 @@
 }
 
 .phase10-card--discard .phase10-card__word {
-  font-size: 13px;
+  font-size: 18px;
 }
 
 /* ===================================================================
@@ -196,20 +191,16 @@
 }
 
 /* ===================================================================
-   Phase10CardBack — stock (56 × 78) — the draw pile
+   Phase10CardBack — stock (70 × 100) — the draw pile, same size as hand
    =================================================================== */
 
-/*
-   Reuses Rummy's stock size and visual weight (56×78, 3px ink border,
-   0 5px ink shadow) so the two games' stock slots look identical.
-*/
 .phase10-card-back--stock {
-  width: 56px;
-  height: 78px;
-  border-radius: 11px;
-  border-width: 3px;
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
   border-color: var(--ink);
-  box-shadow: 0 5px 0 var(--ink);
+  box-shadow: 0 6px 0 var(--ink);
 }
 
 /* Turn-highlight: border turns yellow */
