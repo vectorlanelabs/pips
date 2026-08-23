@@ -3,8 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { joinAsAiPlayer, type AiPlayerHandle, type AiPlayerCallbacks } from './peerClient.js'
 import { farkleMoveSchema, parseFarkleMove, trimFarkleState } from './games/farkle.js'
-import { decideFarkleBot } from './games/farkleBot.js'
-import type { BotDifficulty, RoomState } from '../../src/types.js'
+import type { RoomState } from '../../src/types.js'
 
 const server = new McpServer({ name: 'pips-ai-player', version: '0.1.0' })
 // Declare the logging capability up front: we push a notifications/message
@@ -12,47 +11,35 @@ const server = new McpServer({ name: 'pips-ai-player', version: '0.1.0' })
 // to send that unless the server advertises it supports logging.
 server.server.registerCapabilities({ logging: {} })
 
-// ---- Autonomous auto-play ----
-// The bridge can drive the AI seat by itself, reacting to the state stream the
-// moment it's the AI's turn — no external agent, no polling, no human nudge.
-// This is what makes it a real self-playing player. Enable with PIPS_AUTO_PLAY=1;
-// PIPS_ROOM auto-joins on start. Decision logic + pacing mirror the host's
-// runFarkleBot so the AI reads as a human-speed player. (Without auto-play the
-// bridge still exposes the MCP tools for a client agent to drive interactively.)
-const AUTO_PLAY = process.env.PIPS_AUTO_PLAY === '1'
-const AUTO_DIFFICULTY = (process.env.PIPS_DIFFICULTY || 'medium') as BotDifficulty
-const AUTO_DELAY_MS = Number(process.env.PIPS_DELAY_MS || 1600)
-
 let handle: AiPlayerHandle | null = null
 let latestState: RoomState | null = null
 let wasYourTurn = false
-let lastRollSig = ''
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Resolvers for pending wait_for_turn calls — fired the moment the state
+// stream shows it's become the AI's turn. See wait_for_turn below: this is
+// what lets a chat-driven agent (which can't hold its own timer/poll loop
+// across turns) block on a single tool call instead.
+let turnWaiters: (() => void)[] = []
 
 function requireHandle(): AiPlayerHandle {
   if (!handle) throw new Error('Not in a room — call join_room first.')
   return handle
 }
 
+function isYourTurnNow(): boolean {
+  return !!handle && !!latestState && latestState.game === 'farkle' && trimFarkleState(latestState, handle.seatId).yourTurn
+}
+
 function makeCallbacks(): AiPlayerCallbacks {
   return {
     onState(state) {
       latestState = state
-      maybeNotifyTurn()
-      if (AUTO_PLAY) void maybeAutoPlay(state)
+      onTurnCheck()
     },
     onRejected() {
       handle = null
     },
     onDisconnected() {
       handle = null
-      // One room per process: when the host goes away the authoritative room is
-      // gone, so shut the autonomous player down cleanly rather than idling.
-      if (AUTO_PLAY) {
-        console.error('[auto] disconnected — room ended; exiting')
-        setTimeout(() => process.exit(0), 200)
-      }
     },
   }
 }
@@ -87,6 +74,40 @@ server.registerTool(
 )
 
 server.registerTool(
+  'wait_for_turn',
+  {
+    title: 'Wait until it is your turn',
+    description:
+      "Blocks until it becomes your turn, then returns the state — the same shape get_state returns, plus yourTurn. " +
+      'A chat-driven agent has no way to hold its own timer between turns (its run ends when it replies), so call this ' +
+      'in a loop between moves instead of polling get_state on an interval: call wait_for_turn, act on the result if ' +
+      "yourTurn is true, then call wait_for_turn again. Returns early with timedOut:true if the timeout elapses first — " +
+      'call it again to keep waiting.',
+    inputSchema: { timeoutMs: z.number().optional().describe('Max time to wait, in ms (default 25000, max 55000)') },
+  },
+  async ({ timeoutMs }) => {
+    const h = requireHandle()
+    if (isYourTurnNow()) {
+      return { content: [{ type: 'text', text: JSON.stringify(trimFarkleState(latestState!, h.seatId)) }] }
+    }
+    const cap = Math.min(Math.max(timeoutMs ?? 25000, 1000), 55000)
+    const timedOut = await new Promise<boolean>((resolve) => {
+      const onTurn = () => {
+        clearTimeout(timer)
+        resolve(false)
+      }
+      const timer = setTimeout(() => {
+        turnWaiters = turnWaiters.filter((w) => w !== onTurn)
+        resolve(true)
+      }, cap)
+      turnWaiters.push(onTurn)
+    })
+    if (timedOut || !latestState) return { content: [{ type: 'text', text: JSON.stringify({ yourTurn: false, timedOut: true }) }] }
+    return { content: [{ type: 'text', text: JSON.stringify(trimFarkleState(latestState, h.seatId)) }] }
+  },
+)
+
+server.registerTool(
   'submit_move',
   {
     title: 'Submit a Farkle move',
@@ -111,9 +132,11 @@ server.registerTool(
   },
 )
 
-function maybeNotifyTurn() {
-  if (!handle || !latestState || latestState.game !== 'farkle') return
-  const isYourTurn = trimFarkleState(latestState, handle.seatId).yourTurn
+// Single edge-detector shared by the push notification (for event-driven
+// harnesses) and wait_for_turn's waiters (for chat-driven ones) — both react
+// to the same "it just became your turn" moment.
+function onTurnCheck() {
+  const isYourTurn = isYourTurnNow()
   if (isYourTurn && !wasYourTurn) {
     // Best-effort: a failed/unsupported notification must never take down the
     // live room connection, so swallow both sync throws and async rejections.
@@ -124,66 +147,12 @@ function maybeNotifyTurn() {
     } catch (err) {
       console.error('Turn notification failed:', err)
     }
+    const waiters = turnWaiters
+    turnWaiters = []
+    waiters.forEach((w) => w())
   }
   wasYourTurn = isYourTurn
 }
 
-// Autonomous turn-taker. Called on every state update while AUTO_PLAY is on; it
-// only acts when it's the AI seat's turn, and acts exactly once per distinct
-// roll (guarded by lastRollSig), mirroring the host's runFarkleBot decision and
-// pacing. Waits a beat before each action so the AI reads as human-speed.
-async function maybeAutoPlay(state: RoomState): Promise<void> {
-  if (!handle) return
-  if (state.game !== 'farkle' || !state.farkle) return
-  const seatIdx = state.seats.findIndex((s) => s.id === handle!.seatId)
-  if (seatIdx === -1 || state.seats[state.turnIdx]?.id !== handle.seatId) return // not my turn
-  const f = state.farkle
-
-  // Bust: end the turn so the seat passes on.
-  if (f.farkle) {
-    await wait(AUTO_DELAY_MS)
-    handle.sendAction({ type: 'farkleEndTurn' })
-    lastRollSig = ''
-    return
-  }
-
-  // Start of my turn (nothing rolled yet): roll the dice.
-  if (f.dice.length === 0) {
-    await wait(AUTO_DELAY_MS)
-    handle.sendAction({ type: 'farkleRoll' })
-    return
-  }
-
-  // A roll is on the table — decide once per distinct roll.
-  const vals = f.dice.map((d) => d.val)
-  const sig = JSON.stringify({ vals: [...vals].sort((a, b) => a - b), ts: f.turnScore })
-  if (sig === lastRollSig) return
-  lastRollSig = sig
-
-  const seat = state.seats[seatIdx]
-  const move = decideFarkleBot(vals, f.turnScore, seat.score, f.openingScore, f.winningScore, AUTO_DIFFICULTY)
-  await wait(AUTO_DELAY_MS)
-  for (const idx of move.keepIndices) {
-    handle.sendAction({ type: 'farkleToggle', dieId: f.dice[idx].id })
-    await wait(AUTO_DELAY_MS * 0.5)
-  }
-  await wait(AUTO_DELAY_MS * 0.5)
-  if (move.bank) handle.sendAction({ type: 'farkleBank' })
-  else handle.sendAction({ type: 'farkleRoll' })
-}
-
 const transport = new StdioServerTransport()
 await server.connect(transport)
-
-// Auto-join when configured as a self-playing player (PIPS_ROOM + PIPS_AUTO_PLAY).
-// Runs alongside the stdio server; auto-play is driven purely by the state
-// stream, so it works even with no MCP client attached.
-if (AUTO_PLAY && process.env.PIPS_ROOM) {
-  const name = process.env.PIPS_NAME || 'Ziggy'
-  joinAsAiPlayer(process.env.PIPS_ROOM, name, makeCallbacks())
-    .then((h) => {
-      handle = h
-      console.error(`[auto] joined ${process.env.PIPS_ROOM} as seat ${h.seatId}`)
-    })
-    .catch((err) => console.error('[auto] join failed:', err))
-}

@@ -34,12 +34,18 @@ just by knowing the room code the way a human guest can.
   host accepts.
 - `get_state()` — the current game state, trimmed to what's relevant for a
   move, including `yourTurn`.
+- `wait_for_turn({ timeoutMs? })` — blocks until it becomes your turn (or the
+  timeout elapses), then returns state. **This is the recommended way for a
+  chat-driven agent to wait between turns** — a chat agent has no way to hold
+  its own timer or poll loop across turns (its run ends the moment it
+  replies), so call this in a loop instead: `wait_for_turn`, act if
+  `yourTurn` came back true, `wait_for_turn` again.
 - `submit_move({ action })` — send one Farkle action.
 - `leave_room()` — disconnect.
 
 The server also pushes an MCP notification the moment it becomes your turn,
-so an agent doesn't have to poll on a blind timer (though polling
-`get_state()` works too).
+for event-driven harnesses that can react to it directly. Both mechanisms
+watch the same state stream — use whichever fits how your harness runs.
 
 ## Adding a second game
 
