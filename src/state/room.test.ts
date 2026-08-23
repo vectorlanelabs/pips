@@ -1,7 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { addSeat, applyAction, makeRoom } from './room'
+import { addSeat, applyAction, CODE_WORD_COUNT, generateCode, makeRoom } from './room'
 import { grandTotal } from '../games/yahtzee'
 import type { RoomState, YCategory } from '../types'
+
+describe('generateCode', () => {
+  it('draws from the full 400-word namespace', () => {
+    expect(CODE_WORD_COUNT).toBe(400)
+  })
+
+  it('produces a WORD-NUMBER code with a 4-6 letter uppercase word and a number in [10, 9999]', () => {
+    const codes = Array.from({ length: 500 }, () => generateCode())
+    for (const code of codes) {
+      const match = code.match(/^([A-Z]{3,7})-(\d+)$/)
+      expect(match).not.toBeNull()
+      const [, word, numStr] = match!
+      expect(word.length).toBeGreaterThanOrEqual(3)
+      expect(word.length).toBeLessThanOrEqual(7)
+      const num = Number(numStr)
+      expect(num).toBeGreaterThanOrEqual(10)
+      expect(num).toBeLessThanOrEqual(9999)
+    }
+    // The old range topped out at 99 — assert the expansion actually happened,
+    // not just that codes fall within a superset of the old range.
+    const nums = codes.map((c) => Number(c.split('-')[1]))
+    expect(nums.some((n) => n > 99)).toBe(true)
+    expect(nums.some((n) => n > 999)).toBe(true)
+  })
+})
 
 function yahtzeeRoom(): RoomState {
   let room = makeRoom('TEST-1', 'yahtzee', 'Host', 'h1')
