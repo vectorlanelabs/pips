@@ -3,7 +3,7 @@ import type { SolitaireState, SolitaireLoc, SolitaireMove } from '../card-games/
 import { SPIDER_FAMILY } from '../card-games/solitaire/state'
 import { applyAnyMove as applyMove, autoCompleteAnyMoves as autoCompleteMoves, findAnyFoundationMove as findFoundationMove, anyLegalDestinations as legalDestinations } from '../card-games/solitaire/dispatch'
 import { hasAnyLegalMove } from '../card-games/solitaire/shared'
-import { PYRAMID_ROWS, isExposed } from '../card-games/solitaire/pyramid'
+import { isExposed } from '../card-games/solitaire/pyramid'
 import type { Rank, Suit } from '../card-engine/cards'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
@@ -40,7 +40,13 @@ function pyramidCardPosition(row: number, col: number) {
   return {
     left: `calc(50% + ${(col - row / 2) * PYRAMID_COL_STEP}px - ${CARD_WIDTH / 2}px)`,
     top: row * PYRAMID_ROW_STEP,
-    zIndex: PYRAMID_ROWS - row,
+    // Physically, the apex is dealt first and each row after is dealt on
+    // top of it, ending with the base row dealt last and sitting on top of
+    // everything — matching the exposure rule, where the base is always
+    // exposed and a higher card needs the two cards resting on it (the row
+    // literally stacked over it) removed first. Higher row index = dealt
+    // later = higher z-index.
+    zIndex: row,
   }
 }
 
@@ -432,7 +438,6 @@ export function SolitaireTable({
           <DealIntro
             others={[]}
             yourHandSize={state.mode === 'pyramid' ? state.pyramidRows.flat().length : state.tableau.length}
-            maxFlights={state.mode === 'pyramid' ? 28 : undefined}
             renderCardBack={(p) => <CardBack {...p} design={cardBack} />}
             onComplete={() => setShowDealIntro(false)}
           />
