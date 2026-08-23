@@ -34,6 +34,8 @@ export interface SkipBoPublicState {
   usedCount: number                        // public — size of the reshuffle pool
   roundOver: boolean
   winnerId: string | null                  // set the instant a stockpile hits 0, possibly mid-turn
+  cardBack: string                       // host-chosen card-back design id (see components/cardBacks.ts);
+                                          // cosmetic only, but every seat must render the same back.
 }
 
 export interface SkipBoPrivateState {
@@ -66,7 +68,7 @@ export interface SkipBoSession {
                      // every later used-pool recycle shuffle — one seed drives the whole game
 }
 
-export function createSkipBoGame(playerIds: string[], seed: number): SkipBoSession {
+export function createSkipBoGame(playerIds: string[], seed: number, cardBack = 'pips_default'): SkipBoSession {
   const rng = createRng(seed)
   const shuffled = shuffleDeck(createSkipBoDeck(), rng)
   let remaining = shuffled
@@ -130,6 +132,7 @@ export function createSkipBoGame(playerIds: string[], seed: number): SkipBoSessi
     usedCount: 0,
     roundOver: false,
     winnerId: null,
+    cardBack,
   }
 
   return { session: createHostSession(publicState, privateStates), drawPile, usedPile, stocks, rng }

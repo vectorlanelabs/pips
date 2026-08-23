@@ -4,6 +4,7 @@ import type { UnoHouseRuleKey } from '../card-games/uno/state'
 import { UNO_HOUSE_RULE_DEFS, UNO_MAX_SEATS, UNO_MIN_SEATS } from '../card-games/uno/state'
 import { UnoRulesOverlay } from './UnoRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import { CardBackPicker } from '../components/CardBackPicker'
 import './UnoRoom.css'
 
 export interface UnoRoomProps {
@@ -14,6 +15,8 @@ export interface UnoRoomProps {
   notice?: string | null
   houseRules: Record<UnoHouseRuleKey, boolean>       // host's currently-chosen overrides (guests see these read-only)
   difficulty: BotDifficulty                          // room-wide setting for every house bot's Uno-call reflex timing
+  cardBack: string                          // host's current pick (guests see it read-only)
+  onSelectCardBack: (id: string) => void    // host-only
   onAddHouseBot: () => void       // host-only
   onToggleHouseRule: (key: UnoHouseRuleKey) => void   // host-only
   onSetDifficulty: (d: BotDifficulty) => void         // host-only
@@ -33,6 +36,8 @@ export function UnoRoom({
   notice,
   houseRules,
   difficulty,
+  cardBack,
+  onSelectCardBack,
   onAddHouseBot,
   onToggleHouseRule,
   onSetDifficulty,
@@ -102,6 +107,12 @@ export function UnoRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
+
+          <CardBackPicker
+            cardBack={cardBack}
+            onSelect={isHost ? onSelectCardBack : undefined}
+            hostName={!isHost ? hostName : undefined}
+          />
 
           <div style={{ marginTop: 26 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>House rules</div>

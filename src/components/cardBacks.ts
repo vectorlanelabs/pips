@@ -54,3 +54,9 @@ export const CARD_BACKS: CardBackDef[] = [
   { id: 'forest', name: 'Forest', image: forest },
   { id: 'dark_confetti', name: 'Dark Confetti', image: darkConfetti },
 ]
+
+// Every card-back-rendering component (PlayingCard's CardBack, and Uno/SkipBo/
+// Phase10's own card-back components) looks up its `design` id the same way.
+export function findCardBack(id: string | undefined): CardBackDef | undefined {
+  return id ? CARD_BACKS.find((d) => d.id === id) : undefined
+}

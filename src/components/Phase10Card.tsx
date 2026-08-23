@@ -1,5 +1,6 @@
 import type { Card } from '../card-engine/cards'
 import type { JSX } from 'react'
+import { findCardBack } from './cardBacks'
 import './Phase10Card.css'
 
 // ---- Phase 10 color lookup (exported for M4 reuse in non-card UI, e.g. a color-coded phase requirement icon) ----
@@ -127,6 +128,8 @@ export interface Phase10CardBackProps {
   size: Phase10CardBackSize
   /** When true the stock border turns `var(--yellow)` signalling the player may draw. Ignored for fan. */
   canDraw?: boolean
+  /** Design id from components/cardBacks.ts. Omitted or unknown → plain ink. */
+  design?: string
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
@@ -135,10 +138,12 @@ export interface Phase10CardBackProps {
 export function Phase10CardBack({
   size,
   canDraw,
+  design,
   className,
   style,
   onClick,
 }: Phase10CardBackProps): JSX.Element {
+  const backDef = findCardBack(design)
   const cls = [
     'phase10-card-back',
     `phase10-card-back--${size}`,
@@ -147,17 +152,18 @@ export function Phase10CardBack({
   ]
     .filter(Boolean)
     .join(' ')
+  const imageStyle: React.CSSProperties = backDef
+    ? { backgroundImage: `url(${backDef.image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : {}
 
   return (
     <button
       type="button"
       className={cls}
-      style={style}
+      style={{ ...imageStyle, ...style }}
       onClick={onClick}
       disabled={!onClick}
       aria-label={size === 'stock' ? 'Stock pile' : 'Face-down card'}
-    >
-      <span className="phase10-card-back__mark">10</span>
-    </button>
+    />
   )
 }

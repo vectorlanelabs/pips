@@ -609,7 +609,7 @@ export function Phase10Table({
           <DealIntro
             others={others}
             yourHandSize={hand.length}
-            renderCardBack={(p) => <Phase10CardBack {...p} />}
+            renderCardBack={(p) => <Phase10CardBack {...p} design={publicState.cardBack} />}
             onComplete={() => setShowIntro(false)}
           />
         ) : (
@@ -648,6 +648,7 @@ export function Phase10Table({
                         <Phase10CardBack
                           key={i}
                           size="fan"
+                          design={publicState.cardBack}
                           style={{ marginLeft: i === 0 ? 0 : -15 }}
                         />
                       ))}
@@ -724,6 +725,7 @@ export function Phase10Table({
               <div className="p10-stock-card-wrapper">
                 <Phase10CardBack
                   size="stock"
+                  design={publicState.cardBack}
                   canDraw={canDrawStock}
                   onClick={canDrawStock ? onDrawStock : undefined}
                 />

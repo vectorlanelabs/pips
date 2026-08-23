@@ -1,5 +1,5 @@
 import type { Suit, Rank } from '../card-engine/cards'
-import { CARD_BACKS } from './cardBacks'
+import { findCardBack } from './cardBacks'
 import './PlayingCard.css'
 
 // ---- Suit helpers (exported for M4 reuse in status-line, etc.) ----
@@ -189,7 +189,7 @@ export interface CardBackProps {
 
 export function CardBack({ size, canDraw, empty, design, ariaLabel, className, style, onClick }: CardBackProps) {
   const isEmpty = (size === 'stock' || size === 'pile') && empty
-  const backDef = design ? CARD_BACKS.find((d) => d.id === design) : undefined
+  const backDef = findCardBack(design)
   const cls = [
     'card-back',
     `card-back--${size}`,

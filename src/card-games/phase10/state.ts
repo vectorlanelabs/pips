@@ -51,6 +51,8 @@ export interface Phase10PublicState {
   matchWinnerId: string | null
   handCounts: Record<string, number>      // number of cards in each player's hand — let clients show
                                             // opponent hand size without leaking card identity
+  cardBack: string                       // host-chosen card-back design id (see components/cardBacks.ts);
+                                          // cosmetic only, but every seat must render the same back.
 }
 
 export interface Phase10PrivateState {
@@ -114,7 +116,7 @@ export function dealRound(
   return { hands, stock, discardPile }
 }
 
-export function createPhase10Game(playerIds: string[], seed: number): Phase10Session {
+export function createPhase10Game(playerIds: string[], seed: number, cardBack = 'pips_default'): Phase10Session {
   const rng = createRng(seed)
   const { hands, stock, discardPile } = dealRound(playerIds, rng)
   const turn = createTurnState<Phase10TurnPhase>(playerIds, 'draw')
@@ -149,6 +151,7 @@ export function createPhase10Game(playerIds: string[], seed: number): Phase10Ses
     roundWinnerId: null,
     matchWinnerId: null,
     handCounts,
+    cardBack,
   }
 
   return { session: createHostSession(publicState, privateStates), stock, rng }
