@@ -75,8 +75,7 @@ function computePromptLine(
 ): string {
   if (!isMyTurn) {
     const currentId = currentPlayer(publicState.turn)
-    const currentName = currentId === localPlayerId ? 'You' : 'They'
-    return `${currentName}'s move…`
+    return currentId === localPlayerId ? 'Your move…' : 'Their move…'
   }
 
   if (hasStagedTiles) {
