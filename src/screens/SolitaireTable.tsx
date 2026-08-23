@@ -24,10 +24,13 @@ const FACE_UP_OFFSET = 36
 const CARD_WIDTH = 75
 const CARD_HEIGHT = 105
 
-// Pyramid's cards overlap slightly within and between rows — see
-// SolitaireTable.css's .sol-pyramid for the matching fixed container size.
-const PYRAMID_COL_STEP = 60
-const PYRAMID_ROW_STEP = 40
+// Cards in the same row sit edge to edge (no horizontal overlap); rows
+// overlap vertically only enough to fan the corner pip, same proportion as
+// Klondike's FACE_UP_OFFSET/CARD_HEIGHT — and ROW_STEP is kept above half
+// of CARD_HEIGHT so a row never also overlaps the row two above/below it.
+// See SolitaireTable.css's .sol-pyramid for the matching fixed container size.
+const PYRAMID_COL_STEP = 78
+const PYRAMID_ROW_STEP = 75
 
 function isSpiderMode(mode: SolitaireState['mode']): boolean {
   return (SPIDER_FAMILY as string[]).includes(mode)
