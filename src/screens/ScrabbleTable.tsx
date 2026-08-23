@@ -75,8 +75,7 @@ function computePromptLine(
 ): string {
   if (!isMyTurn) {
     const currentId = currentPlayer(publicState.turn)
-    const currentName = currentId === localPlayerId ? 'You' : 'They'
-    return `${currentName}'s move…`
+    return currentId === localPlayerId ? 'Your move…' : 'Their move…'
   }
 
   if (hasStagedTiles) {
@@ -447,7 +446,9 @@ export function ScrabbleTable({
               <div className="scr-hand-section">
                 <div className="scr-hand-header">
                   <div className="scr-hand-label">Your hand</div>
-                  <span className="scr-hand-stats">{myRack.length} tiles</span>
+                  <span className="scr-hand-stats">
+                    {publicState.scores[localPlayerId] ?? 0} pts · {myRack.length} tiles
+                  </span>
                 </div>
                 <div className="scr-hand-row">
                   {myRack.map((tile) => {
