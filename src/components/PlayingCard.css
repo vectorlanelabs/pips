@@ -2,13 +2,6 @@
    PlayingCard & CardBack — Rummy card-visual components
    =================================================================== */
 
-/* ---- Local custom properties (scoped to .playing-card, not shared) ---- */
-
-.playing-card {
-  --_selected-shadow: #e0a800;
-  --_meld-shadow-default: #b7e6d1;
-}
-
 /* ===================================================================
    PlayingCard — base
    =================================================================== */
@@ -43,24 +36,24 @@
 .playing-card--hand {
   width: 74px;
   height: 104px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 7px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
-/* Hover: lift 9 px (only visible when not selected — selected rules below win on specificity) */
+/* Hover: a slight lift — tuned to the thin card frame, not the app's usual
+   hard-shadow gap. */
 .playing-card--hand:hover:not(:disabled) {
-  transform: translateY(-9px);
+  transform: translateY(-2px);
 }
 
-/* Selected: yellow border, darker shadow, higher lift.
-   The :hover combinator ensures the selected transform wins over the plain hover above. */
+/* Selected: yellow border carries the signal; shadow deepens slightly. */
 .playing-card--hand.playing-card--selected,
 .playing-card--hand.playing-card--selected:hover {
   border-color: var(--yellow);
-  box-shadow: 0 6px 0 var(--_selected-shadow);
-  transform: translateY(-18px);
+  box-shadow: var(--card-shadow-selected);
+  transform: translateY(-4px);
 }
 
 /* ===================================================================
@@ -70,10 +63,10 @@
 .playing-card--meld {
   width: 38px;
   height: 54px;
-  border-radius: 9px;
-  border-width: 3px;
+  border-radius: 3px;
+  border-width: 1px;
   border-color: var(--card-owner-color, var(--green-text));
-  box-shadow: 0 3px 0 var(--card-owner-shadow, var(--_meld-shadow-default));
+  box-shadow: var(--card-shadow);
 }
 
 /* ===================================================================
@@ -85,15 +78,15 @@
 .playing-card--discard {
   width: 74px;
   height: 104px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 7px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
 .playing-card--discard.playing-card--selected {
   border-color: var(--yellow);
-  box-shadow: 0 6px 0 var(--_selected-shadow);
+  box-shadow: var(--card-shadow-selected);
 }
 
 /* ===================================================================
@@ -105,15 +98,15 @@
 .playing-card--tableau {
   width: 75px;
   height: 105px;
-  border-radius: 12px;
-  border-width: 3px;
+  border-radius: 7px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
 .playing-card--tableau.playing-card--selected {
   border-color: var(--yellow);
-  box-shadow: 0 4px 0 var(--_selected-shadow);
+  box-shadow: var(--card-shadow-selected);
 }
 
 /* Every tableau-size card in the app is Solitaire's own, and every one of
@@ -264,8 +257,8 @@
 .card-back--fan {
   width: 30px;
   height: 44px;
-  border-radius: 7px;
-  border-width: 2px;
+  border-radius: 3px;
+  border-width: 1px;
   border-color: var(--ink);
 }
 
@@ -276,10 +269,10 @@
 .card-back--stock {
   width: 74px;
   height: 104px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 7px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--ink);
+  box-shadow: var(--card-deck-shadow);
 }
 
 /* ===================================================================
@@ -292,10 +285,10 @@
 .card-back--pile {
   width: 75px;
   height: 105px;
-  border-radius: 12px;
-  border-width: 3px;
+  border-radius: 7px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--ink);
+  box-shadow: var(--card-deck-shadow);
 }
 
 /* Turn-highlight: border turns yellow (stock, or pile reused as Solitaire's stock) */
@@ -308,7 +301,7 @@
    and :disabled already sets pointer-events: none so :hover never fires. */
 .card-back--stock:hover:not(:disabled),
 .card-back--pile:hover:not(:disabled) {
-  transform: translateY(-6px);
+  transform: translateY(-2px);
 }
 
 /* Empty stock: outline only, no fill/pattern — the pile is gone, not just unclickable */

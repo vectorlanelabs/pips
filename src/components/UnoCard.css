@@ -7,7 +7,6 @@
    =================================================================== */
 
 .uno-card-face {
-  --_selected-shadow: #e0a800;
   position: relative;
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -36,29 +35,29 @@
 .uno-card-face--hand {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
-/* Hover: lift 9 px (same as Phase10/Rummy hand cards) */
+/* Hover: a slight lift — tuned to the thin card frame, not the app's usual
+   hard-shadow gap. */
 .uno-card-face--hand:hover:not(:disabled) {
-  transform: translateY(-9px);
+  transform: translateY(-2px);
 }
 
 .uno-card-face--hand:active:not(:disabled) {
   transform: translateY(2px);
 }
 
-/* Selected (select-then-confirm): yellow border, darker shadow, higher lift —
-   the same treatment PlayingCard/Phase10Card use. The :hover combinator
-   ensures the selected transform wins over the plain hover above. */
+/* Selected (select-then-confirm): yellow border carries the signal; shadow
+   deepens slightly — same treatment PlayingCard/Phase10Card use. */
 .uno-card-face--hand.uno-card-face--selected,
 .uno-card-face--hand.uno-card-face--selected:hover {
   border-color: var(--yellow);
-  box-shadow: 0 6px 0 var(--_selected-shadow);
-  transform: translateY(-18px);
+  box-shadow: var(--card-shadow-selected);
+  transform: translateY(-4px);
 }
 
 /* ===================================================================
@@ -68,10 +67,10 @@
 .uno-card-face--discard {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
 /* ===================================================================
@@ -246,8 +245,8 @@
 .uno-card-back--fan {
   width: 30px;
   height: 44px;
-  border-radius: 7px;
-  border-width: 2px;
+  border-radius: 3px;
+  border-width: 1px;
   border-color: var(--ink);
 }
 
@@ -260,16 +259,16 @@
 .uno-card-back--hand {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--grey-border);
+  box-shadow: var(--card-shadow);
 }
 
 /* Hover lift matches the hand face, so a face-down card reads as clickable
    (it flips the whole unrevealed batch face-up). */
 .uno-card-back--hand:hover:not(:disabled) {
-  transform: translateY(-9px);
+  transform: translateY(-2px);
 }
 
 .uno-card-back--hand:active:not(:disabled) {
@@ -283,10 +282,10 @@
 .uno-card-back--stock {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
+  border-radius: 6px;
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: 0 6px 0 var(--ink);
+  box-shadow: var(--card-deck-shadow);
 }
 
 /* Turn-highlight: the border turns gold when drawing is legal. Same class-swap
@@ -297,7 +296,7 @@
 
 /* Hover lift + press (stock only) */
 .uno-card-back--stock:hover:not(:disabled) {
-  transform: translateY(-6px);
+  transform: translateY(-2px);
 }
 
 .uno-card-back--stock:active:not(:disabled) {
@@ -311,7 +310,7 @@
 .uno-card-back--small {
   width: 14px;
   height: 26px;
-  border-radius: 4px;
-  border-width: 2px;
+  border-radius: 1px;
+  border-width: 1px;
   border-color: var(--ink);
 }

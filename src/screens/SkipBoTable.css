@@ -186,7 +186,7 @@
 .sb-empty-tile {
   width: 44px;
   height: 62px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 3px dashed var(--slate-pip);
   background: transparent;
   flex: none;
@@ -199,7 +199,7 @@
 .sb-empty-tile--hand {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
+  border-radius: 6px;
 }
 
 /* ---- Building piles band ---- */
@@ -283,9 +283,9 @@
 .sb-draw-slot .skipbo-card-back--stock {
   width: 70px;
   height: 100px;
-  border-radius: 14px;
-  border-width: 4px;
-  box-shadow: 0 6px 0 var(--ink);
+  border-radius: 6px;
+  border-width: 2px;
+  box-shadow: var(--card-deck-shadow);
 }
 
 /* ---- Your side ---- */
