@@ -321,24 +321,6 @@ export function ScrabbleTable({
     return cells
   }, [publicState.board, stagedPlacements, blankAssignments])
 
-  if (showIntro) {
-    return (
-      <div className="scr-table">
-        <DealIntro
-          others={opponentIds.map((id) => ({
-            id,
-            name: opponentNames?.[id] ?? 'Opponent',
-            color: opponentColors?.[id] ?? BRAND,
-            handSize: publicState.handCounts[id] ?? 0,
-          }))}
-          yourHandSize={myRack.length}
-          renderCardBack={(p) => <ScrabbleTileBack {...p} />}
-          onComplete={() => setShowIntro(false)}
-        />
-      </div>
-    )
-  }
-
   return (
     <div className="scr-table">
       <TableHeader
@@ -362,8 +344,22 @@ export function ScrabbleTable({
       {notice && <div className="scr-error-banner">{notice}</div>}
 
       <div className="scr-table-card">
-        {/* Opponent rail */}
-        <div className="scr-opp-rail">
+        {showIntro ? (
+          <DealIntro
+            others={opponentIds.map((id) => ({
+              id,
+              name: opponentNames?.[id] ?? 'Opponent',
+              color: opponentColors?.[id] ?? BRAND,
+              handSize: publicState.handCounts[id] ?? 0,
+            }))}
+            yourHandSize={myRack.length}
+            renderCardBack={(p) => <ScrabbleTileBack {...p} />}
+            onComplete={() => setShowIntro(false)}
+          />
+        ) : (
+          <>
+            {/* Opponent rail */}
+            <div className="scr-opp-rail">
           {opponentIds.map((oppId) => {
             const isOppTurn = currentPlayer(publicState.turn) === oppId
             const oppScore = publicState.scores[oppId] ?? 0
@@ -553,6 +549,8 @@ export function ScrabbleTable({
             </button>
           )}
         </div>
+          </>
+        )}
       </div>
 
       <p className="scr-footnote">Your hand never leaves this device — only the play does.</p>

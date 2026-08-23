@@ -76,3 +76,26 @@
       verified including the mandatory 4-seat bot-pacing check), user
       said "push" — merged into `main` and pushed to `origin`. Branch/
       worktree intentionally NOT pruned yet per explicit instruction.
+
+- [ ] 2026-08-23, Scrabble polish (spec 50) — 2 of 3 real bugs fixed and
+      verified: deal-intro screen now shows the header during shuffle,
+      and the bot rewrite actually searches for real dictionary words
+      with cross-word validation instead of placing tiles in raw rack
+      order (confirmed live: played "REBEC," a real word; also passed
+      a hard performance bar — max 402ms across 120 test turns/3 seeds,
+      well under the ~900ms pacing budget, after 3 rounds catching a
+      real 11.3-second worst case and then a too-coarse time-budget
+      fix). **The third bug — the table requiring scroll on normal
+      viewports — is NOT fixed.** 4 fix rounds were attempted (vh-
+      percentage sizing: still overflowed; flexbox intrinsic sizing:
+      collapsed the board to an unusable 12px sliver while technically
+      satisfying the no-scroll metric; JS-measured sizing: overlapped/
+      broke the layout and hid the hand+action buttons entirely, worse
+      than the original bug). Reverted the layout mechanism to the
+      original safe (scrolling-required-but-fully-usable) baseline
+      rather than land a broken intermediate state. This needs either
+      a fresh, more careful attempt (possibly with tighter visual
+      iteration than a single delegated round allows) or an explicit
+      decision to accept scrolling for now — flagging rather than
+      silently continuing to burn cycles on a slice that's failed 4
+      times running.
