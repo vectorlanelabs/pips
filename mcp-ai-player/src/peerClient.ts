@@ -13,8 +13,30 @@
 import * as wrtc from 'node-datachannel/polyfill'
 Object.assign(globalThis, wrtc)
 
-// eslint-disable-next-line import/first -- the globalThis assignment above must run before peerjs is imported
-import Peer, { type DataConnection, type PeerError } from 'peerjs'
+// PeerJS is a browser-oriented CJS package. We load it lazily rather than with a
+// static import, for two reasons:
+//
+//  1. The bundler hoists any static `import ... from 'peerjs'` above this module's
+//     own body, so peerjs would evaluate its WebRTC-support probe before the
+//     node-datachannel polyfill globals (assigned just above) are installed.
+//     That makes `supports.webRTC` false and `new Peer()` throw "The current
+//     browser does not support WebRTC". Loading peerjs on first use guarantees
+//     the globals are already present.
+//
+//  2. Node resolves peerjs to its CJS build (no "exports" map, so pkg.main wins),
+//     which makes the module namespace's `default` the exports *object* rather
+//     than the class. The Peer constructor is reachable as `.Peer` on that
+//     object (or is the default itself under peerjs's ESM build) — normalize
+//     whichever shape Node hands us.
+type PeerClass = typeof import('peerjs').Peer
+let peerClass: PeerClass | null = null
+async function getPeerClass(): Promise<PeerClass> {
+  if (peerClass) return peerClass
+  const mod = (await import('peerjs')) as unknown as { default?: PeerClass & { Peer?: PeerClass } }
+  peerClass = mod.default?.Peer ?? mod.default ?? (mod as unknown as PeerClass)
+  return peerClass
+}
+import type { DataConnection, PeerError } from 'peerjs'
 import type { Action, RoomState } from '../../src/types.js'
 
 function peerIdForCode(code: string): string {
@@ -33,7 +55,8 @@ export interface AiPlayerHandle {
   destroy: () => void
 }
 
-export function joinAsAiPlayer(code: string, name: string, callbacks: AiPlayerCallbacks): Promise<AiPlayerHandle> {
+export async function joinAsAiPlayer(code: string, name: string, callbacks: AiPlayerCallbacks): Promise<AiPlayerHandle> {
+  const Peer = await getPeerClass()
   return new Promise((resolve, reject) => {
     const peer = new Peer()
     let conn: DataConnection | null = null
