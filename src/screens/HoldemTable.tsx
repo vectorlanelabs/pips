@@ -48,12 +48,19 @@ export function HoldemTable({
 }: HoldemTableProps) {
   const { play, enabled, setEnabled } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [showIntro, setShowIntro] = useState(false)
+  // Every hand stages the same three beats before the table becomes
+  // interactive: blinds post (paced, one seat at a time -- a forced action
+  // is still a turn a human at that seat would watch happen), then the
+  // shuffle+deal intro, then the real table. Keyed off handNumber (not a
+  // phase-transition edge) so hand #1 gets the same staging as every hand
+  // after it -- the old edge-detector only fired on handOver -> preflop,
+  // which never happens for the very first hand.
+  const [uiPhase, setUiPhase] = useState<'blinds' | 'deal' | 'table'>('blinds')
+  const [blindStage, setBlindStage] = useState<'sb' | 'bb'>('sb')
   const [betAmount, setBetAmount] = useState(HOLDEM_BIG_BLIND * 2)
   const [raiseSizingOpen, setRaiseSizingOpen] = useState(false)
 
-  const introShownForHandRef = useRef<number | null>(null)
-  const prevPhaseRef = useRef<string>(publicState.turn.phase)
+  const stagedForHandRef = useRef<number | null>(null)
   const noticeSeenRef = useRef(!!notice)
   const soundSigRef = useRef({
     phase: publicState.turn.phase,
@@ -63,20 +70,23 @@ export function HoldemTable({
     myFolded: publicState.hands[localPlayerId]?.folded ?? false,
   })
 
-  // Show deal intro when transitioning from handOver to preflop
+  // 900ms per blind matches BASE_MS, the app's standard single-action bot
+  // pacing gap (App.tsx) -- long enough to actually read, short enough not
+  // to drag out a forced, non-interactive beat.
+  const BLIND_POST_REVEAL_MS = 900
+
   useEffect(() => {
-    const wasInHandOver = prevPhaseRef.current === 'handOver'
-    const nowInPreflop = publicState.turn.phase === 'preflop'
-
-    if (wasInHandOver && nowInPreflop) {
-      if (introShownForHandRef.current !== publicState.handNumber) {
-        introShownForHandRef.current = publicState.handNumber
-        setShowIntro(true)
-      }
+    if (stagedForHandRef.current === publicState.handNumber) return
+    stagedForHandRef.current = publicState.handNumber
+    setBlindStage('sb')
+    setUiPhase('blinds')
+    const t1 = window.setTimeout(() => setBlindStage('bb'), BLIND_POST_REVEAL_MS)
+    const t2 = window.setTimeout(() => setUiPhase('deal'), BLIND_POST_REVEAL_MS * 2)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
     }
-
-    prevPhaseRef.current = publicState.turn.phase
-  }, [publicState.turn.phase, publicState.handNumber])
+  }, [publicState.handNumber])
 
   // Sound effects
   useEffect(() => {
@@ -85,10 +95,9 @@ export function HoldemTable({
     const myBetThisStreet = myHand?.betThisStreet ?? 0
     const myFolded = myHand?.folded ?? false
 
-    // Shuffle sound at start of new hand (when transitioning into preflop)
-    if (p.phase !== 'preflop' && publicState.turn.phase === 'preflop') {
-      play('shuffle')
-    }
+    // Shuffle sound plays from DealIntro itself now (see the uiPhase staging
+    // above) -- it always shows, including hand #1, so a second manual
+    // trigger here would double up with it.
 
     // Card-draw sound when board cards are dealt (flop, turn, river)
     if (
@@ -253,12 +262,32 @@ export function HoldemTable({
 
       {/* Main table card */}
       <div className="holdem-table-card">
-        {showIntro ? (
+        {uiPhase === 'blinds' ? (
+          /* Blinds are forced, not a choice -- but they're still a turn a
+             human at that seat would watch happen, so each posts as its
+             own paced beat instead of silently existing in the state the
+             moment the hand starts. */
+          <div className="holdem-blinds-stage">
+            <div className="holdem-blinds-caption">Posting blinds…</div>
+            <div
+              className="holdem-blinds-seat"
+              style={{ color: colors[blindStage === 'sb' ? publicState.smallBlindSeat : publicState.bigBlindSeat] ?? 'var(--ink)' }}
+            >
+              {(blindStage === 'sb' ? names[publicState.smallBlindSeat] : names[publicState.bigBlindSeat]) ?? 'A player'}
+              {' posts the '}
+              {blindStage === 'sb' ? 'small' : 'big'}
+              {' blind — '}
+              {blindStage === 'sb'
+                ? publicState.hands[publicState.smallBlindSeat]?.betThisStreet ?? 0
+                : publicState.hands[publicState.bigBlindSeat]?.betThisStreet ?? 0}
+            </div>
+          </div>
+        ) : uiPhase === 'deal' ? (
           <DealIntro
             others={others}
             yourHandSize={privateState.hand.length}
             renderCardBack={(p) => <CardBack {...p} design={publicState.cardBack} />}
-            onComplete={() => setShowIntro(false)}
+            onComplete={() => setUiPhase('table')}
             maxFlights={publicState.seatOrder.length * 2}
           />
         ) : (

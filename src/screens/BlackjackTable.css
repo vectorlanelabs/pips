@@ -252,6 +252,32 @@
   color: #666;
 }
 
+/* ---- Pre-deal: nothing dealt yet, just the shoe and your own bet ---- */
+
+.blackjack-pre-deal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: clamp(32px, 5vw, 56px) 16px;
+}
+
+.blackjack-pre-deal-status {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--body-text);
+}
+
+.blackjack-pre-deal-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--body-text);
+}
+
 /* ---- Centre band: dealer, restyled as the table's focal point ---- */
 
 .blackjack-centre {
@@ -306,29 +332,9 @@
 }
 
 .blackjack-dealer-card-wrapper {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.blackjack-dealer-hole-indicator {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #fff8e6;
-  border: 2px solid #8a6b1f;
-  font-size: 20px;
-  font-weight: 700;
-  color: #8a6b1f;
-  pointer-events: none;
 }
 
 .blackjack-dealer-status {

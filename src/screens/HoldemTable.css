@@ -89,6 +89,30 @@
   flex-direction: column;
 }
 
+/* ---- Blinds stage: paced pre-deal reveal, nothing else on the table yet ---- */
+
+.holdem-blinds-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: clamp(48px, 8vw, 84px) 16px;
+}
+
+.holdem-blinds-caption {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+
+.holdem-blinds-seat {
+  font-size: 18px;
+  font-weight: 700;
+}
+
 /* ---- Opponent tiles: wrapping grid of opponent-seat tiles ---- */
 
 .holdem-opp-rail {
