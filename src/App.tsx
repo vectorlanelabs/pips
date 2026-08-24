@@ -398,6 +398,10 @@ export default function App() {
   const [scrabbleView, setScrabbleView] = useState<ScrabbleView | null>(null)
   const [scrabbleConnection, setScrabbleConnection] = useState<'connected' | 'disconnected'>('connected')
   const [scrabbleNotice, setScrabbleNotice] = useState<string | null>(null)
+  // Tracks the exact text scrabbleDispatch last set on a rejected action, so a
+  // subsequent successful dispatch only clears ITS OWN rejection message --
+  // not an unrelated notice (e.g. "X disconnected") that arrived in between.
+  const scrabbleRejectionNoticeRef = useRef<string | null>(null)
   const [scrabbleStarted, setScrabbleStarted] = useState(false)
   const [scrabbleSeats, setScrabbleSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [scrabbleDifficulty, setScrabbleDifficulty] = useState<BotDifficulty>('medium')
@@ -4398,10 +4402,18 @@ export default function App() {
       if (!session) return
       const result = applyScrabbleAction(session, scrabbleLocalPlayerId, action, scrabbleDictionaryRef.current)
       if (!result.outcome.ok) {
-        setScrabbleNotice(result.outcome.reason ?? 'that move is not allowed')
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        scrabbleRejectionNoticeRef.current = reason
+        setScrabbleNotice(reason)
         return
       }
-      setScrabbleNotice(null)
+      // Only clear the notice if it's still the rejection message this same
+      // function set -- don't stomp an unrelated notice (e.g. a disconnect
+      // banner) that may have arrived since.
+      if (scrabbleNotice !== null && scrabbleNotice === scrabbleRejectionNoticeRef.current) {
+        setScrabbleNotice(null)
+      }
+      scrabbleRejectionNoticeRef.current = null
       scrabbleSessionRef.current = result.session
       scrabbleBroadcast()
       runScrabbleBotsIfNeeded()
