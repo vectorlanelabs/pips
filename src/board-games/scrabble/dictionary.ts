@@ -12,12 +12,8 @@ function deserializeDAWG(data: Array<Record<string, number | boolean>>): DAWGNod
   return data as DAWGNode[]
 }
 
-export async function loadDictionary(): Promise<ScrabbleDictionary> {
-  const response = await fetch(`${import.meta.env.BASE_URL}dictionary/enable1.dawg.json`)
-  if (!response.ok) {
-    throw new Error(`Failed to load dictionary: ${response.statusText}`)
-  }
-  const data = await response.json() as Array<Record<string, number | boolean>>
+// Build an isWord-capable dictionary from already-parsed DAWG data
+export function createDictionaryFromData(data: Array<Record<string, number | boolean>>): ScrabbleDictionary {
   const nodes = deserializeDAWG(data)
 
   function isWord(word: string): boolean {
@@ -41,4 +37,13 @@ export async function loadDictionary(): Promise<ScrabbleDictionary> {
   }
 
   return { isWord }
+}
+
+export async function loadDictionary(): Promise<ScrabbleDictionary> {
+  const response = await fetch(`${import.meta.env.BASE_URL}dictionary/enable1.dawg.json`)
+  if (!response.ok) {
+    throw new Error(`Failed to load dictionary: ${response.statusText}`)
+  }
+  const data = await response.json() as Array<Record<string, number | boolean>>
+  return createDictionaryFromData(data)
 }

@@ -1,4 +1,7 @@
+/// <reference types="node" />
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { createDictionaryFromData } from './dictionary.ts'
 
 interface DAWGNode {
   [letter: string]: number | boolean
@@ -27,38 +30,9 @@ const testDAWG: DAWGNode[] = [
   { 'A': 2, 'end': true },
 ]
 
-function createTestDictionary() {
-  const nodes = testDAWG
-
-  function isWord(word: string): boolean {
-    // Empty string should return false
-    if (!word) return false
-
-    let nodeIdx = 0
-    const upper = word.toUpperCase()
-
-    for (const char of upper) {
-      const node = nodes[nodeIdx]
-      if (!node) return false
-
-      const next = node[char]
-      if (typeof next === 'number') {
-        nodeIdx = next
-      } else {
-        return false
-      }
-    }
-
-    const finalNode = nodes[nodeIdx]
-    return finalNode && finalNode.end === true
-  }
-
-  return { isWord }
-}
-
 describe('Dictionary - isWord function', () => {
   it('should recognize valid words', () => {
-    const dict = createTestDictionary()
+    const dict = createDictionaryFromData(testDAWG)
     expect(dict.isWord('CAT')).toBe(true)
     expect(dict.isWord('CA')).toBe(true)
     expect(dict.isWord('DO')).toBe(true)
@@ -68,7 +42,7 @@ describe('Dictionary - isWord function', () => {
   })
 
   it('should reject non-words', () => {
-    const dict = createTestDictionary()
+    const dict = createDictionaryFromData(testDAWG)
     expect(dict.isWord('CAR')).toBe(false)
     expect(dict.isWord('CATS')).toBe(false)
     expect(dict.isWord('X')).toBe(false)
@@ -76,7 +50,7 @@ describe('Dictionary - isWord function', () => {
   })
 
   it('should be case-insensitive', () => {
-    const dict = createTestDictionary()
+    const dict = createDictionaryFromData(testDAWG)
     expect(dict.isWord('cat')).toBe(true)
     expect(dict.isWord('Cat')).toBe(true)
     expect(dict.isWord('CAT')).toBe(true)
@@ -87,12 +61,12 @@ describe('Dictionary - isWord function', () => {
   })
 
   it('should return false for empty string', () => {
-    const dict = createTestDictionary()
+    const dict = createDictionaryFromData(testDAWG)
     expect(dict.isWord('')).toBe(false)
   })
 
   it('should handle partial words correctly', () => {
-    const dict = createTestDictionary()
+    const dict = createDictionaryFromData(testDAWG)
     // "C" is not a word in the fixture
     expect(dict.isWord('C')).toBe(false)
     // "D" is not a word in the fixture
@@ -101,5 +75,23 @@ describe('Dictionary - isWord function', () => {
     expect(dict.isWord('T')).toBe(false)
     // "TE" is a word (marked with end: true at node 8)
     expect(dict.isWord('TE')).toBe(true)
+  })
+})
+
+describe('Dictionary - real shipped dictionary', () => {
+  it('recognizes common words and rejects an obvious non-word in enable1', () => {
+    // Load the actual shipped asset directly from disk (this test runs in the
+    // node environment, so fetch() against import.meta.env.BASE_URL is not
+    // available) and feed it through the real deserialization path.
+    const data = JSON.parse(
+      readFileSync(new URL('../../../public/dictionary/enable1.dawg.json', import.meta.url), 'utf-8'),
+    ) as Array<Record<string, number | boolean>>
+
+    const dict = createDictionaryFromData(data)
+
+    expect(dict.isWord('CAT')).toBe(true)
+    expect(dict.isWord('DOG')).toBe(true)
+    expect(dict.isWord('THE')).toBe(true)
+    expect(dict.isWord('ZZZZQX')).toBe(false)
   })
 })

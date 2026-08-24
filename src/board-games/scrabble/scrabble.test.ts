@@ -194,26 +194,24 @@ describe('Scrabble placement', () => {
 
   it('should reject blank tile with invalid letter assignment', () => {
     const game = createScrabbleGame(['p1', 'p2'], 42)
-    // Find a blank in the rack
-    const rack1 = game.session.privateStates.p1.rack.cards
-    const blank = rack1.find((t) => t.letter === '')
-
-    if (!blank) {
-      // No blank in this hand, skip test
-      expect(true).toBe(true)
-      return
-    }
+    // Override the rack with known tiles, including a blank, so the blank
+    // scenario is guaranteed to run instead of depending on a random deal.
+    game.session.privateStates.p1.rack.cards = [
+      { id: 'blank-1', letter: '', points: 0 },
+      { id: 'tile-a', letter: 'A', points: 1 },
+    ]
 
     const action = {
       type: 'PLACE_WORD' as const,
       tiles: [
-        { tileId: blank.id, row: 7, col: 6, letter: '1' }, // Invalid: not A-Z
-        { tileId: rack1[1].id, row: 7, col: 7, letter: rack1[1].letter === '' ? 'A' : rack1[1].letter },
+        { tileId: 'blank-1', row: 7, col: 6, letter: '1' }, // Invalid: not A-Z
+        { tileId: 'tile-a', row: 7, col: 7, letter: 'A' },
       ],
     }
 
     const outcome = applyScrabbleAction(game, 'p1', action, mockDictionary).outcome
     expect(outcome.ok).toBe(false)
+    expect(outcome.reason).toContain('blank tile letter must be A-Z')
   })
 })
 
@@ -449,89 +447,107 @@ describe('Scrabble rack refill', () => {
 
 describe('Scrabble duplicate cross-word detection - deterministic test', () => {
   it('should deterministically test extractWords for position duplicates via hand-built board', () => {
-    // Deterministic test: manually construct a board where we try to trigger the same
-    // word position being extracted twice. This requires careful geometry.
+    // Deterministic test: build a board where a placement creates both a main
+    // word and a cross-word that shares tiles with an existing vertical word.
+    // The final assertion fails if extractWords ever reports the same word (or
+    // the same board footprint) twice.
     //
-    // Strategy: Create a board where a horizontal placement creates cross-words,
-    // and we deliberately engineer board state so that a position span might be
-    // extracted twice if there's a bug.
-
+    // Geometry:
+    //   p1 places WALK horizontally at row 7, cols 5-8 (first placement).
+    //   p2 places DIAN vertically at col 6: D(5,6), I(6,6), N(8,6), with the
+    //     existing A(7,6) from WALK completing the word.
+    //   p1 places SA horizontally at row 9, cols 6-7. Main word "SA"; the new
+    //     S(9,6) hangs off the bottom of DIAN, forming the cross-word "DIANS".
+    //   Final placement must report exactly 2 distinct words: ['SA', 'DIANS'].
     let game = createScrabbleGame(['p1', 'p2'], 42)
 
-    // First, place WALK horizontally at row 7, cols 5-8
-    // This will be our anchoring word.
-    const rack1 = game.session.privateStates.p1.rack.cards
+    // p1 places WALK horizontally at row 7, cols 5-8.
+    game.session.privateStates.p1.rack.cards = [
+      { id: 'w1', letter: 'W', points: 4 },
+      { id: 'a1', letter: 'A', points: 1 },
+      { id: 'l1', letter: 'L', points: 1 },
+      { id: 'k1', letter: 'K', points: 5 },
+      { id: 'keep-1', letter: 'M', points: 3 },
+      { id: 'keep-2', letter: 'N', points: 1 },
+      { id: 'keep-3', letter: 'O', points: 1 },
+    ]
     const firstPlacement = applyScrabbleAction(
       game,
       'p1',
       {
         type: 'PLACE_WORD',
         tiles: [
-          { tileId: rack1[0].id, row: 7, col: 5, letter: rack1[0].letter === '' ? 'W' : rack1[0].letter },
-          { tileId: rack1[1].id, row: 7, col: 6, letter: rack1[1].letter === '' ? 'A' : rack1[1].letter },
-          { tileId: rack1[2].id, row: 7, col: 7, letter: rack1[2].letter === '' ? 'L' : rack1[2].letter },
-          { tileId: rack1[3].id, row: 7, col: 8, letter: rack1[3].letter === '' ? 'K' : rack1[3].letter },
+          { tileId: 'w1', row: 7, col: 5, letter: 'W' },
+          { tileId: 'a1', row: 7, col: 6, letter: 'A' },
+          { tileId: 'l1', row: 7, col: 7, letter: 'L' },
+          { tileId: 'k1', row: 7, col: 8, letter: 'K' },
         ],
       },
       mockDictionary,
     )
-
-    if (!firstPlacement.outcome.ok) {
-      expect(firstPlacement.outcome.ok).toBe(true)
-      return
-    }
+    expect(firstPlacement.outcome.ok).toBe(true)
     game = firstPlacement.session
 
-    // Now p2 places a vertical word through one of these tiles, say at col 6
-    // Place vertically: D at (5,6), I at (6,6), (7,6 is A from previous), N at (8,6)
-    // This forms DIAN vertically
-    const rack2 = game.session.privateStates.p2.rack.cards
+    // p2 places DIAN vertically at col 6 (sharing the A at (7,6) with WALK).
+    game.session.privateStates.p2.rack.cards = [
+      { id: 'd1', letter: 'D', points: 2 },
+      { id: 'i1', letter: 'I', points: 1 },
+      { id: 'n1', letter: 'N', points: 1 },
+      { id: 'keep-4', letter: 'M', points: 3 },
+      { id: 'keep-5', letter: 'N', points: 1 },
+      { id: 'keep-6', letter: 'O', points: 1 },
+      { id: 'keep-7', letter: 'P', points: 3 },
+    ]
     const placeResult2 = applyScrabbleAction(
       game,
       'p2',
       {
         type: 'PLACE_WORD',
         tiles: [
-          { tileId: rack2[0].id, row: 5, col: 6, letter: rack2[0].letter === '' ? 'D' : rack2[0].letter },
-          { tileId: rack2[1].id, row: 6, col: 6, letter: rack2[1].letter === '' ? 'I' : rack2[1].letter },
-          { tileId: rack2[2].id, row: 8, col: 6, letter: rack2[2].letter === '' ? 'N' : rack2[2].letter },
+          { tileId: 'd1', row: 5, col: 6, letter: 'D' },
+          { tileId: 'i1', row: 6, col: 6, letter: 'I' },
+          { tileId: 'n1', row: 8, col: 6, letter: 'N' },
         ],
       },
       mockDictionary,
     )
-
-    if (!placeResult2.outcome.ok) {
-      expect(placeResult2.outcome.ok).toBe(true)
-      return
-    }
+    expect(placeResult2.outcome.ok).toBe(true)
     game = placeResult2.session
 
-    // Now p1 places another horizontal word. The key is to place it such that
-    // multiple tiles in the placement each have the same cross-word span.
-    // This is geometrically nearly impossible, but let's try:
-    // Place two tiles horizontally, both at a row where they connect to the same vertical word.
-    // For instance, place at row 9, cols 6-7, where col 6 has D,I,A,N above.
-    const rack1b = game.session.privateStates.p1.rack.cards
+    // p1 places SA horizontally at row 9, cols 6-7. The S at (9,6) hangs off
+    // the bottom of DIAN, forming the cross-word DIANS.
+    game.session.privateStates.p1.rack.cards = [
+      { id: 's1', letter: 'S', points: 1 },
+      { id: 'a2', letter: 'A', points: 1 },
+      { id: 'keep-8', letter: 'M', points: 3 },
+      { id: 'keep-9', letter: 'N', points: 1 },
+      { id: 'keep-10', letter: 'O', points: 1 },
+      { id: 'keep-11', letter: 'P', points: 3 },
+      { id: 'keep-12', letter: 'R', points: 1 },
+    ]
     const placeResult3 = applyScrabbleAction(
       game,
       'p1',
       {
         type: 'PLACE_WORD',
         tiles: [
-          { tileId: rack1b[0].id, row: 9, col: 6, letter: rack1b[0].letter === '' ? 'S' : rack1b[0].letter },
-          { tileId: rack1b[1].id, row: 9, col: 7, letter: rack1b[1].letter === '' ? 'A' : rack1b[1].letter },
+          { tileId: 's1', row: 9, col: 6, letter: 'S' },
+          { tileId: 'a2', row: 9, col: 7, letter: 'A' },
         ],
       },
       mockDictionary,
     )
+    expect(placeResult3.outcome.ok).toBe(true)
 
-    // Just verify no error; the test passes if we get here without extractWords
-    // producing duplicates (checked by the dedup logic)
-    if (placeResult3.outcome.ok) {
-      const placement = placeResult3.session.session.publicState.lastPlacement
-      // Verify structure is intact
-      expect(placement).not.toBeNull()
-    }
+    // The claim under test: the main word "SA" and the cross-word "DIANS" are
+    // each reported exactly once. If extractWords counted the same word or the
+    // same board footprint twice, words.length would exceed 2 and the word set
+    // would contain a duplicate.
+    const lastPlacement = placeResult3.session.session.publicState.lastPlacement
+    expect(lastPlacement).not.toBeNull()
+    const words = lastPlacement!.words.map((w) => w.word)
+    expect(words).toEqual(['SA', 'DIANS'])
+    expect(new Set(words).size).toBe(words.length)
   })
 })
 
@@ -565,43 +581,50 @@ describe('Scrabble regression tests', () => {
   })
 
   it('[Bug 2] should not overssize rack after successful CHALLENGE', () => {
-    // Regression test: placer's rack should return to size before placement after challenge
+    // Regression test: after a successful challenge, the placer's rack must be
+    // back to its pre-placement size — not oversized by keeping the refill
+    // tiles AND re-adding the returned tiles.
     let game = createScrabbleGame(['p1', 'p2'], 42)
 
-    // Place tiles
-    const rack1 = game.session.privateStates.p1.rack.cards
+    // Override p1's rack with 7 known tiles: 2 will be placed (forming the
+    // invalid word QZ), 5 stay in the rack untouched.
+    const placedTiles: ScrabbleTile[] = [
+      { id: 'placed-q', letter: 'Q', points: 10 },
+      { id: 'placed-z', letter: 'Z', points: 10 },
+    ]
+    const keptTiles: ScrabbleTile[] = [
+      { id: 'kept-1', letter: 'M', points: 3 },
+      { id: 'kept-2', letter: 'N', points: 1 },
+      { id: 'kept-3', letter: 'O', points: 1 },
+      { id: 'kept-4', letter: 'P', points: 3 },
+      { id: 'kept-5', letter: 'R', points: 1 },
+    ]
+    game.session.privateStates.p1.rack.cards = [...placedTiles, ...keptTiles]
+
+    // QZ is not in the mock dictionary, so p2's challenge will succeed.
     const placeResult = applyScrabbleAction(
       game,
       'p1',
       {
         type: 'PLACE_WORD',
-        tiles: [
-          { tileId: rack1[0].id, row: 7, col: 6, letter: rack1[0].letter === '' ? 'INVALID' : rack1[0].letter },
-          { tileId: rack1[1].id, row: 7, col: 7, letter: rack1[1].letter === '' ? 'WORD' : rack1[1].letter },
-        ],
+        tiles: placedTiles.map((t, i) => ({ tileId: t.id, row: 7, col: 6 + i, letter: t.letter })),
       },
       mockDictionary,
     )
-
-    if (!placeResult.outcome.ok) {
-      // Placement failed, skip this test - likely invalid tiles
-      expect(true).toBe(true)
-      return
-    }
-
+    expect(placeResult.outcome.ok).toBe(true)
     game = placeResult.session
-    const rackSizeAfterPlacement = cardCount(game.session.privateStates.p1.rack)
-    expect(rackSizeAfterPlacement).toBe(RACK_SIZE)
 
-    // Opponent challenges (will succeed if any word is invalid)
+    // Refill drew exactly 2 tiles: rack is back to 7.
+    expect(cardCount(game.session.privateStates.p1.rack)).toBe(RACK_SIZE)
+
+    // Opponent challenges; the invalid word means the challenge succeeds.
     const challengeResult = applyScrabbleAction(game, 'p2', { type: 'CHALLENGE' }, mockDictionary)
+    expect(challengeResult.outcome.ok).toBe(true)
 
-    if (challengeResult.outcome.ok && !game.session.publicState.lastPlacement?.challengeable) {
-      // Challenge succeeded and placement is now non-challengeable
-      const rackSizeAfterChallenge = cardCount(challengeResult.session.session.privateStates.p1.rack)
-      // Rack should be back to initial size (7), not 9 (7 + 2 returned tiles)
-      expect(rackSizeAfterChallenge).toBeLessThanOrEqual(RACK_SIZE)
-    }
+    // The 2 placed tiles return to p1's rack and the 2 refill tiles go back to
+    // the bag: rack is 7 again, not 9 (7 + 2 returned tiles).
+    const rackSizeAfterChallenge = cardCount(challengeResult.session.session.privateStates.p1.rack)
+    expect(rackSizeAfterChallenge).toBe(RACK_SIZE)
   })
 
   it('[Bug 5] should return only the actually-drawn refill tiles to the bag after a successful CHALLENGE', () => {
@@ -725,47 +748,48 @@ describe('Scrabble regression tests', () => {
   it('[Bug 4] should restore bagCount after successful CHALLENGE', () => {
     // Regression test: publicState.bagCount should be restored when challenge succeeds
     let game = createScrabbleGame(['p1', 'p2'], 42)
-
-    // Record initial bag count
     const initialBagCount = game.session.publicState.bagCount
 
-    // Place an invalid word (one not in the mock dictionary)
-    const rack1 = game.session.privateStates.p1.rack.cards
+    // Override p1's rack with known tiles forming the invalid word QZ, so p2's
+    // challenge is guaranteed to succeed instead of depending on a random deal.
+    const placedTiles: ScrabbleTile[] = [
+      { id: 'placed-q', letter: 'Q', points: 10 },
+      { id: 'placed-z', letter: 'Z', points: 10 },
+    ]
+    const keptTiles: ScrabbleTile[] = [
+      { id: 'kept-1', letter: 'M', points: 3 },
+      { id: 'kept-2', letter: 'N', points: 1 },
+      { id: 'kept-3', letter: 'O', points: 1 },
+      { id: 'kept-4', letter: 'P', points: 3 },
+      { id: 'kept-5', letter: 'R', points: 1 },
+    ]
+    game.session.privateStates.p1.rack.cards = [...placedTiles, ...keptTiles]
+
+    // QZ is not in the mock dictionary, so p2's challenge will succeed.
     const placeResult = applyScrabbleAction(
       game,
       'p1',
       {
         type: 'PLACE_WORD',
-        tiles: [
-          { tileId: rack1[0].id, row: 7, col: 6, letter: rack1[0].letter === '' ? 'X' : rack1[0].letter },
-          { tileId: rack1[1].id, row: 7, col: 7, letter: rack1[1].letter === '' ? 'Z' : rack1[1].letter },
-        ],
+        tiles: placedTiles.map((t, i) => ({ tileId: t.id, row: 7, col: 6 + i, letter: t.letter })),
       },
       mockDictionary,
     )
-
-    if (!placeResult.outcome.ok) {
-      // Placement failed, skip test
-      expect(true).toBe(true)
-      return
-    }
-
+    expect(placeResult.outcome.ok).toBe(true)
     game = placeResult.session
 
-    // Record bag count after placement (should be less than initial due to refill)
+    // Refill drew exactly 2 tiles (5 kept + 2 placed = 7), so the bag shrank by 2.
     const bagCountAfterPlacement = game.session.publicState.bagCount
-    expect(bagCountAfterPlacement).toBeLessThan(initialBagCount)
+    expect(bagCountAfterPlacement).toBe(initialBagCount - 2)
 
-    // Opponent challenges the invalid word
+    // Opponent challenges the invalid word; the challenge succeeds and the 2
+    // refill tiles go back to the bag.
     const challengeResult = applyScrabbleAction(game, 'p2', { type: 'CHALLENGE' }, mockDictionary)
-
     expect(challengeResult.outcome.ok).toBe(true)
 
-    // The key assertion: bagCount should be restored to the pre-placement value
-    if (challengeResult.outcome.ok) {
-      const bagCountAfterChallenge = challengeResult.session.session.publicState.bagCount
-      expect(bagCountAfterChallenge).toBe(initialBagCount)
-    }
+    // The key assertion: bagCount should be restored to the pre-placement value.
+    const bagCountAfterChallenge = challengeResult.session.session.publicState.bagCount
+    expect(bagCountAfterChallenge).toBe(initialBagCount)
   })
 
   it('[Bug 6] skips the failed challenger\'s next turn when they are the current player', () => {
