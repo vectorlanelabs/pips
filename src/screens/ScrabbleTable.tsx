@@ -67,15 +67,12 @@ function computeEventLine(
 }
 
 function computePromptLine(
-  publicState: ScrabblePublicState,
-  localPlayerId: string,
   isMyTurn: boolean,
   hasStagedTiles: boolean,
   canPlayWord: boolean,
 ): string {
   if (!isMyTurn) {
-    const currentId = currentPlayer(publicState.turn)
-    return currentId === localPlayerId ? 'Your move…' : 'Their move…'
+    return 'Their move…'
   }
 
   if (hasStagedTiles) {
@@ -104,8 +101,7 @@ export function ScrabbleTable({
   onChallenge,
   onLeave,
 }: ScrabbleTableProps) {
-  void localName // preserved in props for future wiring
-  void connection // preserved in props for future wiring
+  void localName // preserved in props for future wiring (matches RummyTable's identical M4b-deferred pattern)
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [showIntro, setShowIntro] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -294,13 +290,11 @@ export function ScrabbleTable({
   const promptLine = useMemo(
     () =>
       computePromptLine(
-        publicState,
-        localPlayerId,
         isMyTurn,
         stagedPlacements.length > 0,
         canPlayWord,
       ),
-    [publicState, localPlayerId, isMyTurn, stagedPlacements, canPlayWord],
+    [isMyTurn, stagedPlacements, canPlayWord],
   )
 
   // Render the board
@@ -325,7 +319,7 @@ export function ScrabbleTable({
       <TableHeader
         gameLabel="Scrabble"
         gameColor={BRAND}
-        meta={`${code} · ${publicState.turn.playerOrder.length} players`}
+        meta={connection === 'connected' ? `${code} · ${publicState.turn.playerOrder.length} players` : 'connection lost'}
         onRules={() => setRulesOpen(true)}
         onLeave={onLeave}
         enabled={enabled}
