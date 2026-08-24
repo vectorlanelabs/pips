@@ -7,6 +7,7 @@ import { shuffleDeck } from '../../card-engine/deck.ts'
 import { premiumAt } from './board.ts'
 import {
   LETTER_POINTS,
+  RACK_SIZE,
   type ScrabbleTile,
   type ScrabbleAction,
   type ScrabblePrivateState,
@@ -411,7 +412,6 @@ function makeValidator(
         newBoard[tile.row][tile.col] = {
           letter: tile.letter,
           isBlank: tile.isBlank,
-          premiumConsumed: true,
         }
       }
 
@@ -481,6 +481,9 @@ function makeValidator(
     }
 
     if (action.type === 'EXCHANGE_TILES') {
+      if (action.tileIds.length === 0) {
+        return { ok: false, reason: 'must exchange at least one tile' }
+      }
       if (cardCount(bag) < action.tileIds.length) {
         return { ok: false, reason: 'not enough tiles in bag' }
       }
@@ -550,8 +553,6 @@ function makeValidator(
     return { ok: false, reason: 'unknown action' }
   }
 }
-
-const RACK_SIZE = 7
 
 // Validate PLACE_WORD structural legality
 function validatePlacement(

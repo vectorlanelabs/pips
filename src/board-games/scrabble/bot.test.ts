@@ -43,9 +43,9 @@ describe('Scrabble bot word search', () => {
       .fill(null)
       .map(() => Array(15).fill(null))
 
-    board[7][6] = { letter: 'A', isBlank: false, premiumConsumed: true }
-    board[7][7] = { letter: 'C', isBlank: false, premiumConsumed: true }
-    board[7][8] = { letter: 'T', isBlank: false, premiumConsumed: true }
+    board[7][6] = { letter: 'A', isBlank: false }
+    board[7][7] = { letter: 'C', isBlank: false }
+    board[7][8] = { letter: 'T', isBlank: false }
 
     // Create bot's rack: can spell "CATS" vertically at col 8, rows 7-10
     // C is already at (7,8), so bot needs A, T, S
@@ -145,10 +145,10 @@ describe('Scrabble bot word search', () => {
       .map(() => Array(15).fill(null))
 
     // Place "A" at (7, 7) - center
-    board[7][7] = { letter: 'A', isBlank: false, premiumConsumed: true }
+    board[7][7] = { letter: 'A', isBlank: false }
 
     // Place "T" at (7, 8) to form "AT" horizontally
-    board[7][8] = { letter: 'T', isBlank: false, premiumConsumed: true }
+    board[7][8] = { letter: 'T', isBlank: false }
 
     // Bot's rack
     const rackTiles: ScrabbleTile[] = [
@@ -224,7 +224,7 @@ describe('Scrabble bot word search', () => {
       .map(() => Array(15).fill(null))
 
     // Place "O" at (7, 7)
-    board[7][7] = { letter: 'O', isBlank: false, premiumConsumed: true }
+    board[7][7] = { letter: 'O', isBlank: false }
 
     // Bot's rack with a blank
     const rackTiles: ScrabbleTile[] = [
@@ -321,17 +321,17 @@ describe('Scrabble bot word search', () => {
             // fill everything else so other anchors resolve near-instantly.
             r === 4 && (c === 6 || c === 7 || c === 8)
               ? null
-              : { letter: 'Z', isBlank: false, premiumConsumed: true },
+              : { letter: 'Z', isBlank: false },
           ),
       )
 
     const letters = ['C', 'R', 'A', 'N']
     for (let i = 0; i < letters.length; i++) {
-      board[i][col] = { letter: letters[i], isBlank: false, premiumConsumed: true }
+      board[i][col] = { letter: letters[i], isBlank: false }
     }
     // row 4 is the empty anchor; rows 5-6 are existing isolated tiles
-    board[5][col] = { letter: 'E', isBlank: false, premiumConsumed: true }
-    board[6][col] = { letter: 'S', isBlank: false, premiumConsumed: true }
+    board[5][col] = { letter: 'E', isBlank: false }
+    board[6][col] = { letter: 'S', isBlank: false }
 
     // Rack: only 'T' can usefully fill the gap; the rest can't form any word
     const rackTiles: ScrabbleTile[] = [
@@ -501,13 +501,13 @@ describe('Scrabble bot word search', () => {
             if (r === 7 && c === 9) {
               return null
             }
-            return { letter: 'Z', isBlank: false, premiumConsumed: true }
+            return { letter: 'Z', isBlank: false }
           }),
       )
 
     // Existing tiles at (7,7-8)
-    board[7][7] = { letter: 'A', isBlank: false, premiumConsumed: true }
-    board[7][8] = { letter: 'T', isBlank: false, premiumConsumed: true }
+    board[7][7] = { letter: 'A', isBlank: false }
+    board[7][8] = { letter: 'T', isBlank: false }
 
     // Rack with tiles that can't form any valid words (dict is empty)
     const rackTiles: ScrabbleTile[] = [
@@ -599,7 +599,7 @@ describe('Scrabble bot word search', () => {
           .map((__, c) =>
             (r === 1 || r === 7 || r === 13) && c >= 4 && c <= 10
               ? null
-              : { letter: 'Z', isBlank: false, premiumConsumed: true },
+              : { letter: 'Z', isBlank: false },
           ),
       )
 

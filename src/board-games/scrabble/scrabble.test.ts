@@ -216,6 +216,23 @@ describe('Scrabble placement', () => {
 })
 
 describe('Scrabble EXCHANGE_TILES', () => {
+  it('should reject exchanging zero tiles', () => {
+    const game = createScrabbleGame(['p1', 'p2'], 42)
+
+    const outcome = applyScrabbleAction(
+      game,
+      'p1',
+      { type: 'EXCHANGE_TILES', tileIds: [] },
+      mockDictionary,
+    )
+
+    expect(outcome.outcome.ok).toBe(false)
+    expect(outcome.outcome.reason).toContain('at least one tile')
+    // Turn and state are untouched: still p1's turn, no pass counted
+    expect(currentPlayer(outcome.session.session.publicState.turn)).toBe('p1')
+    expect(outcome.session.session.publicState.consecutivePasses).toBe(0)
+  })
+
   it('should exchange tiles and update hand count', () => {
     let game = createScrabbleGame(['p1', 'p2'], 42)
     const rack1 = game.session.privateStates.p1.rack.cards
@@ -1106,7 +1123,7 @@ describe('Scrabble scoring', () => {
   it('scores every word in a multi-word turn, with multipliers only on newly-placed tiles', () => {
     const board = makeEmptyBoard()
     // Pre-existing tile from an earlier turn: 'M' at (3,6). Not in placement.
-    board[3][6] = { letter: 'M', isBlank: false, premiumConsumed: true }
+    board[3][6] = { letter: 'M', isBlank: false }
 
     // Newly placed this turn: P(2,5), A(2,6), N(2,7). (2,6) is DL.
     const placement = [

@@ -20,7 +20,6 @@ export interface ScrabbleTile {
 export interface BoardCell {
   letter: string       // the letter actually on the board (assigned letter for a blank)
   isBlank: boolean      // true if this cell was placed using a blank tile
-  premiumConsumed: boolean  // true once any tile has occupied this square
 }
 
 export type ScrabbleStage = 'play' | 'over'
