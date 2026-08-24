@@ -33,6 +33,13 @@ import unoSkip from '../assets/sounds/uno-skip.mp3'
 import unoReverse from '../assets/sounds/uno-reverse.mp3'
 import unoDraw from '../assets/sounds/uno-draw.mp3'
 import unoWild from '../assets/sounds/uno-wild.mp3'
+import chipBet from '../assets/sounds/chip-bet.mp3'
+import chipWin from '../assets/sounds/chip-win.mp3'
+import cardFlip from '../assets/sounds/card-flip.mp3'
+import bust from '../assets/sounds/bust.mp3'
+import blackjack from '../assets/sounds/blackjack.mp3'
+import fold from '../assets/sounds/fold.mp3'
+import allIn from '../assets/sounds/all-in.mp3'
 
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'drawn-x' | 'drawn-circle' | 'piece-drop' | 'farkle-bust' | 'bank-points'
@@ -42,6 +49,7 @@ export type SoundName =
   | 'checker-move' | 'checker-jump' | 'king-me'
   | 'train-horn' | 'turn-start'
   | 'uno-call' | 'uno-called-on' | 'uno-skip' | 'uno-reverse' | 'uno-draw' | 'uno-wild'
+  | 'chip-bet' | 'chip-win' | 'card-flip' | 'bust' | 'blackjack' | 'fold' | 'all-in'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -78,6 +86,13 @@ const SOUND_FILES: Record<SoundName, string> = {
   'uno-reverse': unoReverse,
   'uno-draw': unoDraw,
   'uno-wild': unoWild,
+  'chip-bet': chipBet,
+  'chip-win': chipWin,
+  'card-flip': cardFlip,
+  'bust': bust,
+  'blackjack': blackjack,
+  'fold': fold,
+  'all-in': allIn,
 }
 
 const COOKIE_NAME = 'pips-sound'

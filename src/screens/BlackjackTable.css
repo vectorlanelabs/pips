@@ -1,0 +1,445 @@
+/* ===================================================================
+   BlackjackTable — N-player table: opponent rail (top) / dealer centre
+   (middle) / your side (bottom). Three-tier layout matching Rummy/Phase10
+   pattern with game-specific sizing.
+   =================================================================== */
+
+/* ---- Outer container ---- */
+
+.blackjack-table {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.blackjack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.blackjack-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.blackjack-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--coral);
+}
+
+.blackjack-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.blackjack-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blackjack-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.blackjack-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Error banner ---- */
+
+.blackjack-error-banner {
+  background: #fff;
+  border: 4px solid var(--coral);
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin-bottom: clamp(12px, 2vw, 20px);
+  color: var(--coral);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* ---- Main table card ---- */
+
+.blackjack-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Opponent tiles: wrapping grid of opponent-seat tiles ---- */
+
+.blackjack-opp-rail {
+  --blackjack-opp-gap: clamp(10px, 1.6vw, 14px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--blackjack-opp-gap);
+  padding-bottom: clamp(12px, 2vw, 20px);
+  margin-bottom: clamp(12px, 2vw, 20px);
+}
+
+.blackjack-opp-tile {
+  flex: 1 1 200px;
+  max-width: calc((100% - 3 * var(--blackjack-opp-gap)) / 4);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.blackjack-opp-tile--turn {
+  border-width: 4px;
+}
+
+.blackjack-opp-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.blackjack-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.blackjack-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.blackjack-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Opponent tile content ---- */
+
+.blackjack-opp-chips {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+.blackjack-opp-bet {
+  font-size: 12px;
+  color: var(--body-text);
+}
+
+.blackjack-opp-status {
+  font-size: 12px;
+  color: var(--muted-text);
+}
+
+.blackjack-opp-hands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blackjack-opp-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.blackjack-opp-hand-separator {
+  height: 1px;
+  background: var(--grey-border);
+  margin: 4px 0;
+}
+
+.blackjack-opp-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.blackjack-opp-total {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--body-text);
+}
+
+.blackjack-opp-result {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.blackjack-opp-result--win,
+.blackjack-opp-result--blackjack {
+  background-color: #d4f0e8;
+  color: #0a6b42;
+}
+
+.blackjack-opp-result--lose {
+  background-color: #ffe8e8;
+  color: #a00;
+}
+
+.blackjack-opp-result--push {
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+/* ---- Centre band: dealer ---- */
+
+.blackjack-centre {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: clamp(20px, 3vw, 32px);
+  border-top: 3px solid var(--grey-fill);
+  border-bottom: 3px solid var(--grey-fill);
+  padding: clamp(14px, 2vw, 22px) 0;
+  margin-bottom: clamp(12px, 2vw, 20px);
+}
+
+/* Decorative shoe -- shows the real remaining count but isn't clickable;
+   nothing in Blackjack's rules draws from it as a direct player action. */
+.blackjack-shoe-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.blackjack-shoe-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+.blackjack-dealer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blackjack-dealer-label {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+.blackjack-dealer-cards {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.blackjack-dealer-card-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.blackjack-dealer-hole-indicator {
+  font-size: 12px;
+  color: var(--body-text);
+}
+
+.blackjack-dealer-total {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--body-text);
+  margin-top: 8px;
+}
+
+/* ---- Your side: local player area ---- */
+
+.blackjack-your-side {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 2vw, 20px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+/* Chip bank: prominent display with chunky emphasis treatment */
+.blackjack-chip-bank {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 18px;
+  border: 4px solid var(--ink);
+  border-radius: 12px;
+  background: var(--yellow);
+  box-shadow: 0 4px 0 var(--ink);
+  width: fit-content;
+}
+
+.blackjack-chip-bank-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.blackjack-chip-bank-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.blackjack-your-hands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blackjack-your-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blackjack-your-hand-separator {
+  height: 1px;
+  background: var(--grey-border);
+  margin: 4px 0;
+}
+
+.blackjack-your-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blackjack-your-total {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--body-text);
+}
+
+.blackjack-your-result {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.blackjack-your-result--win,
+.blackjack-your-result--blackjack {
+  background-color: #d4f0e8;
+  color: #0a6b42;
+}
+
+.blackjack-your-result--lose {
+  background-color: #ffe8e8;
+  color: #a00;
+}
+
+.blackjack-your-result--push {
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+/* ---- Action section ---- */
+
+.blackjack-action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.blackjack-action-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+.blackjack-bet-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.blackjack-bet-button {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 16px;
+  flex: none;
+}
+
+.blackjack-bet-amount {
+  font-weight: 700;
+  font-size: 18px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.blackjack-round-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--body-text);
+  padding: 14px 16px;
+  background: #f5f5f5;
+  border: 2px solid var(--grey-border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+/* ---- Footnote ---- */
+
+.blackjack-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
