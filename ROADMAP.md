@@ -8,10 +8,15 @@ Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
 (branch `worktree-poker-blackjack-loop`) per user instruction.
 
 ## Next up
-1. M4 — Hold'em screens (spec 56)
-2. M5 — Hold'em wiring (spec 57)
+1. M5 — Hold'em wiring (spec 57) — final milestone
 
 ## Done
+- [cycle 7] M4 — Hold'em screens (spec 56): Room/Table/Board/
+  RulesOverlay, correct private-hand rendering (mirrors Rummy, not
+  Blackjack). One severe bug found and fixed: the action area made
+  Fold/Check/Call mutually exclusive with the bet/raise slider,
+  making the game unplayable in its most common turns. 1398 tests /
+  tsc / build clean.
 - [cycle 6] M3 — Hold'em engine (spec 55 + 55b): shoe/blinds/betting/
   side-pots/hand-eval/elimination. 4 severe bugs found and fixed
   beyond the delegated fix round (2 by the lead personally, past the

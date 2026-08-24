@@ -4523,3 +4523,49 @@ shipping each verified charter promptly.
   before Hold'em's wiring, spec 57, given wiring is where the leak
   would have become externally observable over real PeerJS
   connections).
+
+## Cycle 7 — 2026-08-24 — spec 56 (Hold'em screens) lands
+- **Shipped:** `src/components/HoldemBoard.tsx`, `src/screens/Holdem
+  {Room,Table,RulesOverlay}.tsx`. Private-hand rendering correctly
+  mirrors Rummy's pattern (not Blackjack's, which has no private
+  info): local player's own hole cards render from a private `hand`
+  prop, every other seat shows face-down backs unless
+  `publicState.hands[seatId].cards` is populated by a genuine showdown
+  reveal (verified: no code path reads hidden data outside that exact
+  condition — the engine's privacy fix from earlier this cycle stays
+  intact at the UI layer too).
+- **Verification:** re-ran tsc/full-suite/build myself — clean.
+- **Review (lead, personally):** found one severe, confirmed bug via
+  code reading: the action area's JSX treated the bet-slider, the
+  raise-slider, and the Fold/Check/Call button row as MUTUALLY
+  EXCLUSIVE branches of one ternary. Whenever betting was legal
+  (no one had bet yet this street), the player was shown ONLY a bet
+  slider — no way to Check or Fold. Whenever raising was legal (facing
+  a bet), the player was shown ONLY a raise slider — no way to Call or
+  Fold. Since Check-or-fold and Call-or-fold are the most common
+  actions in poker (raising is comparatively rare), this made the game
+  essentially unplayable through this screen — a player could almost
+  never do the ordinary thing. A telltale sign of the same mistake: a
+  dead "Bet" button existed inside the fallback branch, permanently
+  `disabled` by construction (the branch it lived in could only be
+  reached when `canBet` was already false), suggesting the intent was
+  there but the ternary structure accidentally made the paths
+  exclusive. Restructured so Fold/Check/Call always render together
+  (each independently gated), with the Bet-or-Raise slider as an
+  ADDITIONAL section shown alongside them when applicable, not a
+  replacement. Fixed directly by the lead (small, contained,
+  well-understood fix). Re-verified: tsc/tests/build clean.
+- **Landed**: commit (see git log) on `worktree-poker-blackjack-loop`.
+- **Lesson**: this is the same failure shape as several prior findings
+  in this charter — code that looks locally plausible (each branch of
+  the ternary is individually well-formed) but is structurally wrong
+  in a way only surfaces when you ask "what CAN'T a user do from this
+  state" rather than "does each rendered branch look right." Will
+  specifically walk through every reachable action-area state (no bet
+  yet / facing a bet / facing a short all-in / your own turn at
+  showdown) during the live verification pass once wiring (spec 57)
+  makes that possible, not just read the code a second time.
+- **Continue?** Yes — proceeding to M5 (Hold'em wiring, spec 57), the
+  final milestone. Live browser verification of the full Hold'em build
+  (matching the depth of Blackjack's live check, including this exact
+  action-area bug class) happens once wiring makes it possible.
