@@ -62,6 +62,65 @@ describe('Scrabble placement', () => {
     expect(result2.outcome.reason).toContain('occupied')
   })
 
+  it('should reject placement with duplicate target cells', () => {
+    const game = createScrabbleGame(['p1', 'p2'], 42)
+    const rack1 = game.session.privateStates.p1.rack.cards
+
+    const action = {
+      type: 'PLACE_WORD' as const,
+      tiles: [
+        { tileId: rack1[0].id, row: 7, col: 7, letter: rack1[0].letter === '' ? 'C' : rack1[0].letter },
+        { tileId: rack1[1].id, row: 7, col: 7, letter: rack1[1].letter === '' ? 'A' : rack1[1].letter },
+      ],
+    }
+
+    const outcome = applyScrabbleAction(game, 'p1', action, mockDictionary).outcome
+    expect(outcome.ok).toBe(false)
+    expect(outcome.reason).toContain('duplicate cell')
+  })
+
+  it('should reject placement with the same tile listed twice', () => {
+    const game = createScrabbleGame(['p1', 'p2'], 42)
+    const rack1 = game.session.privateStates.p1.rack.cards
+
+    const action = {
+      type: 'PLACE_WORD' as const,
+      tiles: [
+        { tileId: rack1[0].id, row: 7, col: 6, letter: rack1[0].letter === '' ? 'C' : rack1[0].letter },
+        { tileId: rack1[0].id, row: 7, col: 7, letter: rack1[0].letter === '' ? 'A' : rack1[0].letter },
+      ],
+    }
+
+    const outcome = applyScrabbleAction(game, 'p1', action, mockDictionary).outcome
+    expect(outcome.ok).toBe(false)
+    expect(outcome.reason).toContain('duplicate tile')
+  })
+
+  it('should accept a valid multi-tile placement with no duplicates', () => {
+    const game = createScrabbleGame(['p1', 'p2'], 42)
+    game.session.privateStates.p1.rack.cards = [
+      { id: 'cat-c', letter: 'C', points: 3 },
+      { id: 'cat-a', letter: 'A', points: 1 },
+      { id: 'cat-t', letter: 'T', points: 1 },
+    ]
+
+    const outcome = applyScrabbleAction(
+      game,
+      'p1',
+      {
+        type: 'PLACE_WORD',
+        tiles: [
+          { tileId: 'cat-c', row: 7, col: 6, letter: 'C' },
+          { tileId: 'cat-a', row: 7, col: 7, letter: 'A' },
+          { tileId: 'cat-t', row: 7, col: 8, letter: 'T' },
+        ],
+      },
+      mockDictionary,
+    )
+
+    expect(outcome.outcome.ok).toBe(true)
+  })
+
   it('should reject first placement not covering center (7,7)', () => {
     const game = createScrabbleGame(['p1', 'p2'], 42)
     const rack1 = game.session.privateStates.p1.rack.cards

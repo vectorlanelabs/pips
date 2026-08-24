@@ -558,7 +558,25 @@ function validatePlacement(
     }
   }
 
-  // 2. Every target cell is empty and in bounds
+  // 2. No two tiles share a target cell
+  for (let i = 0; i < action.tiles.length; i++) {
+    for (let j = i + 1; j < action.tiles.length; j++) {
+      if (action.tiles[i].row === action.tiles[j].row && action.tiles[i].col === action.tiles[j].col) {
+        return 'duplicate cell in placement'
+      }
+    }
+  }
+
+  // 3. No tile is used more than once
+  for (let i = 0; i < action.tiles.length; i++) {
+    for (let j = i + 1; j < action.tiles.length; j++) {
+      if (action.tiles[i].tileId === action.tiles[j].tileId) {
+        return 'duplicate tile in placement'
+      }
+    }
+  }
+
+  // 4. Every target cell is empty and in bounds
   for (const tile of action.tiles) {
     if (tile.row < 0 || tile.row >= 15 || tile.col < 0 || tile.col >= 15) {
       return 'placement out of bounds'
@@ -568,7 +586,7 @@ function validatePlacement(
     }
   }
 
-  // 3. All placed cells in a single row or column
+  // 5. All placed cells in a single row or column
   const rows = action.tiles.map((t) => t.row)
   const cols = action.tiles.map((t) => t.col)
   const singleRow = rows.every((r) => r === rows[0])
@@ -577,7 +595,7 @@ function validatePlacement(
     return 'tiles must be in a single row or column'
   }
 
-  // 4. No gaps in the placement
+  // 6. No gaps in the placement
   if (singleRow) {
     const minCol = Math.min(...cols)
     const maxCol = Math.max(...cols)
@@ -602,7 +620,7 @@ function validatePlacement(
 
   const isFirstPlacement = publicState.board.every((row) => row.every((cell) => cell === null))
 
-  // 5. First placement must cover center and be 2+ tiles
+  // 7. First placement must cover center and be 2+ tiles
   if (isFirstPlacement) {
     if (action.tiles.length < 2) {
       return 'first placement must be at least 2 tiles'
@@ -612,7 +630,7 @@ function validatePlacement(
       return 'first placement must cover the center square (7,7)'
     }
   } else {
-    // 6. Must connect to existing tiles
+    // 8. Must connect to existing tiles
     let connects = false
     for (const tile of action.tiles) {
       // Check orthogonal adjacency
@@ -629,7 +647,7 @@ function validatePlacement(
     }
   }
 
-  // 7. Blank tile letter validation
+  // 9. Blank tile letter validation
   for (const placedTile of action.tiles) {
     const rackTile = rack.cards.find((t) => t.id === placedTile.tileId)!
     if (rackTile.letter === '') {
