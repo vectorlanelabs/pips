@@ -21,7 +21,6 @@ import './RummyTable.css'
 export interface RummyTableProps {
   code: string
   localPlayerId: string
-  localName: string
   names: Record<string, string>        // playerId -> display name
   colors: Record<string, string>       // playerId -> seat ink
   connection: 'connected' | 'disconnected'
@@ -33,7 +32,6 @@ export interface RummyTableProps {
   onLayDownMeld: (cardIds: string[]) => void
   onLayOffMeld: (targetPlayerId: string, meldIndex: number, cardIds: string[]) => void
   onDiscard: (cardId: string) => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -307,6 +305,12 @@ function MeldCluster({ cards, ownerColor, ownerShadow, onLayOff }: {
     <div
       className={`rummy-meld-cluster${onLayOff ? ' rummy-meld-cluster--layoff' : ''}`}
       onClick={onLayOff}
+      onKeyDown={onLayOff ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onLayOff()
+        }
+      } : undefined}
       role={onLayOff ? 'button' : undefined}
       tabIndex={onLayOff ? 0 : undefined}
     >
@@ -346,7 +350,6 @@ function StatusDisplay({ status }: { status: StatusLine }) {
 export function RummyTable({
   code,
   localPlayerId,
-  localName,
   names,
   colors,
   connection,
@@ -358,12 +361,9 @@ export function RummyTable({
   onLayDownMeld,
   onLayOffMeld,
   onDiscard,
-  onOpenRules,
   onLeave,
 }: RummyTableProps) {
   // ---- Derived ----
-  void localName // preserved in props for M4b wiring; unused in this presentational milestone
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
   const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && !publicState.roundOver
@@ -507,6 +507,9 @@ export function RummyTable({
   )
 
   const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId && publicState.roundWinnerId
+  // Blocked round (stock AND discard both exhausted, nobody can draw): no round winner, but the
+  // host still deals a fresh round automatically — same as a going-out round, just no score.
+  const showBlockedRoundBanner = publicState.roundOver && !publicState.matchWinnerId && !publicState.roundWinnerId
 
   // Drawing from an empty stock is still legal (and necessary) when the discard pile
   // has 2+ cards — it recycles the pile (keeping the top card) into a fresh stock.
@@ -717,6 +720,13 @@ export function RummyTable({
               {' won this round — '}
               {publicState.scores[publicState.roundWinnerId!] ?? 0}
               {' points. Round '}
+              {publicState.roundNumber + 1}
+              {' starts automatically.'}
+            </div>
+          )}
+          {showBlockedRoundBanner && (
+            <div className="rummy-round-banner">
+              {'Stock and discard pile both ran out — round blocked, no score. Round '}
               {publicState.roundNumber + 1}
               {' starts automatically.'}
             </div>

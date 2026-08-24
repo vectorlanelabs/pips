@@ -21,7 +21,7 @@ import { decideConnect4Move } from './games/connect4'
 import { decideHangmanLetter } from './games/hangman'
 
 // ---- Rummy (separate parallel session, per CHARTER.md resolution #7) ----
-import { createRummyGame, RUMMY_MAX_SEATS, RUMMY_MIN_SEATS, type RummySession, type RummyPublicState, type RummyAction } from './card-games/rummy/state'
+import { createRummyGame, RUMMY_MAX_SEATS, RUMMY_MIN_SEATS, RUMMY_HAND_SIZE, isRummyAction, type RummySession, type RummyPublicState, type RummyAction } from './card-games/rummy/state'
 import { applyRummyAction, runRummyBotTurn } from './card-games/rummy/rules'
 import { rummyBotStrategy } from './card-games/rummy/bot'
 import { deriveSnapshot, shouldAcceptUpdate } from './engine/sync'
@@ -146,6 +146,10 @@ import { ScrabbleRoom } from './screens/ScrabbleRoom'
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type Phase10View =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
@@ -202,6 +206,15 @@ const UNO_DEAL_HOLD_BUFFER_MS = 700
 // turn — so a full 4-bot table never blurs a run of plays together between a
 // human's own turns.
 const SKIPBO_DEAL_HOLD_BUFFER_MS = 700
+// Rummy: same "fast forward" problem as Uno — a turn is draw, then optional meld/lay-off(s),
+// then discard, each its own broadcast state change with its own card sound. A full 4-seat
+// table means up to 3 bots' worth of these actions can land between a human's own turns, so
+// this reuses Uno's measured card-game-scale pace rather than bare BASE_MS (900ms would blur
+// them together — see CLAUDE.md's "never reuse a shared pacing constant" rule).
+const RUMMY_ACTION_MS = 1600
+// Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
+// render/paint time on top of estimateDealIntroMs's pure animation estimate.
+const RUMMY_DEAL_HOLD_BUFFER_MS = 700
 const MT_ACTION_MS = 1100
 // Yahtzee was reusing bare BASE_MS across its 3-roll/2-hold/1-score turn shape, which measured at
 // ~4.6s per bot turn against a human averaging ~10-13s per turn on the same table (see spec/
@@ -421,6 +434,9 @@ export default function App() {
   const rummyBotSeatsRef = useRef<Set<string>>(new Set())
   const rummyCardBackRef = useRef(savedCardBack())
   const rummyBotCounterRef = useRef(0)
+  const rummyBotsHeldUntilRef = useRef(0)
+  const rummyLastRoundRef = useRef<number | null>(null)
+  const rummyRejectionNoticeRef = useRef<string | null>(null)
   const phase10SessionRef = useRef<Phase10Session | null>(null)
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
   const phase10GuestRef = useRef<GuestHandle<Phase10Action> | null>(null)
@@ -819,6 +835,9 @@ export default function App() {
     rummyBotSeatsRef.current.clear()
     rummyBotCounterRef.current = 0
     rummyNamesRef.current = {}
+    rummyBotsHeldUntilRef.current = 0
+    rummyLastRoundRef.current = null
+    rummyRejectionNoticeRef.current = null
     // Card back deliberately survives a reset — it's the host's saved preference.
     // Phase 10
     phase10HostRef.current?.destroy()
@@ -1148,6 +1167,12 @@ export default function App() {
       return
     }
     const session = rummySessionRef.current!
+    const currentRound = session.session.publicState.roundNumber
+    if (currentRound !== rummyLastRoundRef.current) {
+      rummyLastRoundRef.current = currentRound
+      const totalFlights = session.session.publicState.seatOrder.length * RUMMY_HAND_SIZE
+      rummyBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(totalFlights) + RUMMY_DEAL_HOLD_BUFFER_MS
+    }
     const hostSnap = deriveSnapshot(session.session, rummyLocalPlayerIdRef.current!)
     setRummyView({
       kind: 'game',
@@ -1207,8 +1232,17 @@ export default function App() {
         const session = rummySessionRef.current
         if (!session) return
         if (!rummySeatsRef.current.some((s) => s.playerId === guestId)) return
+        // action arrives over PeerJS as `unknown` at runtime — the TypeScript RummyAction
+        // union is compile-time only, so a malformed/stale/hostile guest payload must be
+        // rejected here, before it ever reaches action.type inside the validator.
+        if (!isRummyAction(action)) return
         const result = applyRummyAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          rummyHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         rummySessionRef.current = result.rummy
         rummyBroadcast()
       },
@@ -1258,8 +1292,10 @@ export default function App() {
 
   async function runRummyBot(botId: string, key: string) {
     while (!rummyStale(key)) {
-      await wait(BASE_MS)
+      const holdRemaining = rummyBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : RUMMY_ACTION_MS)
       if (rummyStale(key)) return
+      if (Date.now() < rummyBotsHeldUntilRef.current) continue
       const session = rummySessionRef.current!
       const ps = session.session.publicState
       if (ps.roundOver || ps.matchWinnerId) return
@@ -1301,8 +1337,19 @@ export default function App() {
           setRummyStarted(false)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // rummyView/localRevision, so it can't be mistaken for (or block) a real state update.
+          rummyRejectionNoticeRef.current = view.message
+          setRummyNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setRummyNotice((prev) => (prev !== null && prev === rummyRejectionNoticeRef.current ? null : prev))
+        rummyRejectionNoticeRef.current = null
         setRummyView(view)
         setRummyStarted(true)
       },
@@ -1334,7 +1381,18 @@ export default function App() {
       const session = rummySessionRef.current
       if (!session) return
       const result = applyRummyAction(session, rummyLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        rummyRejectionNoticeRef.current = reason
+        setRummyNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (rummyNotice !== null && rummyNotice === rummyRejectionNoticeRef.current) {
+        setRummyNotice(null)
+      }
+      rummyRejectionNoticeRef.current = null
       rummySessionRef.current = result.rummy
       rummyBroadcast()
     } else if (rummyRole === 'guest') {
@@ -5029,7 +5087,6 @@ export default function App() {
       <RummyTable
         code={rummyCode}
         localPlayerId={rummyLocalPlayerId}
-        localName={name}
         names={rummyView.names}
         colors={rummyColors}
         connection={rummyConnection}
@@ -5041,7 +5098,6 @@ export default function App() {
         onLayDownMeld={(cardIds) => rummyDispatch({ type: 'LAY_DOWN_MELD', cardIds })}
         onLayOffMeld={(targetPlayerId, meldIndex, cardIds) => rummyDispatch({ type: 'LAY_OFF', targetPlayerId, meldIndex, cardIds })}
         onDiscard={(cardId) => rummyDispatch({ type: 'DISCARD_CARD', cardId })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )

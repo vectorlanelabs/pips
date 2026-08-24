@@ -190,6 +190,20 @@ describe('Rummy integration harness', () => {
     expect(totalCards(rummy)).toBe(52)
   })
 
+  // Defense-in-depth for the PeerJS host boundary (App.tsx's onAction guards with
+  // isRummyAction — see state.test.ts — before ever reaching here), documenting that the
+  // validator itself never throws on an unrecognized action.type; it rejects cleanly.
+  it('an action with an unrecognized type is rejected, not thrown, and leaves state untouched', () => {
+    const rummy = createRummyGame(['p1', 'p2'], 42)
+    const before = rummy.session.revision
+
+    expect(() => applyRummyAction(rummy, 'p1', { type: 'NOT_A_REAL_ACTION' } as unknown as RummyAction))
+      .not.toThrow()
+    const result = applyRummyAction(rummy, 'p1', { type: 'NOT_A_REAL_ACTION' } as unknown as RummyAction)
+    expect(result.outcome.ok).toBe(false)
+    expect(result.rummy.session.revision).toBe(before)
+  })
+
   it('p1 draws from stock', () => {
     const rummy = createRummyGame(['p1', 'p2'], 42)
 
@@ -883,6 +897,34 @@ describe('Rummy integration harness', () => {
     expect(result.outcome.ok).toBe(true)
     expect(result.rummy.session.publicState.roundOver).toBe(true)
     expect(result.rummy.session.publicState.roundWinnerId).toBeNull()
+  })
+
+  it('a blocked round (no winner) can still transition to a fresh round via START_NEXT_ROUND — this is the App.tsx host-effect path (round-over, no matchWinnerId) firing for the blocked case, not just the going-out case', () => {
+    const p1Cards = ['c0', 'c1', 'c2']
+    const p2BaseCards = ['c3', 'c4', 'c5', 'c6', 'c7']
+    const remaining = createStandardDeck().map(c => c.id).filter(id =>
+      !p1Cards.includes(id) && !p2BaseCards.includes(id)
+    )
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: [...p2BaseCards, ...remaining],
+      discardCardIds: [],
+      stockCardIds: [],
+      phase: 'draw',
+      currentPlayerIndex: 0,
+    })
+    const blocked = applyRummyAction(rummy, 'p1', { type: 'DRAW_FROM_STOCK' })
+    expect(blocked.outcome.ok).toBe(true)
+    expect(blocked.rummy.session.publicState.roundOver).toBe(true)
+    expect(blocked.rummy.session.publicState.roundWinnerId).toBeNull()
+    expect(blocked.rummy.session.publicState.matchWinnerId).toBeNull()
+
+    const next = applyRummyAction(blocked.rummy, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(next.outcome.ok).toBe(true)
+    expect(next.rummy.session.publicState.roundOver).toBe(false)
+    expect(next.rummy.session.publicState.roundNumber).toBe(2)
+    // No score change for a blocked round — nobody melded, nobody had deadwood scored.
+    expect(next.rummy.session.publicState.scores).toEqual(rummy.session.publicState.scores)
   })
 
   it('START_NEXT_ROUND succeeds — new round dealt, scores preserved, start alternates', () => {

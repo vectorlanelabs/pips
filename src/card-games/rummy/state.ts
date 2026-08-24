@@ -67,6 +67,20 @@ export type RummyAction =
   | { type: 'DISCARD_CARD'; cardId: string }
   | { type: 'START_NEXT_ROUND' }
 
+const RUMMY_ACTION_TYPES = new Set<RummyAction['type']>([
+  'DRAW_FROM_STOCK', 'DRAW_FROM_DISCARD', 'LAY_DOWN_MELD', 'LAY_OFF', 'DISCARD_CARD', 'START_NEXT_ROUND',
+])
+
+// Runtime guard for the PeerJS host boundary: a guest action arrives over the wire as `unknown`
+// (the TypeScript RummyAction union is compile-time only, not a network validator), so the host
+// must confirm it's actually a plain object with a recognized `type` string before dispatching it
+// into applyRummyAction — never trust the network cast.
+export function isRummyAction(value: unknown): value is RummyAction {
+  if (typeof value !== 'object' || value === null) return false
+  const type = (value as { type?: unknown }).type
+  return typeof type === 'string' && RUMMY_ACTION_TYPES.has(type as RummyAction['type'])
+}
+
 // The current full set of cards in a meld group — its original zone plus every lay-off (by
 // either player) that has targeted it since. This is what a NEW lay-off's validity is checked
 // against, and what scoring uses for correct Ace-value context (ace-high run vs ace-low vs a
@@ -96,6 +110,11 @@ export const RUMMY_MIN_SEATS = 2
 export const RUMMY_MAX_SEATS = 4   // hard ceiling for a single 52-card deck at a 10-card hand: 5 players
                                      // would deal 5×10+1=51 cards and leave a degenerate 1-card stock; 4 leaves 11
 
+// Cards dealt to each seated player at the start of every round. Exported so the host's deal-intro
+// pacing (App.tsx) can compute the total number of card flights (seatOrder.length * RUMMY_HAND_SIZE)
+// without duplicating this number.
+export const RUMMY_HAND_SIZE = 10
+
 const TARGET_SCORE = 500
 
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
@@ -110,7 +129,7 @@ function dealRound(
   let remaining = shuffled
   const hands: Record<string, Zone> = {}
   for (const playerId of playerIds) {
-    const { dealt, remaining: rest } = dealCards(remaining, 10)
+    const { dealt, remaining: rest } = dealCards(remaining, RUMMY_HAND_SIZE)
     hands[playerId] = addCards(createHand(playerId), dealt)
     remaining = rest
   }
