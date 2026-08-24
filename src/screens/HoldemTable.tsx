@@ -1,0 +1,524 @@
+import { useState, useEffect, useRef } from 'react'
+import type { HoldemPublicState, HoldemPrivateState } from '../card-games/holdem/state'
+import { HOLDEM_BIG_BLIND } from '../card-games/holdem/state'
+import { currentPlayer } from '../engine/turn-engine'
+import { DealIntro } from '../components/DealIntro'
+import { HoldemBoard } from '../components/HoldemBoard'
+import { PlayingCard, CardBack } from '../components/PlayingCard'
+import { Wordmark } from '../components/Wordmark'
+import { SoundToggle } from '../components/SoundToggle'
+import { HoldemRulesOverlay } from './HoldemRulesOverlay'
+import { useSound } from '../hooks/useSound'
+
+export interface HoldemTableProps {
+  code: string
+  localPlayerId: string
+  names: Record<string, string>
+  colors: Record<string, string>
+  connection: 'connected' | 'disconnected'
+  notice?: string | null
+  publicState: HoldemPublicState
+  privateState: HoldemPrivateState
+  onFold: () => void
+  onCheck: () => void
+  onCall: () => void
+  onBet: (amount: number) => void
+  onRaise: (amount: number) => void
+  onStartNextHand: () => void
+  onLeaveTable: () => void
+}
+
+export function HoldemTable({
+  code,
+  localPlayerId,
+  names,
+  colors,
+  connection,
+  notice,
+  publicState,
+  privateState,
+  onFold,
+  onCheck,
+  onCall,
+  onBet,
+  onRaise,
+  onStartNextHand,
+  onLeaveTable,
+}: HoldemTableProps) {
+  const { play, enabled, setEnabled } = useSound()
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [showIntro, setShowIntro] = useState(false)
+  const [betAmount, setBetAmount] = useState(HOLDEM_BIG_BLIND * 2)
+
+  const introShownForHandRef = useRef<number | null>(null)
+  const prevPhaseRef = useRef<string>(publicState.turn.phase)
+  const noticeSeenRef = useRef(!!notice)
+  const soundSigRef = useRef({
+    phase: publicState.turn.phase,
+    handOver: publicState.handOver,
+    handResults: publicState.handResults,
+  })
+
+  // Show deal intro when transitioning from handOver to preflop
+  useEffect(() => {
+    const wasInHandOver = prevPhaseRef.current === 'handOver'
+    const nowInPreflop = publicState.turn.phase === 'preflop'
+
+    if (wasInHandOver && nowInPreflop) {
+      if (introShownForHandRef.current !== publicState.handNumber) {
+        introShownForHandRef.current = publicState.handNumber
+        setShowIntro(true)
+      }
+    }
+
+    prevPhaseRef.current = publicState.turn.phase
+  }, [publicState.turn.phase, publicState.handNumber])
+
+  // Sound effects
+  useEffect(() => {
+    const p = soundSigRef.current
+
+    // Shuffle sound at start of new hand (when transitioning into preflop)
+    if (p.phase !== 'preflop' && publicState.turn.phase === 'preflop') {
+      play('shuffle')
+    }
+
+    // Card-draw sound when board cards are dealt (flop, turn, river)
+    if (
+      (p.phase === 'preflop' && publicState.turn.phase === 'flop') ||
+      (p.phase === 'flop' && publicState.turn.phase === 'turn') ||
+      (p.phase === 'turn' && publicState.turn.phase === 'river')
+    ) {
+      play('card-draw')
+    }
+
+    // Hand-over sounds
+    if (!p.handOver && publicState.handOver && publicState.handResults) {
+      const myResults = publicState.handResults.winners.find((w) => w.playerId === localPlayerId)
+      if (myResults) {
+        play('round-win')
+      } else {
+        play('error')
+      }
+    }
+
+    // Error banner
+    if (notice && !noticeSeenRef.current) {
+      play('error')
+      noticeSeenRef.current = true
+    } else if (!notice) {
+      noticeSeenRef.current = false
+    }
+
+    soundSigRef.current = {
+      phase: publicState.turn.phase,
+      handOver: publicState.handOver,
+      handResults: publicState.handResults,
+    }
+  }, [publicState.turn.phase, publicState.handOver, publicState.handResults, notice, play, localPlayerId])
+
+  // Derived state
+  const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
+  const myChips = publicState.chips[localPlayerId] ?? 0
+  const myBetThisStreet = publicState.hands[localPlayerId]?.betThisStreet ?? 0
+  const currentPhase = publicState.turn.phase
+  const isActionPhase = ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
+  const canAct = isMyTurn && isActionPhase && !publicState.handOver
+
+  // Button gating conditions based on rules.ts validators
+  const callAmount = Math.min(publicState.currentBetThisStreet - myBetThisStreet, myChips)
+  const canCall = canAct && callAmount > 0
+  const canCheck = canAct && publicState.currentBetThisStreet <= myBetThisStreet
+  const canFold = canAct
+  const canBet = canAct && publicState.currentBetThisStreet === 0 && myChips > 0
+  const canRaise = canAct && publicState.currentBetThisStreet > 0 && publicState.reRaiseEligible[localPlayerId] && myChips > 0
+
+  // Compute min/max for bet/raise slider
+  let minBetAmount = 1
+  let maxBetAmount = myChips
+
+  if (canBet) {
+    // Betting: min = 1, max = myChips
+    minBetAmount = 1
+    maxBetAmount = myChips
+  } else if (canRaise) {
+    // Raising: min = currentBet + minRaise, max = myChips + myBetThisStreet (max possible bet-to)
+    const minRaise = Math.max(publicState.lastFullRaiseIncrement, HOLDEM_BIG_BLIND)
+    minBetAmount = publicState.currentBetThisStreet + minRaise
+    maxBetAmount = myChips + myBetThisStreet
+    // If min exceeds max (short all-in scenario), allow short all-in: clamp min to max
+    if (minBetAmount > maxBetAmount) {
+      minBetAmount = maxBetAmount
+    }
+  }
+
+  // Clamp betAmount to valid range
+  const clampedBetAmount = Math.min(Math.max(betAmount, minBetAmount), maxBetAmount)
+
+  // Quick preset buttons
+  const halfPotPreset = Math.floor(publicState.pot / 2)
+  const potPreset = publicState.pot
+  const allInPreset = myChips + myBetThisStreet
+
+  const quickPresets = [
+    { label: '½ pot', value: Math.min(Math.max(halfPotPreset, minBetAmount), maxBetAmount) },
+    { label: 'Pot', value: Math.min(Math.max(potPreset, minBetAmount), maxBetAmount) },
+    { label: 'All in', value: allInPreset },
+  ]
+
+  // Opponent data for DealIntro
+  const others = publicState.seatOrder
+    .filter((id) => id !== localPlayerId && !publicState.eliminated[id])
+    .map((id) => ({
+      id,
+      name: names[id] ?? id,
+      color: colors[id] ?? 'var(--slate-pip)',
+      handSize: publicState.hands[id]?.folded ? 0 : 2,
+    }))
+
+  return (
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: 'clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <Wordmark small onClick={onLeaveTable} />
+          <span style={{ fontWeight: 700, fontSize: 22, color: 'var(--coral)' }}>Texas Hold'em</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: '50%',
+                display: 'block',
+                background: connection === 'connected' ? 'var(--green)' : 'var(--coral)',
+              }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted-text)' }}>
+              {connection === 'connected' ? `peer to peer · ${publicState.seatOrder.length} players` : 'connection lost'}
+            </span>
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
+          <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
+          <button type="button" className="btn btn-ghost" onClick={onLeaveTable}>Leave</button>
+        </div>
+      </div>
+
+      {/* Code chip */}
+      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Hold'em · {code}</span>
+      </div>
+
+      {/* Error banner */}
+      {notice && (
+        <div style={{
+          background: '#fff',
+          border: '4px solid var(--coral)',
+          borderRadius: 16,
+          padding: '12px 16px',
+          marginBottom: 'clamp(12px, 2vw, 20px)',
+          color: 'var(--coral)',
+          fontWeight: 700,
+          fontSize: 14,
+        }}>
+          {notice}
+        </div>
+      )}
+
+      {/* Main table */}
+      <div style={{
+        background: 'var(--surface)',
+        border: '4px solid var(--ink)',
+        borderRadius: 28,
+        boxShadow: '0 10px 0 var(--ink)',
+        padding: 'clamp(16px, 2.4vw, 26px)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {showIntro ? (
+          <DealIntro
+            others={others}
+            yourHandSize={privateState.hand.length}
+            renderCardBack={(p) => <CardBack {...p} design={publicState.cardBack} />}
+            onComplete={() => setShowIntro(false)}
+            maxFlights={publicState.seatOrder.length * 2}
+          />
+        ) : (
+          <>
+            {/* Board + Pot */}
+            <div style={{ marginBottom: 'clamp(20px, 3vw, 32px)', textAlign: 'center' }}>
+              <div style={{ marginBottom: 16 }}>
+                <HoldemBoard cards={publicState.board} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 24, color: 'var(--ink)' }}>
+                Pot: {publicState.pot}
+              </div>
+            </div>
+
+            {/* Seat rail */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 'clamp(10px, 1.6vw, 14px)',
+              paddingBottom: 'clamp(12px, 2vw, 20px)',
+              marginBottom: 'clamp(20px, 3vw, 32px)',
+              borderBottom: '2px solid var(--grey-border)',
+            }}>
+              {publicState.seatOrder.map((seatId) => {
+                const seatColor = colors[seatId] ?? 'var(--slate-pip)'
+                const seatName = names[seatId] ?? seatId
+                const isYou = seatId === localPlayerId
+                const seatHand = publicState.hands[seatId]
+                const isTurn = seatId === currentPlayer(publicState.turn) && isActionPhase
+                const seatChips = publicState.chips[seatId] ?? 0
+                const isFolded = seatHand.folded
+                const isAllIn = seatHand.allIn
+                const isEliminated = publicState.eliminated[seatId]
+
+                return (
+                  <div
+                    key={seatId}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      border: `3px solid ${isTurn ? seatColor : 'var(--grey-border)'}`,
+                      borderRadius: 16,
+                      padding: '12px 14px',
+                      background: '#fff',
+                      opacity: isFolded || isEliminated ? 0.6 : 1,
+                    }}
+                  >
+                    {/* Seat header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        display: 'block',
+                        background: seatColor,
+                      }} />
+                      <span style={{ fontWeight: 700, fontSize: 15, color: seatColor }}>
+                        {seatName}
+                      </span>
+                      {isYou && <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--muted-text)' }}>(you)</span>}
+                      {isTurn && <span style={{ fontWeight: 600, fontSize: 11, background: seatColor, color: '#fff', padding: '2px 8px', borderRadius: 999 }}>turn</span>}
+                    </div>
+
+                    {/* Chips and bet info */}
+                    <div style={{ fontSize: 13, color: 'var(--body-text)' }}>
+                      <div>{seatChips} chips</div>
+                      {seatHand.betThisStreet > 0 && <div>Bet: {seatHand.betThisStreet}</div>}
+                    </div>
+
+                    {/* Status badges */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {isFolded && <span className="chip" style={{ background: '#ddd', color: 'var(--muted-text)', fontSize: 12 }}>Folded</span>}
+                      {isAllIn && !isFolded && <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)', fontSize: 12 }}>All in</span>}
+                      {isEliminated && <span className="chip" style={{ background: '#ddd', color: 'var(--muted-text)', fontSize: 12 }}>Out</span>}
+                    </div>
+
+                    {/* Hole cards */}
+                    {isYou && privateState.hand.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        {privateState.hand.map((card, i) => (
+                          <PlayingCard
+                            key={i}
+                            rank={card.rank as any}
+                            suit={card.suit as any}
+                            size="hand"
+                            style={{ fontSize: 10 }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {!isYou && !isFolded && !isEliminated && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        {seatHand.cards.length > 0 ? (
+                          // Showdown reveal
+                          seatHand.cards.map((card, i) => (
+                            <PlayingCard
+                              key={i}
+                              rank={card.rank as any}
+                              suit={card.suit as any}
+                              size="hand"
+                              style={{ fontSize: 10 }}
+                            />
+                          ))
+                        ) : (
+                          // Face-down cards
+                          <>
+                            <CardBack design={publicState.cardBack} size="pile" style={{ fontSize: 10 }} />
+                            <CardBack design={publicState.cardBack} size="pile" style={{ fontSize: 10 }} />
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Action area. Fold/Check/Call and a Bet-or-Raise slider are
+                ADDITIVE, never mutually exclusive -- a player facing no bet
+                can always Check (or Fold) instead of betting, and a player
+                facing a bet can always Call (or Fold) instead of raising. */}
+            {canAct && (
+              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-lg"
+                    onClick={onFold}
+                    disabled={!canFold}
+                  >
+                    Fold
+                  </button>
+                  {canCheck && (
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onCheck}
+                    >
+                      Check
+                    </button>
+                  )}
+                  {canCall && (
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onCall}
+                    >
+                      Call {callAmount}
+                    </button>
+                  )}
+                </div>
+
+                {(canBet || canRaise) && (
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--body-text)' }}>
+                      {canBet ? 'Place your bet' : 'Raise to'}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <input
+                          type="range"
+                          min={minBetAmount}
+                          max={maxBetAmount}
+                          step={1}
+                          value={clampedBetAmount}
+                          onChange={(e) => setBetAmount(Number(e.target.value))}
+                          style={{ flex: 1, height: 8, borderRadius: 4 }}
+                        />
+                        <div style={{ fontWeight: 700, fontSize: 16, minWidth: 60, textAlign: 'right' }}>
+                          {clampedBetAmount}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {quickPresets.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            className="btn btn-lg"
+                            onClick={() => setBetAmount(preset.value)}
+                            style={{ flex: '1 1 auto', minWidth: 80 }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-coral btn-lg"
+                        onClick={() => canBet ? onBet(clampedBetAmount) : onRaise(clampedBetAmount)}
+                      >
+                        {canBet ? `Bet ${clampedBetAmount}` : `Raise to ${clampedBetAmount}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Waiting status */}
+            {isMyTurn && !canAct && !publicState.handOver && (
+              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', fontSize: 14, color: 'var(--body-text)' }}>
+                Game in progress…
+              </div>
+            )}
+
+            {!isMyTurn && isActionPhase && !publicState.handOver && (
+              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', fontSize: 14, color: 'var(--body-text)' }}>
+                Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
+              </div>
+            )}
+
+            {/* Hand-over banner */}
+            {publicState.handOver && publicState.handResults && (
+              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+                <div style={{
+                  background: '#f5f5f5',
+                  border: '2px solid var(--grey-border)',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  marginBottom: 12,
+                }}>
+                  {publicState.gameOverWinnerId ? (
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--body-text)', marginBottom: 8 }}>
+                      {publicState.gameOverWinnerId === localPlayerId ? 'You' : names[publicState.gameOverWinnerId] ?? 'Someone'} wins the table!
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 14, color: 'var(--body-text)' }}>
+                      {publicState.handResults.potBreakdown.map((breakdown, i) => {
+                        const winners = breakdown.winnerIds
+                        const winnerNames = winners.map((id) => id === localPlayerId ? 'You' : names[id] ?? id)
+                        const amountPerWinner = Math.floor(breakdown.amount / winners.length)
+
+                        if (winners.length === 1) {
+                          const winnerId = winners[0]
+                          const winnerName = winnerId === localPlayerId ? 'You' : names[winnerId] ?? winnerId
+                          return (
+                            <div key={i}>
+                              {winnerName} wins {breakdown.amount}
+                            </div>
+                          )
+                        } else {
+                          return (
+                            <div key={i}>
+                              {winnerNames.join(' and ')} split the pot, {amountPerWinner} each
+                            </div>
+                          )
+                        }
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {!publicState.gameOverWinnerId && (
+                    <button
+                      type="button"
+                      className="btn btn-lg btn-coral"
+                      onClick={onStartNextHand}
+                    >
+                      Deal next hand
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-lg"
+                    onClick={onLeaveTable}
+                  >
+                    Leave table
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {rulesOpen && <HoldemRulesOverlay onClose={() => setRulesOpen(false)} />}
+    </div>
+  )
+}

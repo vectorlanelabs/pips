@@ -1,5 +1,17 @@
 # Requests for the human
 
+- [ ] 2026-08-24, Blackjack + Texas Hold'em charter wrap-up — **charter
+      complete**, verified in the tree on `worktree-poker-blackjack-loop`
+      (isolated worktree at `.claude/worktrees/poker-blackjack-loop`):
+      6/6 milestones landed (Blackjack engine/screens/wiring, Hold'em
+      engine/screens/wiring), 1398 tests / tsc / build green throughout,
+      both games live-verified in a real browser at their max seat
+      counts (Blackjack 6-seat, Hold'em 8-seat) including the CLAUDE.md-
+      mandated bot-pacing check. Nothing merged/pushed yet per this
+      project's standing git workflow — say "push" and I'll merge
+      `worktree-poker-blackjack-loop` into `main` and push to `origin`,
+      then prune the branch/worktree per the standing rule.
+
 - [x] 2026-08-09, Wahoo wrap-up — commit the charter: done, pushed
       (verified: full Wahoo commit sequence on `main`, HEAD == origin/main).
 - [x] 2026-08-09, Wahoo wrap-up — real audio: done, user confirmed fine.

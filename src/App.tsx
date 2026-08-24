@@ -113,6 +113,20 @@ import { SkipBoTable } from './screens/SkipBoTable'
 import { SkipBoResults } from './screens/SkipBoResults'
 import { SkipBoRoom } from './screens/SkipBoRoom'
 
+// ---- Blackjack (separate parallel session, per CHARTER.md resolution #7) ----
+import { createBlackjackGame, BLACKJACK_MAX_SEATS, BLACKJACK_MIN_SEATS, type BlackjackSession, type BlackjackPublicState, type BlackjackAction } from './card-games/blackjack/state'
+import { applyBlackjackAction, runBlackjackBotTurn } from './card-games/blackjack/rules'
+import { blackjackBotStrategy } from './card-games/blackjack/bot'
+import { BlackjackTable } from './screens/BlackjackTable'
+import { BlackjackRoom } from './screens/BlackjackRoom'
+
+// ---- Texas Hold'em (separate parallel session, per CHARTER.md resolution #7) ----
+import { createHoldemGame, HOLDEM_MAX_SEATS, HOLDEM_MIN_SEATS, type HoldemSession, type HoldemPublicState, type HoldemPrivateState, type HoldemAction } from './card-games/holdem/state'
+import { applyHoldemAction, runHoldemBotTurn } from './card-games/holdem/rules'
+import { holdemBotStrategy } from './card-games/holdem/bot'
+import { HoldemTable } from './screens/HoldemTable'
+import { HoldemRoom } from './screens/HoldemRoom'
+
 // ---- Solitaire (single-player local session) ----
 import { createSolitaireGame, type SolitaireState, type SolitaireMode, type SolitaireMove } from './card-games/solitaire/state'
 import { applyAnyMove as applySolitaireMove } from './card-games/solitaire/dispatch'
@@ -153,6 +167,12 @@ type UnoView =
 type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
+type BlackjackView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
+  | { kind: 'game'; revision: number; publicState: BlackjackPublicState; names: Record<string, string> }
+type HoldemView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
+  | { kind: 'game'; revision: number; publicState: HoldemPublicState; privateState: HoldemPrivateState; names: Record<string, string> }
 type ScrabbleView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
   | { kind: 'game'; revision: number; publicState: ScrabblePublicState; rack: ScrabbleTile[]; names: Record<string, string> }
@@ -326,6 +346,26 @@ export default function App() {
   const [skipBoStarted, setSkipBoStarted] = useState(false)
   const [skipBoSeats, setSkipBoSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
+  // ---- Blackjack ----
+  const [blackjackRole, setBlackjackRole] = useState<'host' | 'guest' | null>(null)
+  const [blackjackCode, setBlackjackCode] = useState('')
+  const [blackjackLocalPlayerId, setBlackjackLocalPlayerId] = useState<string | null>(null)
+  const [blackjackView, setBlackjackView] = useState<BlackjackView | null>(null)
+  const [blackjackConnection, setBlackjackConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [blackjackNotice, setBlackjackNotice] = useState<string | null>(null)
+  const [blackjackStarted, setBlackjackStarted] = useState(false)
+  const [blackjackSeats, setBlackjackSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
+  // ---- Texas Hold'em ----
+  const [holdemRole, setHoldemRole] = useState<'host' | 'guest' | null>(null)
+  const [holdemCode, setHoldemCode] = useState('')
+  const [holdemLocalPlayerId, setHoldemLocalPlayerId] = useState<string | null>(null)
+  const [holdemView, setHoldemView] = useState<HoldemView | null>(null)
+  const [holdemConnection, setHoldemConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [holdemNotice, setHoldemNotice] = useState<string | null>(null)
+  const [holdemStarted, setHoldemStarted] = useState(false)
+  const [holdemSeats, setHoldemSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
   // ---- Solitaire ----
   const [solitaireOpen, setSolitaireOpen] = useState(false)
   const [solitaireMode, setSolitaireMode] = useState<SolitaireMode>('klondike')
@@ -456,6 +496,27 @@ export default function App() {
   const skipBoBotSeatsRef = useRef<Set<string>>(new Set())
   const skipBoBotCounterRef = useRef(0)
   const skipBoBotsHeldUntilRef = useRef(0)
+  const blackjackSessionRef = useRef<BlackjackSession | null>(null)
+  const blackjackHostRef = useRef<HostHandle<BlackjackView> | null>(null)
+  const blackjackGuestRef = useRef<GuestHandle<BlackjackAction> | null>(null)
+  const blackjackBotBusyRef = useRef(false)
+  const blackjackLocalPlayerIdRef = useRef<string | null>(null)
+  const blackjackSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const blackjackStartedRef = useRef(false)
+  const blackjackNamesRef = useRef<Record<string, string>>({})
+  const blackjackBotSeatsRef = useRef<Set<string>>(new Set())
+  const blackjackBotCounterRef = useRef(0)
+  const holdemSessionRef = useRef<HoldemSession | null>(null)
+  const holdemHostRef = useRef<HostHandle<HoldemView> | null>(null)
+  const holdemGuestRef = useRef<GuestHandle<HoldemAction> | null>(null)
+  const holdemBotBusyRef = useRef(false)
+  const holdemLocalPlayerIdRef = useRef<string | null>(null)
+  const holdemSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const holdemStartedRef = useRef(false)
+  const holdemNamesRef = useRef<Record<string, string>>({})
+  const holdemBotSeatsRef = useRef<Set<string>>(new Set())
+  const holdemBotCounterRef = useRef(0)
+  const holdemCardBackRef = useRef(savedCardBack())
   const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
   const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
   const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
@@ -498,6 +559,10 @@ export default function App() {
     unoGuestRef.current?.destroy()
     skipBoHostRef.current?.destroy()
     skipBoGuestRef.current?.destroy()
+    blackjackHostRef.current?.destroy()
+    blackjackGuestRef.current?.destroy()
+    holdemHostRef.current?.destroy()
+    holdemGuestRef.current?.destroy()
     scrabbleHostRef.current?.destroy()
     scrabbleGuestRef.current?.destroy()
   }, [])
@@ -570,6 +635,7 @@ export default function App() {
     if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
     if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
     if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
+    if (blackjackRole && blackjackStarted && blackjackView?.kind === 'game') return 'blackjack'
     if (solitaireOpen && solitaireHistory.length > 0 && !solitaireHistory[solitaireHistory.length - 1].won) return 'solitaire'
     if (scrabbleRole && scrabbleStarted && scrabbleView?.kind === 'game' && scrabbleView.publicState.stage !== 'over') return 'scrabble'
     return null
@@ -578,7 +644,7 @@ export default function App() {
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, solitaireOpen, solitaireHistory, scrabbleRole, scrabbleStarted, scrabbleView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, blackjackRole, blackjackStarted, blackjackView, solitaireOpen, solitaireHistory, scrabbleRole, scrabbleStarted, scrabbleView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -610,6 +676,7 @@ export default function App() {
       case 'chess': startChessHost(); return
       case 'uno': startUnoHost(); return
       case 'skipbo': startSkipBoHost(); return
+      case 'blackjack': startBlackjackHost(); return
       case 'solitaire': startSolitaire(); return
       case 'scrabble': startScrabbleHost(); return
     }
@@ -917,6 +984,50 @@ export default function App() {
     skipBoBotCounterRef.current = 0
     skipBoNamesRef.current = {}
     skipBoBotsHeldUntilRef.current = 0
+    // Blackjack
+    blackjackHostRef.current?.destroy()
+    blackjackHostRef.current = null
+    blackjackGuestRef.current?.destroy()
+    blackjackGuestRef.current = null
+    blackjackSessionRef.current = null
+    setBlackjackRole(null)
+    setBlackjackCode('')
+    setBlackjackLocalPlayerId(null)
+    blackjackLocalPlayerIdRef.current = null
+    setBlackjackView(null)
+    setBlackjackConnection('connected')
+    setBlackjackNotice(null)
+    setBlackjackStarted(false)
+    blackjackStartedRef.current = false
+    setBlackjackSeats([])
+    blackjackSeatsRef.current = []
+    blackjackBotBusyRef.current = false
+    blackjackBotSeatsRef.current.clear()
+    blackjackBotCounterRef.current = 0
+    blackjackNamesRef.current = {}
+    // Card back deliberately survives a reset — it's the host's saved preference.
+    // Texas Hold'em
+    holdemHostRef.current?.destroy()
+    holdemHostRef.current = null
+    holdemGuestRef.current?.destroy()
+    holdemGuestRef.current = null
+    holdemSessionRef.current = null
+    setHoldemRole(null)
+    setHoldemCode('')
+    setHoldemLocalPlayerId(null)
+    holdemLocalPlayerIdRef.current = null
+    setHoldemView(null)
+    setHoldemConnection('connected')
+    setHoldemNotice(null)
+    setHoldemStarted(false)
+    holdemStartedRef.current = false
+    setHoldemSeats([])
+    holdemSeatsRef.current = []
+    holdemBotBusyRef.current = false
+    holdemBotSeatsRef.current.clear()
+    holdemBotCounterRef.current = 0
+    holdemNamesRef.current = {}
+    // Card back deliberately survives a reset — it's the host's saved preference.
     // Solitaire
     setSolitaireOpen(false)
     setSolitaireHistory([])
@@ -1246,6 +1357,537 @@ export default function App() {
     setCardBackPreference(id)
     skipBoBroadcast()
   }
+
+  // ---- Blackjack helpers ----
+
+  function blackjackActorKey(session: BlackjackSession): string {
+    const ps = session.session.publicState
+    // Key on phase, roundNumber, and completion counts for betting/insurance phases,
+    // plus current player for acting phase to detect when human action changes the state
+    const betCount = Object.values(ps.bets).filter(b => b > 0).length
+    const insuranceCount = Object.values(ps.hasResolvedInsurance).filter(r => r).length
+    const currentId = currentPlayer(ps.turn)
+    return `${ps.roundNumber}:${ps.turn.phase}:${betCount}:${insuranceCount}:${currentId}`
+  }
+
+  function blackjackStale(key: string): boolean {
+    return !blackjackSessionRef.current || blackjackActorKey(blackjackSessionRef.current) !== key
+  }
+
+  function blackjackBroadcast() {
+    if (!blackjackStartedRef.current) {
+      const view: BlackjackView = {
+        kind: 'lobby',
+        roster: blackjackSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === blackjackLocalPlayerIdRef.current })),
+        cardBack: rummyCardBackRef.current,
+      }
+      setBlackjackView(view)
+      blackjackHostRef.current?.broadcast(view)
+      return
+    }
+    const session = blackjackSessionRef.current!
+    // No private state needed — all cards are public except dealer's hole card, which is controlled by dealerHoleRevealed flag
+    const view: BlackjackView = {
+      kind: 'game',
+      revision: session.session.revision,
+      publicState: session.session.publicState,
+      names: { ...blackjackNamesRef.current },
+    }
+    setBlackjackView(view)
+    blackjackHostRef.current?.broadcast(view)
+  }
+
+  function startBlackjackHost() {
+    setError(null)
+    blackjackHostRef.current = createHost<BlackjackView, BlackjackAction>(() => `BK-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setBlackjackRole('host')
+        writeNameCookie(name)
+        pushGameUrl('blackjack')
+        setBlackjackCode(code)
+        setBlackjackLocalPlayerId(hostId)
+        blackjackLocalPlayerIdRef.current = hostId
+        setBlackjackStarted(false)
+        blackjackStartedRef.current = false
+        setBlackjackSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        blackjackSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setBlackjackNotice(null)
+        blackjackBroadcast()
+      },
+      onJoin(guestId, guestName) {
+        if (blackjackStartedRef.current) {
+          blackjackHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (blackjackSeatsRef.current.length >= BLACKJACK_MAX_SEATS) {
+          blackjackHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        blackjackSeatsRef.current = [...blackjackSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setBlackjackSeats(blackjackSeatsRef.current)
+        blackjackBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!blackjackStartedRef.current) return
+        const session = blackjackSessionRef.current
+        if (!session) return
+        if (!blackjackSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyBlackjackAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        blackjackSessionRef.current = result.blackjackSession
+        blackjackBroadcast()
+      },
+      onLeave(guestId) {
+        if (!blackjackStartedRef.current) {
+          blackjackSeatsRef.current = blackjackSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setBlackjackSeats(blackjackSeatsRef.current)
+          blackjackBroadcast()
+          return
+        }
+        const seat = blackjackSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setBlackjackNotice(`${seat.name} disconnected.`)
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addBlackjackHouseBot() {
+    if (blackjackRole !== 'host' || blackjackStartedRef.current) return
+    if (blackjackSeatsRef.current.length >= BLACKJACK_MAX_SEATS) return
+    blackjackBotCounterRef.current += 1
+    const botId = `bot-${blackjackBotCounterRef.current}`
+    const botName = randomBotName(blackjackSeatsRef.current.map((s) => s.name))
+    blackjackSeatsRef.current = [...blackjackSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setBlackjackSeats(blackjackSeatsRef.current)
+    blackjackBotSeatsRef.current.add(botId)
+    blackjackBroadcast()
+  }
+
+  function blackjackStart() {
+    if (blackjackRole !== 'host' || blackjackStartedRef.current) return
+    const seats = blackjackSeatsRef.current
+    if (seats.length < BLACKJACK_MIN_SEATS || seats.length > BLACKJACK_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
+    const seed = Math.floor(Math.random() * 2147483647)
+    blackjackSessionRef.current = createBlackjackGame(playerIds, seed, rummyCardBackRef.current)
+    blackjackNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    blackjackStartedRef.current = true
+    setBlackjackStarted(true)
+    blackjackBroadcast()
+  }
+
+  async function runBlackjackBot(botId: string, key: string) {
+    const session = blackjackSessionRef.current!
+    const ps = session.session.publicState
+    const phase = ps.turn.phase
+
+    if (phase === 'betting') {
+      // Iterate all bot seats still needing to bet
+      while (!blackjackStale(key)) {
+        // Find bot seats that still need a bet
+        const botNeedingBet = blackjackSeatsRef.current.find(
+          (s) => s.isBot && blackjackBotSeatsRef.current.has(s.playerId) &&
+                 ps.bets[s.playerId] === 0 && !ps.sittingOut[s.playerId]
+        )
+        if (!botNeedingBet) return
+
+        await wait(BASE_MS)
+        if (blackjackStale(key)) return
+
+        const updatedSession = blackjackSessionRef.current!
+        const updatedPs = updatedSession.session.publicState
+        // Re-check the bot still needs a bet in current state
+        if (updatedPs.bets[botNeedingBet.playerId] > 0 || updatedPs.sittingOut[botNeedingBet.playerId]) continue
+
+        const result = runBlackjackBotTurn(updatedSession, botNeedingBet.playerId, blackjackBotStrategy)
+        if (!result.outcome.ok) return
+        blackjackSessionRef.current = result.blackjackSession
+        blackjackBroadcast()
+      }
+    } else if (phase === 'insurance') {
+      // Iterate all bot seats still needing to resolve insurance
+      while (!blackjackStale(key)) {
+        const botNeedingInsurance = blackjackSeatsRef.current.find(
+          (s) => s.isBot && blackjackBotSeatsRef.current.has(s.playerId) &&
+                 ps.turn.playerOrder.includes(s.playerId) &&
+                 !ps.hasResolvedInsurance[s.playerId]
+        )
+        if (!botNeedingInsurance) return
+
+        await wait(BASE_MS)
+        if (blackjackStale(key)) return
+
+        const updatedSession = blackjackSessionRef.current!
+        const updatedPs = updatedSession.session.publicState
+        // Re-check in current state
+        if (!updatedPs.turn.playerOrder.includes(botNeedingInsurance.playerId) || updatedPs.hasResolvedInsurance[botNeedingInsurance.playerId]) continue
+
+        const result = runBlackjackBotTurn(updatedSession, botNeedingInsurance.playerId, blackjackBotStrategy)
+        if (!result.outcome.ok) return
+        blackjackSessionRef.current = result.blackjackSession
+        blackjackBroadcast()
+      }
+    } else if (phase === 'acting') {
+      // Single current player pattern
+      while (!blackjackStale(key)) {
+        await wait(BASE_MS)
+        if (blackjackStale(key)) return
+        const updatedSession = blackjackSessionRef.current!
+        const updatedPs = updatedSession.session.publicState
+        if (updatedPs.turn.phase === 'roundOver' || currentPlayer(updatedPs.turn) !== botId) return
+        if (!blackjackBotSeatsRef.current.has(botId)) return
+        const result = runBlackjackBotTurn(updatedSession, botId, blackjackBotStrategy)
+        if (!result.outcome.ok) return
+        blackjackSessionRef.current = result.blackjackSession
+        blackjackBroadcast()
+      }
+    }
+  }
+
+  async function runBlackjackBotsIfNeeded() {
+    if (blackjackBotBusyRef.current) return
+    const session = blackjackSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.turn.phase === 'roundOver') return
+
+    const phase = ps.turn.phase
+    let botToAct: string | null = null
+
+    if (phase === 'betting') {
+      // Find first bot that needs to bet
+      const botNeedingBet = blackjackSeatsRef.current.find(
+        (s) => s.isBot && blackjackBotSeatsRef.current.has(s.playerId) &&
+               ps.bets[s.playerId] === 0 && !ps.sittingOut[s.playerId]
+      )
+      botToAct = botNeedingBet?.playerId ?? null
+    } else if (phase === 'insurance') {
+      // Find first bot that needs to resolve insurance
+      const botNeedingInsurance = blackjackSeatsRef.current.find(
+        (s) => s.isBot && blackjackBotSeatsRef.current.has(s.playerId) &&
+               ps.turn.playerOrder.includes(s.playerId) &&
+               !ps.hasResolvedInsurance[s.playerId]
+      )
+      botToAct = botNeedingInsurance?.playerId ?? null
+    } else if (phase === 'acting') {
+      // Single current player
+      const current = currentPlayer(ps.turn)
+      if (blackjackBotSeatsRef.current.has(current)) botToAct = current
+    }
+
+    if (!botToAct) return
+
+    blackjackBotBusyRef.current = true
+    const key = blackjackActorKey(session)
+    try {
+      await runBlackjackBot(botToAct, key)
+    } finally {
+      blackjackBotBusyRef.current = false
+      setTimeout(() => runBlackjackBotsIfNeeded(), 50)
+    }
+  }
+
+  function startBlackjackGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<BlackjackView, BlackjackAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setBlackjackView(view)
+          setBlackjackStarted(false)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setBlackjackView(view)
+        setBlackjackStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setBlackjackConnection('connected')
+      },
+      onDisconnected() {
+        setBlackjackConnection('disconnected')
+      },
+    })
+    blackjackGuestRef.current = handle
+    setBlackjackRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('blackjack')
+    setBlackjackCode(code)
+    handle.peerId.then((id) => { setBlackjackLocalPlayerId(id); blackjackLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function blackjackDispatch(action: BlackjackAction) {
+    if (blackjackRole === 'host' && blackjackLocalPlayerId) {
+      const session = blackjackSessionRef.current
+      if (!session) return
+      const result = applyBlackjackAction(session, blackjackLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      blackjackSessionRef.current = result.blackjackSession
+      blackjackBroadcast()
+    } else if (blackjackRole === 'guest') {
+      blackjackGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function blackjackSetCardBack(id: string) {
+    if (blackjackRole !== 'host' || blackjackStartedRef.current) return
+    setCardBackPreference(id)
+    blackjackBroadcast()
+  }
+
+  // ---- End Blackjack helpers ----
+
+  // ---- Texas Hold'em helpers ----
+
+  function holdemActorKey(session: HoldemSession): string {
+    const ps = session.session.publicState
+    // Key on hand number, street, and current player index to detect state changes
+    return `${ps.handNumber}:${ps.turn.phase}:${ps.turn.currentIndex}:${ps.pot}`
+  }
+
+  function holdemStale(key: string): boolean {
+    return !holdemSessionRef.current || holdemActorKey(holdemSessionRef.current) !== key
+  }
+
+  function holdemBroadcast() {
+    if (!holdemStartedRef.current) {
+      const view: HoldemView = {
+        kind: 'lobby',
+        roster: holdemSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerIdRef.current })),
+        cardBack: holdemCardBackRef.current,
+      }
+      setHoldemView(view)
+      holdemHostRef.current?.broadcast(view)
+      return
+    }
+    const session = holdemSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, holdemLocalPlayerIdRef.current!)
+    setHoldemView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      privateState: hostSnap.privateState!,
+      names: { ...holdemNamesRef.current },
+    })
+    const names = { ...holdemNamesRef.current }
+    for (const seat of holdemSeatsRef.current) {
+      if (seat.playerId === holdemLocalPlayerIdRef.current) continue
+      if (holdemBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      holdemHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        privateState: guestSnap.privateState!,
+        names,
+      })
+    }
+  }
+
+  function startHoldemHost() {
+    setError(null)
+    holdemHostRef.current = createHost<HoldemView, HoldemAction>(() => `HE-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setHoldemRole('host')
+        writeNameCookie(name)
+        pushGameUrl('holdem')
+        setHoldemCode(code)
+        setHoldemLocalPlayerId(hostId)
+        holdemLocalPlayerIdRef.current = hostId
+        setHoldemStarted(false)
+        holdemStartedRef.current = false
+        setHoldemSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        holdemSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setHoldemNotice(null)
+        holdemBroadcast()
+      },
+      onJoin(guestId, guestName) {
+        if (holdemStartedRef.current) {
+          holdemHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (holdemSeatsRef.current.length >= HOLDEM_MAX_SEATS) {
+          holdemHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        holdemSeatsRef.current = [...holdemSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setHoldemSeats(holdemSeatsRef.current)
+        holdemBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!holdemStartedRef.current) return
+        const session = holdemSessionRef.current
+        if (!session) return
+        if (!holdemSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyHoldemAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        holdemSessionRef.current = result.holdemSession
+        holdemBroadcast()
+      },
+      onLeave(guestId) {
+        if (!holdemStartedRef.current) {
+          holdemSeatsRef.current = holdemSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setHoldemSeats(holdemSeatsRef.current)
+          holdemBroadcast()
+          return
+        }
+        const seat = holdemSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setHoldemNotice(`${seat.name} disconnected.`)
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addHoldemHouseBot() {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    if (holdemSeatsRef.current.length >= HOLDEM_MAX_SEATS) return
+    holdemBotCounterRef.current += 1
+    const botId = `bot-${holdemBotCounterRef.current}`
+    const botName = randomBotName(holdemSeatsRef.current.map((s) => s.name))
+    holdemSeatsRef.current = [...holdemSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setHoldemSeats(holdemSeatsRef.current)
+    holdemBotSeatsRef.current.add(botId)
+    holdemBroadcast()
+  }
+
+  function holdemStart() {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    const seats = holdemSeatsRef.current
+    if (seats.length < HOLDEM_MIN_SEATS || seats.length > HOLDEM_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
+    const seed = Math.floor(Math.random() * 2147483647)
+    holdemSessionRef.current = createHoldemGame(playerIds, seed, holdemCardBackRef.current)
+    holdemNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    holdemStartedRef.current = true
+    setHoldemStarted(true)
+    holdemBroadcast()
+  }
+
+  async function runHoldemBot(botId: string, key: string) {
+    while (!holdemStale(key)) {
+      await wait(BASE_MS)
+      if (holdemStale(key)) return
+      const session = holdemSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.handOver || ps.gameOverWinnerId) return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!holdemBotSeatsRef.current.has(botId)) return
+      const result = runHoldemBotTurn(session, botId, holdemBotStrategy)
+      if (result.outcome.ok) {
+        holdemSessionRef.current = result.holdemSession
+        holdemBroadcast()
+        continue
+      }
+      // The strategy's chosen action was rejected by the validator. This
+      // should not happen (the strategy is written to only propose legal
+      // actions), but the strategy is deterministic -- if it did happen and
+      // we just gave up, the next retry would derive the identical action
+      // from the identical state and be rejected again, forever, hanging
+      // this bot's turn permanently. Fall back to FOLD, which is always
+      // legal whenever it's genuinely this seat's turn.
+      const foldResult = applyHoldemAction(session, botId, { type: 'FOLD' })
+      if (!foldResult.outcome.ok) return
+      holdemSessionRef.current = foldResult.holdemSession
+      holdemBroadcast()
+    }
+  }
+
+  async function runHoldemBotsIfNeeded() {
+    if (holdemBotBusyRef.current) return
+    const session = holdemSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.handOver || ps.gameOverWinnerId) return
+    const currentId = currentPlayer(ps.turn)
+    if (!holdemBotSeatsRef.current.has(currentId)) return
+    holdemBotBusyRef.current = true
+    const key = holdemActorKey(session)
+    try {
+      await runHoldemBot(currentId, key)
+    } finally {
+      holdemBotBusyRef.current = false
+      setTimeout(() => runHoldemBotsIfNeeded(), 50)
+    }
+  }
+
+  function startHoldemGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<HoldemView, HoldemAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setHoldemView(view)
+          setHoldemStarted(false)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setHoldemView(view)
+        setHoldemStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setHoldemConnection('connected')
+      },
+      onDisconnected() {
+        setHoldemConnection('disconnected')
+      },
+    })
+    holdemGuestRef.current = handle
+    setHoldemRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('holdem')
+    setHoldemCode(code)
+    handle.peerId.then((id) => { setHoldemLocalPlayerId(id); holdemLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function holdemDispatch(action: HoldemAction) {
+    if (holdemRole === 'host' && holdemLocalPlayerId) {
+      const session = holdemSessionRef.current
+      if (!session) return
+      const result = applyHoldemAction(session, holdemLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      holdemSessionRef.current = result.holdemSession
+      holdemBroadcast()
+    } else if (holdemRole === 'guest') {
+      holdemGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function holdemSetCardBack(id: string) {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    holdemCardBackRef.current = id
+    setHoldemView(null)
+    holdemBroadcast()
+  }
+
+  // ---- End Texas Hold'em helpers ----
 
   // ---- End Rummy helpers ----
 
@@ -3193,6 +3835,8 @@ export default function App() {
 
   // Seat inks: same 4-entry palette as Rummy (Skip-Bo also caps at 4 seats).
   const SKIPBO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+  const BLACKJACK_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0']
+  const HOLDEM_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0', '#ec4899', '#06b6d4']
   const SCRABBLE_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
 
   // The actor key must re-key on any field that can change within the SAME
@@ -4116,11 +4760,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skipBoRole, skipBoView])
 
+  // ---- Blackjack effects (host-only) ----
+
+  // Bot turn trigger. Blackjack has phases (betting, insurance, acting) with
+  // no single current player in some phases, so the actor key and loop shape
+  // differ from single-current-player games.
+  useEffect(() => {
+    if (blackjackRole !== 'host' || !blackjackView || blackjackView.kind !== 'game') return
+    runBlackjackBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blackjackRole, blackjackView])
+
+  // Bot turn trigger for Hold'em (single current-player pattern like Rummy)
+  useEffect(() => {
+    if (holdemRole !== 'host' || !holdemView || holdemView.kind !== 'game') return
+    runHoldemBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdemRole, holdemView])
+
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Solitaire, and Scrabble are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !solitaireOpen && !scrabbleRole) {
+  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Blackjack, Hold'em, Solitaire, and Scrabble are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !blackjackRole && !holdemRole && !solitaireOpen && !scrabbleRole) {
     return (
       <Landing
         name={name}
@@ -4139,6 +4801,8 @@ export default function App() {
           else if (code.startsWith('CH-')) startChessGuest(code)
           else if (code.startsWith('UN-')) startUnoGuest(code)
           else if (code.startsWith('SB-')) startSkipBoGuest(code)
+          else if (code.startsWith('BK-')) startBlackjackGuest(code)
+          else if (code.startsWith('HE-')) startHoldemGuest(code)
           else if (code.startsWith('SCR-')) startScrabbleGuest(code)
           else startGuest(code)
         }}
@@ -4153,6 +4817,8 @@ export default function App() {
         onPickChess={startChessHost}
         onPickUno={startUnoHost}
         onPickSkipBo={startSkipBoHost}
+        onPickBlackjack={startBlackjackHost}
+        onPickHoldem={startHoldemHost}
         onPickSolitaire={startSolitaire}
         onPickScrabble={startScrabbleHost}
         error={error}
@@ -4985,6 +5651,106 @@ export default function App() {
         onDiscard={(cardId, pileIndex) => skipBoDispatch({ type: 'DISCARD', cardId, pileIndex })}
         onPass={() => skipBoDispatch({ type: 'PASS' })}
         onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Blackjack session active ----
+  // Blackjack lobby — 2 to 6 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way).
+  if (blackjackRole && !blackjackStarted) {
+    const roster = blackjackRole === 'host'
+      ? blackjackSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === blackjackLocalPlayerId }))
+      : (blackjackView?.kind === 'lobby' ? blackjackView.roster : [])
+    const viewCardBack = blackjackRole === 'host'
+      ? rummyCardBack
+      : (blackjackView?.kind === 'lobby' ? blackjackView.cardBack : DEFAULT_CARD_BACK)
+    return (
+      <BlackjackRoom
+        code={blackjackCode}
+        localName={name}
+        isHost={blackjackRole === 'host'}
+        seats={roster}
+        notice={blackjackNotice ?? error}
+        cardBack={viewCardBack}
+        onSelectCardBack={blackjackSetCardBack}
+        onAddHouseBot={addBlackjackHouseBot}
+        onStartGame={blackjackStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Blackjack table (active game)
+  if (blackjackView?.kind === 'game' && blackjackLocalPlayerId) {
+    const blackjackColors = Object.fromEntries(blackjackView.publicState.seatOrder.map((id, i) => [id, BLACKJACK_SEAT_INKS[i]]))
+    return (
+      <BlackjackTable
+        code={blackjackCode}
+        localPlayerId={blackjackLocalPlayerId}
+        localName={name}
+        names={blackjackView.names}
+        colors={blackjackColors}
+        connection={blackjackConnection}
+        notice={blackjackNotice ?? error}
+        publicState={blackjackView.publicState}
+        onPlaceBet={(amount) => blackjackDispatch({ type: 'PLACE_BET', amount })}
+        onTakeInsurance={() => blackjackDispatch({ type: 'TAKE_INSURANCE' })}
+        onDeclineInsurance={() => blackjackDispatch({ type: 'DECLINE_INSURANCE' })}
+        onHit={() => blackjackDispatch({ type: 'HIT' })}
+        onStand={() => blackjackDispatch({ type: 'STAND' })}
+        onDouble={() => blackjackDispatch({ type: 'DOUBLE' })}
+        onSplit={() => blackjackDispatch({ type: 'SPLIT' })}
+        onStartNextRound={() => blackjackDispatch({ type: 'START_NEXT_ROUND' })}
+        onLeaveTable={resetToEntry}
+      />
+    )
+  }
+
+  // Hold'em lobby
+  if (holdemRole && !holdemStarted) {
+    const roster = holdemRole === 'host'
+      ? holdemSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerId }))
+      : (holdemView?.kind === 'lobby' ? holdemView.roster : [])
+    const viewCardBack = holdemRole === 'host'
+      ? holdemCardBackRef.current
+      : (holdemView?.kind === 'lobby' ? holdemView.cardBack : DEFAULT_CARD_BACK)
+    return (
+      <HoldemRoom
+        code={holdemCode}
+        localName={name}
+        isHost={holdemRole === 'host'}
+        seats={roster}
+        notice={holdemNotice ?? error}
+        cardBack={viewCardBack}
+        onSelectCardBack={holdemSetCardBack}
+        onAddHouseBot={addHoldemHouseBot}
+        onStartGame={holdemStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Hold'em table (active game)
+  if (holdemView?.kind === 'game' && holdemLocalPlayerId) {
+    const holdemColors = Object.fromEntries(holdemView.publicState.seatOrder.map((id, i) => [id, HOLDEM_SEAT_INKS[i]]))
+    return (
+      <HoldemTable
+        code={holdemCode}
+        localPlayerId={holdemLocalPlayerId}
+        names={holdemView.names}
+        colors={holdemColors}
+        connection={holdemConnection}
+        notice={holdemNotice ?? error}
+        publicState={holdemView.publicState}
+        privateState={holdemView.privateState}
+        onFold={() => holdemDispatch({ type: 'FOLD' })}
+        onCheck={() => holdemDispatch({ type: 'CHECK' })}
+        onCall={() => holdemDispatch({ type: 'CALL' })}
+        onBet={(amount) => holdemDispatch({ type: 'BET', amount })}
+        onRaise={(amount) => holdemDispatch({ type: 'RAISE', amount })}
+        onStartNextHand={() => holdemDispatch({ type: 'START_NEXT_HAND' })}
+        onLeaveTable={resetToEntry}
       />
     )
   }

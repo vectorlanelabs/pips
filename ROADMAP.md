@@ -1,6 +1,67 @@
 # Roadmap
 
-Charter: Scrabble — see `CHARTER.md`.
+Charter: Blackjack + Texas Hold'em — see `CHARTER.md`.
+
+## Charter: Blackjack + Texas Hold'em (2026-08-23) — done
+
+**Charter complete.** Both Blackjack (2-6 players, vs. the house) and
+Texas Hold'em (2-8 players, no-limit cash game) are fully playable end
+to end — engine, screens, and wiring for both, live-verified in a real
+browser at each game's max seat count. Running in isolated worktree
+`.claude/worktrees/poker-blackjack-loop` (branch
+`worktree-poker-blackjack-loop`) per explicit user instruction.
+Uncommitted to `main`/`origin` — pending the user's explicit "push".
+
+## Done
+- [cycle 8] M5 — Hold'em wiring (spec 57): App.tsx per-guest sendTo
+  broadcast (privacy-correct, not Blackjack's single-broadcast
+  shortcut), single-current-player bot loop, route/Landing/README.
+  Found and fixed a permanent-hang risk (bot strategy could propose an
+  illegal re-raise; fixed at the source plus a wiring-level fallback-
+  to-fold safety net). **Full live playthrough at a maxed 8-seat table**:
+  multiple hands, correct betting/privacy/side-pot payout/hand
+  advancement, zero errors, bot pacing measured at 845-951ms gaps
+  (matches BASE_MS). 1398 tests / tsc / build clean.
+- [cycle 7] M4 — Hold'em screens (spec 56): Room/Table/Board/
+  RulesOverlay, correct private-hand rendering (mirrors Rummy, not
+  Blackjack). One severe bug found and fixed: the action area made
+  Fold/Check/Call mutually exclusive with the bet/raise slider,
+  making the game unplayable in its most common turns. 1398 tests /
+  tsc / build clean.
+- [cycle 6] M3 — Hold'em engine (spec 55 + 55b): shoe/blinds/betting/
+  side-pots/hand-eval/elimination. 4 severe bugs found and fixed
+  beyond the delegated fix round (2 by the lead personally, past the
+  "fails twice, fix it yourself" threshold): a regression the fix
+  round itself introduced (hand freezes forever once exactly 1 live
+  player remains), FOLD never checking for street closure, and the
+  "short all-in doesn't reopen re-raising" rule being completely
+  unenforced (with its own test vacuous). 1395 tests / tsc / build
+  clean.
+- [cycle 5] Blackjack live-verified in a real browser (Playwright
+  ad-hoc driver, MCP browser tab's visibilityState was permanently
+  'hidden' so DealIntro's rAF-gated animation couldn't be checked
+  there). Found and fixed the charter's most severe bug: settleRound's
+  chipDelta math treated chips as pre-bet when they were already
+  post-bet-escrow, so every win netted $0 profit, every bust cost 2x
+  the bet, and pushes lost the entire bet — invisible to 75 passing
+  unit tests since none asserted a real post-settlement chip total.
+  Fixed with hand-verified arithmetic + 8 new tests; also fixed two
+  small round-over-banner display bugs (double plus-sign, confusing
+  "lose 0" display) found in the same live re-check. Blackjack (M0-M2)
+  now genuinely complete and live-verified. 1329 tests / tsc / build
+  clean.
+- [cycle 4] M2 — Blackjack wiring (spec 54): App.tsx host/guest session,
+  novel multi-phase bot loop (betting/insurance/acting), route/Landing/
+  README. One bug found in review (card-back picker wired to a dead
+  ref) and fixed. 1321 tests / tsc / build clean.
+- [cycle 3] M1 — Blackjack screens (spec 53): Room/Table/RulesOverlay,
+  no Results screen (deliberate — no match winner concept). One bug
+  found in review (deal-intro animation desynced from the real deal
+  event) and fixed. 1321 tests / tsc / build clean.
+- [cycle 2] M0 — Blackjack engine (spec 52): shoe/betting/insurance/
+  splits/doubles/dealer-play/payouts. One blocking bug found in review
+  (order-dependent insurance resolution) and fixed. 1321 tests / tsc
+  clean. Commit `6479144`.
 
 ## Charter: Scrabble (2026-08-22) — done
 

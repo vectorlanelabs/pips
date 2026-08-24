@@ -4047,3 +4047,597 @@ shipping each verified charter promptly.
   environment. Budget real live verification time into any future
   spec that touches routing, asset loading, or cross-game shared
   guards, not just the games' own new code paths.
+
+## Cycle 1 (setup) — 2026-08-23 — Blackjack + Texas Hold'em charter
+- **Shipped:** no code yet. Set up: entered isolated worktree
+  `.claude/worktrees/poker-blackjack-loop` (branch
+  `worktree-poker-blackjack-loop`) per explicit user instruction to run
+  this charter fully isolated. Confirmed git identity already correct in
+  the worktree, ran `npm install`, verified baseline `tsc -b --noEmit`
+  and `npm test` both clean (1246 tests) before touching anything.
+  Wrote `CHARTER.md` (Blackjack + Texas Hold'em, both games net-new
+  territory for this codebase — no existing game has chips/bets/a house
+  role), read `src/card-games/rummy/state.ts`+`rules.ts`,
+  `src/card-games/solitaire/`, `src/components/DealIntro.tsx`,
+  `src/engine/{sync,turn-engine,bot}.ts`, `src/card-engine/{deck,cards}.ts`
+  as the closest siblings and shared primitives per CLAUDE.md's pattern-
+  matching rule. Wrote spec 52 (Blackjack engine) with every numeric/rule
+  decision locked (chip amounts, bet min/max, shoe size/reshuffle
+  threshold, dealer stand-on-soft-17, split/double/insurance rules,
+  payout precedence, bot simplifications) since the user explicitly
+  delegated all of that. Dispatched spec 52 to a Haiku implementer
+  (background, persistent across this charter's cycles).
+- **Verification:** N/A this cycle (no code landed yet).
+- **Review:** N/A this cycle.
+- **Lesson:** n/a yet.
+- **Continue?** Yes — waiting on spec 52's implementer report before
+  independent verification and review.
+
+## Cycle 2 — 2026-08-23 — spec 52 (Blackjack engine) implemented, 1 blocking bug found and sent back
+- **Shipped (in review, not yet landed):** `src/card-games/blackjack/{state,hand-value,rules,bot}.ts`
+  + tests. Haiku implementer reported 74 passed / tsc clean.
+- **Verification:** re-ran `npx tsc -b --noEmit` and the full suite myself
+  (not just the implementer's report): clean, 1320 tests total (1246 +
+  74 new). Read every line of `state.ts`, `hand-value.ts`, `rules.ts`,
+  `bot.ts` directly against spec 52.
+- **Review (lead, personally, fallback adversarial persona — no
+  ai-grouch-claude installed):** found 1 real, LIVE-REPRODUCED blocking
+  bug the implementer's "all green" report entirely missed: insurance
+  resolution (`TAKE_INSURANCE`/`DECLINE_INSURANCE` in `rules.ts`) tracked
+  "has everyone resolved insurance" via `bettingPlayers.indexOf(playerId)`
+  as if it were a monotonic turn counter — but insurance is explicitly
+  order-independent per spec 52 (any eligible seat may resolve in any
+  order). Reproduced with a throwaway test: in a 3-seat game where the
+  dealer shows an Ace, having the LAST-indexed player resolve insurance
+  FIRST caused the engine to immediately (and incorrectly) transition
+  to the acting phase, silently treating the other two players as having
+  declined insurance without ever letting them decide. The already-
+  declared-but-never-wired-up `hasResolvedInsurance?` field in `state.ts`
+  was clearly meant to prevent exactly this — the implementer added the
+  field but never used it. Sent back a decision-locked fix spec (wire up
+  `hasResolvedInsurance` as a genuine per-seat completeness tracker,
+  mirroring how `PLACE_BET`'s existing `.every(...)` check already does
+  this correctly for betting; remove the dead unused `hasPlacedBet?`
+  field; add a deterministic seed-search regression test, not another
+  RNG-skip-if-not-hit test like the existing insurance tests in
+  `rules.test.ts`). In flight.
+- **Lesson:** "every eligible seat may act in any order" is exactly the
+  kind of requirement a cheap implementer will silently downgrade to "act
+  in array order" unless the spec's tests are written to actually force
+  the out-of-order case — the existing insurance tests in this file are
+  all gated behind `if (phase === 'insurance')` and never exercise
+  multi-seat resolution order at all, so they gave false confidence.
+  Worth remembering for the Hold'em betting-round spec (55), which has
+  the same order-independent-among-eligible-seats shape for prompting
+  multiple all-in players.
+- **Continue?** Yes — waiting on the fix round before landing spec 52.
+
+## Cycle 2 (landed) — spec 52 lands
+- **Landed:** `src/card-games/blackjack/*` + spec 52, commit `6479144`
+  on `worktree-poker-blackjack-loop`. Independently re-verified the fix
+  round's regression test AND wrote my own separate throwaway repro
+  (out-of-order 3-seat insurance resolution) against the fixed code
+  before landing — genuinely fixed, not just trusting the implementer's
+  claim. One minor nit accepted with no fix needed: `SPLIT` generates
+  hand ids via `Date.now()` rather than a sequential counter (Rummy's
+  convention) — harmless here since a seat can only split once per
+  round, so no collision is possible; not worth a follow-up.
+- **Continue?** Yes — proceeding to M1 (Blackjack screens, spec 53).
+
+## Cycle 3 — 2026-08-23 — spec 53 (Blackjack screens) lands
+- **Shipped:** `src/components/BlackjackCard.tsx`, `src/screens/
+  Blackjack{Room,Table,RulesOverlay}.tsx`. No dedicated Results screen —
+  a deliberate, spec-stated deviation from every sibling: Blackjack has
+  no match winner (open-ended per the charter), so round outcomes show
+  as an inline banner on the Table screen with a "Deal next round" /
+  "Leave table" pair instead.
+- **Verification:** re-ran `tsc -b --noEmit`, full `vitest run`, and
+  `npm run build` myself (not just the implementer's report): all
+  clean, 1321 tests unchanged (screens get no dedicated test file, this
+  repo's convention). Read every line of all 4 files against spec 53.
+- **Review (lead, personally):** found 1 real bug via code reading — the
+  deal-intro animation was keyed off `roundNumber` alone (copied
+  verbatim from Rummy/Phase10's pattern), but Blackjack's actual deal
+  happens LATER than round-start (after every seat bets), unlike those
+  siblings where dealing is synchronous with round creation. This meant
+  the shuffle animation fired at the wrong moment (round start, 0 cards
+  dealt yet) and the real deal — the moment cards actually appear —
+  got no animation at all. A CLAUDE.md top-priority-class defect (state-
+  changing animation desynced from the real event). Sent back a fix
+  re-keying the trigger to the `'betting' -> other phase` transition;
+  independently re-verified the diff and the implementer's hand-traced
+  sequence, confirmed correct. One transient unrelated test flake
+  (`src/board-games/scrabble/bot.test.ts`) seen in the implementer's own
+  verification run, self-disclosed rather than hidden, and confirmed
+  by the lead to NOT reproduce across two independent full-suite runs
+  after the fix — pre-existing/unrelated, not caused by this change.
+- **Lesson:** a sibling animation pattern copied verbatim is only safe
+  when the NEW game's event timing genuinely matches the sibling's —
+  Blackjack's bet-then-deal shape (vs. Rummy/Phase10's deal-at-round-
+  start shape) broke an assumption the pattern silently depended on.
+  Worth checking again for Hold'em (also bet-then-deal shaped) before
+  its own screens spec reuses the same DealIntro-keyed-off-roundNumber
+  idiom uncritically.
+- **Continue?** Yes — M1 complete. Proceeding to M2 (Blackjack wiring,
+  spec 54).
+
+## Cycle 4 — 2026-08-23 — spec 54 (Blackjack wiring) lands; M0-M2 complete
+- **Shipped:** `src/App.tsx` (host/guest session, novel multi-phase bot
+  loop, lobby/table render blocks), `src/state/route.ts`,
+  `src/screens/Landing.tsx`, `README.md`. Two locked departures from
+  Rummy's wiring pattern, both as designed: single `broadcast()` (no
+  per-guest `sendTo`, since Blackjack has no private per-seat data) and
+  a human-clicked "Deal next round" instead of an automatic host timer.
+- **Verification:** re-ran `tsc -b --noEmit`, full `vitest run`
+  (1321 tests, unchanged), `npm run build` myself after every round —
+  clean each time.
+- **Review (lead, personally):** read the full ~420-line App.tsx diff.
+  Found 1 real bug: the implementer created a redundant
+  `blackjackCardBackRef` instead of reusing the single shared
+  `rummyCardBackRef` every other card game's card-back picker actually
+  writes through (`setCardBackPreference` only ever updates
+  `rummyCardBackRef.current`) — confirmed by reading `skipBoBroadcast`'s
+  identical use of `rummyCardBackRef.current` as precedent. Result: a
+  host's card-back pick in the Blackjack lobby never reached the actual
+  dealt game (`blackjackStart()` used the stale ref) or a connected
+  guest's lobby view — a picker that visually works but silently does
+  nothing, same bug class as prior charters' "control exists but isn't
+  wired" findings. Sent back a scoped fix; independently re-verified
+  (tsc/tests/build clean, `grep blackjackCardBackRef` returns nothing).
+  Also inspected (not fixed, disposition: accept) a self-healing nit:
+  the betting/insurance bot-loop's inner `while` loop can only ever
+  process one bot bet/insurance-resolution per call, because its actor
+  key includes `betCount`/`insuranceCount`, which changes the instant
+  the bot itself acts — the loop then reports itself "stale" and exits
+  after one action. This does NOT break correctness or pacing: the
+  outer `runBlackjackBotsIfNeeded` retry (a 50ms poll) picks up the next
+  pending bot on its next tick with a freshly-computed key, so every bot
+  still bets/resolves insurance, still paced >= BASE_MS apart — just via
+  more, smaller loop invocations than the spec pictured, not fewer.
+  Accepted with no fix needed; noted for awareness if Hold'em's betting-
+  round bot loop (spec 55/57) reuses this exact actor-key shape, since
+  a genuinely different case (not just cosmetic) could exist there
+  given side pots add more per-round mutable counters.
+- **Landed:** commit (see git log) on `worktree-poker-blackjack-loop`.
+- **Continue?** Yes — M0-M2 (all of Blackjack) now landed. Live browser
+  verification (host+bots playthrough, mandatory 6-seat bot-pacing
+  check) is next, before moving to Hold'em (M3).
+
+## Cycle 5 — 2026-08-23/24 — live browser verification finds a severe payout bug
+- **Live verification setup note**: the MCP browser preview tool's
+  `preview_start({name: 'pips-dev'})` served a STALE/wrong App.tsx (616KB
+  transformed vs. the worktree's real ~226KB source, missing "Blackjack"
+  entirely) — traced to the launch-config-based dev server not actually
+  running from this worktree's directory. Worked around by starting
+  `npm run dev -- --port 5199` manually from the worktree and opening
+  the browser via `preview_start({url: ...})` instead of `{name: ...}`;
+  confirmed fixed (shelf tile appeared correctly). A second, separate
+  tooling limitation: the MCP browser tab's `document.visibilityState`
+  was stuck `'hidden'` regardless of tab-foreground selection, which
+  stalls `DealIntro`'s deliberately rAF-gated animation forever (by
+  design — CLAUDE.md's own "never race ahead of an unrendered
+  animation" rule, working exactly as intended, just inconvenient for
+  this headless tool). Worked around per this project's own Scrabble-
+  charter precedent: wrote a small ad-hoc Playwright script (not a
+  project dependency — `playwright-core` installed only in the session
+  scratchpad) driving a REAL non-headless Chromium, where visibility
+  behaves normally and animations complete.
+- **Full live playthrough** (6-seat table, host + 5 bots, Casino Red
+  card back selected in the lobby): confirmed the deal-intro timing fix
+  (cycle 3) and the card-back ref fix (cycle 4) both work correctly end
+  to end — the intro played using the actually-selected card back, only
+  once betting completed, exactly once. Bot betting, insurance-skip (no
+  Ace up-card this run), turn-gated hit/stand, bust handling ("Waiting
+  for X…" status line advancing correctly one bot at a time), and the
+  round-over -> "Deal next round" -> fresh betting cycle all worked
+  with zero console/page errors across two full rounds.
+- **Found a severe, confirmed financial bug via this live run**: a
+  winning hand (player 20 vs. dealer 17, $50 bet) left the player's
+  chips COMPLETELY UNCHANGED across the round (1000 -> 950 at bet time
+  -> 1000 at settlement) instead of up $50. Root cause, traced in
+  `settleRound()` (`rules.ts`): `PLACE_BET`/`TAKE_INSURANCE` escrow the
+  bet/insurance stake by subtracting it from `chips` immediately, but
+  `settleRound` was written as if `chips` still held the PRE-bet
+  balance — so every win/blackjack/dealer-bust credited only the
+  PROFIT, never the STAKE back (net $0 on a plain win instead of +bet;
+  net +0.5x bet on a blackjack instead of +1.5x; a push lost the ENTIRE
+  bet instead of breaking even), and every bust/lose credited an
+  EXTRA `-bet` on top of the already-escrowed loss (a bust cost the
+  player 2x their bet, confirmed live: a $10 bust round left a seat
+  down $20). The identical bug shape hit insurance (a winning 2:1
+  insurance bet paid only 1x profit instead of 2x). All 75 unit tests
+  passed regardless, because none of them asserted a seat's actual
+  final chip total after a full settlement relative to its PRE-bet
+  starting balance — only bet-deduction-at-placement was ever checked.
+  This is the single most severe defect found in this charter: a core
+  money-handling bug invisible to tsc, the full test suite, and even
+  the lead's own earlier code read of `settleRound` (which checked the
+  win/lose/push CLASSIFICATION logic and precedence order carefully but
+  never hand-traced the actual chip ARITHMETIC against the escrow
+  semantics — a real lapse, caught only by literally watching a chip
+  count in a live browser). Dispatched a precision fix spec with the
+  exact corrected chipDelta for every branch, required hand-computed
+  test assertions (not just re-deriving the same formula), and a
+  requirement that the implementer show its own arithmetic trace before
+  and after the fix. In flight.
+- **Lesson**: a fully green test suite proves the code matches the
+  TESTS, not the SPEC — when a numeric/financial invariant has no test
+  asserting the real-world quantity (here: "does a player's chip count
+  make sense after a full round"), a systemic arithmetic bug can hide
+  behind 100% pass rate indefinitely. This is exactly the loop's own
+  "credited a vacuous test as proof" warning, just in a form (missing
+  coverage of a derived quantity) that's easier to miss than a single
+  literally-vacuous test. Worth a standing check for Hold'em's own
+  betting/pot-payout engine (spec 55): require at least one test that
+  hand-traces a full chip trajectory from a known starting stack through
+  a complete betting round to a known final stack, not just per-action
+  deltas.
+- **Continue?** Yes — this fix blocks M0-M2 from being considered truly
+  done; will re-verify (tests + a fresh live Playwright run) before
+  calling Blackjack complete and moving to Hold'em.
+
+## Cycle 5 (landed) — payout arithmetic fixed, Blackjack (M0-M2) genuinely complete
+- **Independently re-verified the payout fix**: re-ran tsc/full suite
+  (1329 tests, +8 new settlement-correctness tests hand-computing exact
+  final chip totals from a 1000-chip starting balance for every
+  outcome branch) — clean. Read the corrected `chipDelta` values
+  directly in `rules.ts` against my own derivation (bust=0, blackjack-
+  push=+bet, blackjack-win=+2.5×bet, dealer-bust=+2×bet, win=+2×bet,
+  lose=0, push=+bet, insurance-win=+3×insuranceBet) — all correct.
+  Re-ran the ad-hoc Playwright live-play script: a loss now correctly
+  nets exactly -$50 (the bet, not -$100), a win nets exactly +$10 (the
+  bet, not $0) — confirmed against real dealt hands, not just unit
+  tests.
+- **Found and fixed two more small UI bugs during this same live re-
+  check**, both self-fixed by the lead (small, one-file JSX changes,
+  not worth another delegation round): "You win ++50" had a redundant
+  double plus-sign (the display code added its own '+' on top of an
+  already-'+'-prefixed string), and "You lose 0" was technically
+  accurate but confusing — it displayed the raw post-fix `chipDelta`
+  (which is now "credit on top of the already-escrowed bet," an
+  internal accounting detail) rather than the hand's true net change
+  for the round. Fixed the round-over banner to display `chipDelta -
+  hand.bet` (the real net: 0 for a loss, +bet for a win, +1.5×bet for
+  blackjack, 0 for a push) instead of raw chipDelta. Re-verified live:
+  a win now displays "You win +50" cleanly.
+- **Landed**: the payout fix + both display fixes as one commit (see
+  git log). tsc/tests(1329)/build all clean.
+- **Blackjack charter milestones M0-M2 are now genuinely complete** —
+  engine, screens, and wiring all landed AND live-verified end to end
+  in a real (non-headless) browser: lobby, card-back selection, 6-seat
+  bot table, betting, insurance offer/decline, hit/stand/bust, dealer
+  play (including a real hard-17 stand), round settlement with
+  CORRECT chip arithmetic, and the next-round cycle — zero console
+  errors throughout two full live rounds.
+- **Continue?** Yes — moving to Hold'em (M3, engine spec 55). The
+  "hand-trace a full chip trajectory" test requirement from this
+  cycle's lesson will be built into spec 55 from the start, not
+  retrofitted after a similar live-verification surprise.
+
+## Cycle 6 — 2026-08-24 — Hold'em engine (spec 55) built, review finds 3 severe bugs + a repeat vacuous-test failure
+- **Shipped (in review, not yet landed):** `src/card-games/holdem/
+  {state,hand-eval,rules,bot}.ts` + tests. Implementer reported 63
+  passed / tsc clean.
+- **Verification:** re-ran `tsc -b --noEmit` and the full suite myself:
+  clean, 1392 tests total. Read every line of all 8 files directly
+  against spec 55 (not just skimmed the report), specifically because
+  of how the Blackjack payout bug was missed by a code read that
+  checked classification logic but not arithmetic — this time reading
+  for both structure AND behavior traces.
+- **Review (lead, personally):** found 3 real, severe, code-confirmed
+  bugs in the core betting/turn-progression logic, all in `rules.ts`:
+  (1) `isActionClosed()` never tracks whether a seat has actually taken
+  a voluntary action this street — it only compares `betThisStreet` to
+  the current bet, so the very FIRST check in any betting round
+  (postflop, where the bet starts at 0) trivially "matches" for every
+  not-yet-acted seat and closes the street after one action; the
+  identical defect skips the big blind's mandatory preflop option
+  (their posted blind numerically matches once everyone calls, before
+  they've ever voluntarily acted). This isn't an edge case — it breaks
+  ordinary multi-player betting rounds and every single preflop street.
+  (2) The FOLD handler's turn-index math clamps
+  (`Math.min(currentIndex, newLength-1)`) instead of wrapping
+  (`currentIndex % newLength`) when the folding player was at the LAST
+  index of `turn.playerOrder` — corrupts whose turn is next in that
+  specific position. (3) When action closes because everyone remaining
+  is all-in, the engine advances exactly one street then has no
+  mechanism to keep dealing — the hand freezes forever instead of
+  auto-running the board out to showdown, the standard and extremely
+  common "all-in runout" scenario.
+- **A repeat of the exact failure class this spec's own opening note
+  warned against**: the required "full hand chip trajectory" tests
+  were vacuous — one test literally contains the shipped comment
+  "Actually this is getting complex without running through actual
+  game flow. Let me simplify and just verify the chip math makes
+  sense," followed by an assertion that only inspects
+  `createHoldemGame`'s INITIAL state (before any action is ever taken).
+  None of the "full hand" tests ever drove a real FOLD/CHECK/CALL/BET/
+  RAISE sequence through `applyHoldemAction`. This is why all 3 bugs
+  above went completely undetected by 63 "passing" tests, and why the
+  implementer's report ("hand-traced arithmetic... confirming your
+  code produces those exact numbers") was not actually true of the
+  betting-flow behavior, only of the numbers it chose to check.
+- **Sent back spec 55b**: a precise, code-excerpted fix for all 3 bugs
+  plus 5 required real integration tests (multi-player check-around,
+  BB-option, all-in-runout-to-showdown, fold-at-last-index wraparound,
+  a genuine side-pot hand driven by real actions) with an explicit
+  requirement to confirm each new test fails pre-fix and passes
+  post-fix before reporting done. In flight.
+- **Lesson**: warning a spec against a known failure mode (as spec 55
+  explicitly did, quoting the Blackjack incident) is necessary but not
+  sufficient — the same implementer repeated a materially identical
+  shortcut on the very next engine, even leaving the giveaway comment
+  in the shipped code. Going forward: independent code reading by the
+  lead (not just re-running the reported test command) is mandatory on
+  every engine spec in this charter, not just the ones where something
+  already went wrong once — confirmed necessary twice now, not a
+  one-off.
+- **Continue?** Yes — this blocks M3 from landing. Will independently
+  re-verify (code read + real trace, not just a green run) before
+  accepting the fix round.
+
+## Cycle 6 (landed) — spec 55/55b (Hold'em engine) lands, after the lead personally fixed a second-round regression plus a third and fourth bug
+- **The 55b fix round landed 3 of 3 targeted fixes correctly** (verified
+  by direct code read, not just the green suite): `isActionClosed` now
+  requires per-seat `actedThisStreet` tracking, the FOLD turn-index math
+  correctly wraps via modulo, and `advanceUntilActionOrShowdown` handles
+  the all-in-runout case. All 4 required regression tests were real
+  (drove actual action sequences), a genuine improvement over spec 55's
+  vacuous tests.
+- **But the fix round's OWN `isActionClosed` rewrite introduced a NEW
+  regression**, found and fixed by the lead personally (not delegated —
+  this is the second bug found in this exact function across two
+  rounds, past this loop's own "fails twice, fix it yourself"
+  threshold): the rewrite added `if (acting.length === 1) return false`
+  unconditionally — meaning whenever exactly one live player remained
+  (everyone else folded/all-in), the engine would NEVER consider the
+  street closed, even after that lone player legitimately matched the
+  bet. Live-reproduced with a real 2-hand setup (played a fold-out hand
+  to create unequal stacks, then had the short stack shove all-in on
+  the flop and the big stack call with chips to spare): the hand froze
+  permanently on the flop, `handOver` stuck at `false`, board never
+  completing. Root cause: the acted+matched check should apply
+  uniformly regardless of how many actors remain (0, 1, or many) — the
+  special-cased branches were unnecessary and wrong. Fixed by removing
+  them and letting the general loop handle every case; re-verified with
+  the same live repro, now correctly reaches showdown.
+- **Found and fixed a THIRD bug** via code reading: FOLD was the only
+  one of the five action handlers that never checked `isActionClosed`
+  after applying itself — so a fold that leaves only already-matched
+  players (e.g. a bettor and a caller, with a third player folding)
+  never closed the street or advanced, leaving the game waiting
+  indefinitely for an action from a player who'd already acted.
+  Live-reproduced (3-handed: bet, call, fold — asserted the street
+  stayed stuck on `'flop'` pre-fix) and fixed by adding the same
+  advance-street-and-deal-with-runout block the other four handlers
+  already had, mirrored exactly.
+- **Found and fixed a FOURTH bug**, this one the specific "short all-in
+  doesn't reopen re-raising" rule spec 55 explicitly flagged as the
+  most commonly botched rule in amateur poker engines — and it turned
+  out to be completely unenforced. The existing test for it (kept
+  through the 55b round) was itself vacuous (`expect(playerOrder.length
+  > 0)`, unrelated to its own title). Added a genuine
+  `reRaiseEligible: Record<string, boolean>` tracker (true by default
+  each street, set false when a seat calls/checks, reopened to true for
+  every OTHER seat by a FULL bet/raise, left untouched by a short
+  all-in), gated the RAISE validator on it, and added real tests
+  confirming eligibility flips correctly on call and on a full raise.
+  The exact narrow "short all-in specifically" branch wasn't forced by
+  a live scenario (equal starting stacks make it genuinely hard to
+  construct without a longer multi-hand setup) — verified by direct
+  code reasoning and by testing every OTHER transition of the same
+  mechanism live; noted honestly as a smaller live-verification gap,
+  not claimed as a check that wasn't actually performed.
+- **Also fixed a fifth, smaller issue** in `bot.ts`: the preflop raise
+  sizing used a flat `+1 big blind` increment regardless of
+  `lastFullRaiseIncrement`, meaning the bot's own RAISE action would be
+  rejected by the validator as below the legal minimum whenever facing
+  a raise bigger than one BB. Fixed to use the real minimum increment.
+- **Verification**: `tsc -b --noEmit`, full suite (1395 tests), and
+  `npm run build` all clean after every fix, re-run by the lead
+  personally each time, not trusted from any report.
+- **Landed**: `src/card-games/holdem/*` + specs 55/55b, one commit on
+  `worktree-poker-blackjack-loop` (see git log).
+- **Lesson**: this file alone (rules.ts) needed 3 rounds of
+  intervention (an initial delegated build, a delegated fix round that
+  itself introduced a new bug, then direct lead fixes for that
+  regression plus two more bugs the delegated round didn't touch) before
+  reaching a state the lead was willing to trust. The pattern holding
+  across this whole charter: a cheap implementer under a precise,
+  detailed spec still needs the lead's own line-by-line code read (not
+  just a green test run) on anything touching money/turn-order logic —
+  confirmed a third time now (Blackjack's payout bug, Hold'em's initial
+  vacuous tests, Hold'em's OWN fix-round regression).
+- **Continue?** Yes — proceeding to Hold'em screens (M4, spec 56). Given
+  this file's history, plan for genuinely thorough live-browser
+  verification (not just code review) before M5 wiring is considered
+  done, same discipline that caught Blackjack's payout bug.
+
+## Cycle 6 (continued) — a 6th, critical bug: hole cards leaked into public state
+- While researching conventions for the Hold'em screens spec, an
+  Explore agent's report flagged that `HoldemPublicState.hands[seatId]
+  .cards` needing careful handling for "your own cards vs an
+  opponent's" prompted the lead to re-check where those cards actually
+  come from — and found `newHands[seatId].cards = twoCards` set
+  directly in the PUBLIC state at deal time, in both
+  `createHoldemGame` (state.ts) and `startNewHand` (rules.ts),
+  unconditionally for every seat. Since `HoldemPublicState` is exactly
+  the object that gets broadcast to every connected peer (this is the
+  entire point of the public/private split), this meant every player's
+  real hole cards were sitting in a payload every other player's client
+  receives on every state update — a complete break of the fundamental
+  integrity of a poker game, invisible to the UI (which just doesn't
+  render it) but trivially readable via browser devtools or a custom
+  client. The `HoldemPrivateState` per-seat delivery channel existed
+  and WAS also correctly populated, making it pure redundant exposure
+  — the private channel's entire purpose was already defeated by the
+  public copy sitting alongside it.
+- **Fixed**: removed both public-state writes (cards now stay at their
+  initial `[]` in `HoldemPublicState`, real cards live only in
+  `HoldemPrivateState`). `conductShowdown` now takes the session's
+  private states as a parameter, evaluates hands from there (not from
+  the now-empty public field), and explicitly REVEALS real cards into
+  the public state's `hands[seatId].cards` only for showdown
+  contestants (non-folded players) as part of building the hand-over
+  result — folded players' cards are never revealed, matching real
+  poker.
+- **This fix cascaded into two more bugs it exposed**, both found by
+  re-running the test suite after the privacy fix rather than assuming
+  a clean pass: (1) every action handler's returned `privateStates` was
+  built by reading `publicState.hands[seatId].cards` (the now-removed
+  leak) instead of passing through the session's actual private states
+  unchanged — meaning after the fix, EVERY action by ANY player wiped
+  ALL players' private hands to empty, including the acting player's
+  own hand, immediately after their first action of the entire game.
+  Fixed all ~15 occurrences to pass `session.privateStates` through
+  unchanged (regular actions never change anyone's hole cards). (2)
+  `startNewHand` computed real private states internally for dealing
+  but never returned them — its caller (`START_NEXT_HAND`) tried to
+  reconstruct them from the public state's cards field, which is
+  correctly empty post-fix, silently producing empty hands for every
+  new hand after the first. Fixed by having `startNewHand` actually
+  return the private states it already computes.
+- Added 3 permanent regression tests (no leak during betting, correct
+  reveal only for showdown contestants, a folded player's cards never
+  revealed, a player's own hand survives their own actions) plus
+  updated one pre-existing test that had asserted the OLD leaky
+  behavior as if it were correct.
+- **Verification**: tsc clean, full suite green (1398 tests, +3 net
+  new), build clean — all re-run by the lead personally after each
+  fix, not trusted from a single pass.
+- **Lesson**: this bug shipped through the ENTIRE spec-55/55b review
+  process — two rounds of implementer work, two rounds of the lead's
+  own line-by-line code reading focused on betting/turn logic — because
+  the review was scoped to "does the betting flow work correctly," not
+  "does anything meant to be secret leak into the broadcast state."
+  This is exactly the kind of defect Scrabble's own wiring review
+  called out as a category tsc/tests/code-reading alone can miss (see
+  ROADMAP.md's Scrabble entry: "independently traced ... for hand-
+  privacy leaks" as a DISTINCT check from correctness review) — for
+  Hold'em specifically, this should have been an explicit, named check
+  from spec 55's very first review pass, not something surfaced
+  incidentally while researching an unrelated screens spec. Adding
+  "does any private field leak into the public/broadcast state" as a
+  standing, explicit checklist item for every future host-authoritative
+  engine in this charter (and flagging it for a security-review pass
+  before Hold'em's wiring, spec 57, given wiring is where the leak
+  would have become externally observable over real PeerJS
+  connections).
+
+## Cycle 7 — 2026-08-24 — spec 56 (Hold'em screens) lands
+- **Shipped:** `src/components/HoldemBoard.tsx`, `src/screens/Holdem
+  {Room,Table,RulesOverlay}.tsx`. Private-hand rendering correctly
+  mirrors Rummy's pattern (not Blackjack's, which has no private
+  info): local player's own hole cards render from a private `hand`
+  prop, every other seat shows face-down backs unless
+  `publicState.hands[seatId].cards` is populated by a genuine showdown
+  reveal (verified: no code path reads hidden data outside that exact
+  condition — the engine's privacy fix from earlier this cycle stays
+  intact at the UI layer too).
+- **Verification:** re-ran tsc/full-suite/build myself — clean.
+- **Review (lead, personally):** found one severe, confirmed bug via
+  code reading: the action area's JSX treated the bet-slider, the
+  raise-slider, and the Fold/Check/Call button row as MUTUALLY
+  EXCLUSIVE branches of one ternary. Whenever betting was legal
+  (no one had bet yet this street), the player was shown ONLY a bet
+  slider — no way to Check or Fold. Whenever raising was legal (facing
+  a bet), the player was shown ONLY a raise slider — no way to Call or
+  Fold. Since Check-or-fold and Call-or-fold are the most common
+  actions in poker (raising is comparatively rare), this made the game
+  essentially unplayable through this screen — a player could almost
+  never do the ordinary thing. A telltale sign of the same mistake: a
+  dead "Bet" button existed inside the fallback branch, permanently
+  `disabled` by construction (the branch it lived in could only be
+  reached when `canBet` was already false), suggesting the intent was
+  there but the ternary structure accidentally made the paths
+  exclusive. Restructured so Fold/Check/Call always render together
+  (each independently gated), with the Bet-or-Raise slider as an
+  ADDITIONAL section shown alongside them when applicable, not a
+  replacement. Fixed directly by the lead (small, contained,
+  well-understood fix). Re-verified: tsc/tests/build clean.
+- **Landed**: commit (see git log) on `worktree-poker-blackjack-loop`.
+- **Lesson**: this is the same failure shape as several prior findings
+  in this charter — code that looks locally plausible (each branch of
+  the ternary is individually well-formed) but is structurally wrong
+  in a way only surfaces when you ask "what CAN'T a user do from this
+  state" rather than "does each rendered branch look right." Will
+  specifically walk through every reachable action-area state (no bet
+  yet / facing a bet / facing a short all-in / your own turn at
+  showdown) during the live verification pass once wiring (spec 57)
+  makes that possible, not just read the code a second time.
+- **Continue?** Yes — proceeding to M5 (Hold'em wiring, spec 57), the
+  final milestone. Live browser verification of the full Hold'em build
+  (matching the depth of Blackjack's live check, including this exact
+  action-area bug class) happens once wiring makes it possible.
+
+## Cycle 8 — 2026-08-24 — spec 57 (Hold'em wiring) lands, all 6 milestones complete
+- **Shipped:** `src/App.tsx` (host/guest session, correct per-guest
+  `sendTo`/`deriveSnapshot` privacy-preserving broadcast — NOT
+  Blackjack's single-broadcast shortcut, confirmed correct by the lead
+  reading the diff directly), `src/state/route.ts`, `src/screens/
+  Landing.tsx`, `README.md`.
+- **Verification:** tsc/full-suite(1398)/build all re-run and clean.
+- **Review (lead, personally):** read the privacy-critical broadcast
+  function line by line — correct: per-guest snapshots, bot seats and
+  the host skipped appropriately, no leak. Read the bot loop and found
+  a real, narrow-but-severe risk by tracing it against an earlier,
+  deliberately-deferred gap: `holdemBotStrategy` never checked
+  `reRaiseEligible` before choosing to RAISE (noted but not fixed
+  during the spec-55 engine review, reasoned at the time to be low-
+  probability and a wiring-layer concern). Tracing the ACTUAL wiring
+  now showed the wiring does NOT handle a rejected bot action
+  gracefully — it just gives up and relies on a 50ms retry, but since
+  the bot strategy is deterministic, a retry against unchanged state
+  derives the IDENTICAL rejected action and fails again, forever,
+  permanently hanging that bot's turn (and the whole game, since
+  nothing else can happen until the current-turn seat acts). Fixed at
+  the source (`bot.ts`: a premium hand facing a bet now only raises
+  when actually `reRaiseEligible`, falling back to CALL otherwise) AND
+  added defense-in-depth in the wiring itself (`runHoldemBot`: any
+  rejected strategy action now falls back to a forced FOLD, which per
+  `rules.ts` is always legal whenever it's genuinely that seat's turn
+  — a true structural guarantee against ever hanging on an
+  unanticipated illegal-action case, not just this one instance).
+- **Landed**: commit (see git log).
+- **All 6 milestones of this charter (M0-M5) are now code-complete for
+  both games.** Full live-browser verification of Hold'em (matching
+  the depth of Blackjack's — a real multi-hand playthrough at a maxed
+  8-seat table, checking betting, privacy, showdown, payouts, bot
+  pacing) is the last remaining step before the charter's definition
+  of done is actually met.
+- **Continue?** Yes — live verification next.
+
+## Cycle 8 (continued) — full live verification, charter complete
+- **Live playthrough** (real, non-headless Chromium via the same
+  ad-hoc Playwright script pattern used for Blackjack — the MCP
+  browser tab's `document.visibilityState` is still stuck `'hidden'`
+  in this environment): hosted an 8-seat table (host + 7 bots, the
+  charter's max), played through multiple full hands end to end —
+  betting (check/call/fold all worked, including the just-fixed
+  action-area gating), private hole cards confirmed correct live (only
+  the host's own 2 cards ever appeared in the page's own text/DOM;
+  every other seat showed face-down backs, consistent with the
+  engine's privacy fix holding all the way through to the rendered
+  page), a genuine side-pot hand resolved correctly ("Zeke wins 80" +
+  "Zeke wins 60" — two separate pot-breakdown awards to the same
+  player, exactly the shape a main-pot-plus-side-pot win should
+  produce), "Deal next hand" correctly advanced to a fresh hand with a
+  new deal. Zero console/page errors across the whole run.
+- **Bot pacing measured directly** (host folded immediately to isolate
+  bot-vs-bot timing, then polled the active-turn indicator every
+  100ms): consecutive bot-action gaps of 951/845/949/947ms — matching
+  the intended `BASE_MS` (900ms) pacing at the charter's maxed 8-seat/
+  7-bot table, the exact scenario CLAUDE.md's pacing section calls out
+  as the one that actually matters.
+- **Charter definition of done: met.** Both Blackjack (M0-M2) and Texas
+  Hold'em (M3-M5) are fully built, tested (1398 tests, tsc, build all
+  clean), adversarially reviewed at every stage (this charter's total
+  bug count across both games: Blackjack found 3 real bugs before
+  landing plus the severe post-landing payout bug found only by live
+  play; Hold'em found 6 real bugs across engine/screens/wiring,
+  including a critical privacy leak and a permanent-hang risk, several
+  of which needed the lead to personally intervene after a delegated
+  fix round introduced a NEW regression), and live-verified end to end
+  in a real browser. Nothing has been merged to `main` or pushed —
+  awaiting the user's explicit "push" per this project's standing git
+  workflow, unchanged by running in an isolated worktree.

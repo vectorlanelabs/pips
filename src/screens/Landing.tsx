@@ -2,7 +2,7 @@ import type { Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, onPickUno, onPickSkipBo, onPickSolitaire, onPickScrabble, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, onPickUno, onPickSkipBo, onPickBlackjack, onPickHoldem, onPickSolitaire, onPickScrabble, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -20,6 +20,8 @@ export function Landing({
   onPickChess: () => void
   onPickUno: () => void
   onPickSkipBo: () => void
+  onPickBlackjack: () => void
+  onPickHoldem: () => void
   onPickSolitaire: () => void
   onPickScrabble: () => void
   error: string | null
@@ -64,6 +66,8 @@ export function Landing({
         { title: 'Phase 10', note: '2–6 players', color: '#ff9f1c', onClick: onPickPhase10 },
         { title: 'Uno', note: '2–6 players', color: '#e11d2e', onClick: onPickUno },
         { title: 'Skip-Bo', note: '2–4 players', color: '#be185d', onClick: onPickSkipBo },
+        { title: 'Blackjack', note: 'vs house, 2–6 players', color: '#ff5d73', onClick: onPickBlackjack },
+        { title: 'Texas Hold\'em', note: 'no-limit, 2–8 players', color: '#8b5cf6', onClick: onPickHoldem },
         { title: 'Solitaire', note: '1 player', color: '#4d7c0f', onClick: onPickSolitaire },
       ],
     },
