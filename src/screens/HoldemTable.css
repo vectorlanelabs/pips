@@ -388,6 +388,16 @@
   flex-wrap: wrap;
 }
 
+.holdem-hand-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holdem-hand-over-actions .btn {
+  width: 100%;
+}
+
 .holdem-fold-btn {
   background: transparent;
   border: 4px solid var(--ink);

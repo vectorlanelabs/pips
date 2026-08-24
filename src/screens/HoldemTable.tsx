@@ -188,8 +188,10 @@ export function HoldemTable({
   let maxBetAmount = myChips
 
   if (canBet) {
-    // Betting: min = 1, max = myChips
-    minBetAmount = 1
+    // Betting: min = one big blind (the stepper below moves in 10s, so
+    // starting it anywhere off that grid -- e.g. the engine's true floor of
+    // 1 chip -- means every step lands on an off-grid number: 1, 11, 21...).
+    minBetAmount = Math.min(HOLDEM_BIG_BLIND, myChips)
     maxBetAmount = myChips
   } else if (canRaise) {
     // Raising: min = currentBet + minRaise, max = myChips + myBetThisStreet (max possible bet-to)
@@ -568,7 +570,13 @@ export function HoldemTable({
                       </div>
                     )}
                   </div>
-                  <div className="holdem-action-buttons">
+                  {/* Full-width stacked, not the same wrapping row the
+                      Fold/Check/Call buttons use -- "Deal next hand" and
+                      "Leave table" are too wide to reliably sit side by
+                      side in this column, and letting them wrap onto their
+                      own lines looked like a layout glitch rather than a
+                      deliberate design. */}
+                  <div className="holdem-hand-over-actions">
                     {!publicState.gameOverWinnerId && (
                       <button
                         type="button"

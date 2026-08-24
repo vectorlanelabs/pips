@@ -395,21 +395,6 @@
   gap: clamp(12px, 2vw, 20px);
 }
 
-/* Each control row pairs the current action's content with the chip bank,
-   so the bank always sits beside the controls instead of stacked above
-   them -- one row per turn phase. */
-.blackjack-controls-row {
-  display: flex;
-  align-items: center;
-  gap: clamp(16px, 2.4vw, 24px);
-  flex-wrap: wrap;
-}
-
-.blackjack-controls-row > .blackjack-action-section {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .blackjack-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(110px, 1fr));
@@ -558,6 +543,16 @@
   border: 2px solid var(--grey-border);
   border-radius: 12px;
   margin-bottom: 12px;
+}
+
+.blackjack-round-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blackjack-round-over-actions .btn {
+  width: 100%;
 }
 
 /* ---- Footnote ---- */
