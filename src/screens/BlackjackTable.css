@@ -118,7 +118,18 @@
   border-width: 4px;
 }
 
+/* Identity (dot/name/turn tag) on the left, chip badge on the right --
+   uses the tile's full width instead of stacking chips/bet as their own
+   lines below the name. */
 .blackjack-opp-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.blackjack-opp-identity {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -156,20 +167,35 @@
 
 /* ---- Opponent tile content ---- */
 
-.blackjack-opp-chips {
+/* Chip badge: a compact yellow pill (mirrors the local chip bank's accent
+   color at a smaller scale) instead of chips just being another line of
+   plain body text -- makes opponents' stacks scannable at a glance. */
+.blackjack-opp-chip-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+  gap: 1px;
+  padding: 4px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--yellow);
+}
+
+.blackjack-opp-chip-value {
   font-weight: 700;
   font-size: 14px;
-  color: var(--body-text);
+  color: var(--ink);
+  line-height: 1.2;
 }
 
-.blackjack-opp-bet {
-  font-size: 12px;
-  color: var(--body-text);
-}
-
-.blackjack-opp-status {
-  font-size: 12px;
-  color: var(--muted-text);
+.blackjack-opp-bet-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  opacity: 0.75;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .blackjack-opp-hands {
@@ -291,13 +317,36 @@
   margin-top: 8px;
 }
 
-/* ---- Your side: local player area ---- */
+/* ---- Your side: local player area ----
+   Two columns on wide viewports: hand on the left (grows to fill
+   available width), chip bank + action controls in a fixed-width column
+   on the right -- so playing a hand never requires scrolling past a
+   wide empty gutter to reach the buttons below it. Wraps to a single
+   stacked column on narrow viewports. */
 
 .blackjack-your-side {
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: clamp(20px, 3vw, 32px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.blackjack-your-hands {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blackjack-your-controls {
+  flex: 0 1 300px;
+  min-width: 240px;
+  display: flex;
   flex-direction: column;
   gap: clamp(12px, 2vw, 20px);
-  padding-top: clamp(12px, 2vw, 20px);
 }
 
 /* Chip bank: prominent display with chunky emphasis treatment */
@@ -324,12 +373,6 @@
   font-size: 24px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.blackjack-your-hands {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .blackjack-your-hand {
@@ -386,7 +429,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 12px;
 }
 
 .blackjack-action-label {

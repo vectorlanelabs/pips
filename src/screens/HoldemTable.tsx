@@ -274,22 +274,22 @@ export function HoldemTable({
                     className={`holdem-opp-tile${isTurn ? ' holdem-opp-tile--turn' : ''}`}
                     style={isTurn ? { borderColor: seatColor } : undefined}
                   >
-                    {/* Tile header */}
+                    {/* Tile header: identity left, chip badge right -- uses the
+                        tile's full width instead of stacking chips/bet as
+                        separate lines below the name. */}
                     <div className="holdem-opp-tile-top">
-                      <span className="holdem-seat-dot" style={{ background: seatColor }} />
-                      <span className="holdem-opp-name" style={{ color: seatColor }}>{seatName}</span>
-                      {isTurn && <span className="holdem-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
+                      <div className="holdem-opp-identity">
+                        <span className="holdem-seat-dot" style={{ background: seatColor }} />
+                        <span className="holdem-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                        {isTurn && <span className="holdem-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
+                      </div>
+                      <div className="holdem-opp-chip-badge">
+                        <span className="holdem-opp-chip-value">{seatChips}</span>
+                        {seatHand.betThisStreet > 0 && (
+                          <span className="holdem-opp-bet-value">Bet {seatHand.betThisStreet}</span>
+                        )}
+                      </div>
                     </div>
-
-                    {/* Chips - prominent */}
-                    <div className="holdem-opp-chips">
-                      {seatChips}
-                    </div>
-
-                    {/* Bet info */}
-                    {seatHand.betThisStreet > 0 && (
-                      <div className="holdem-opp-bet">Bet: {seatHand.betThisStreet}</div>
-                    )}
 
                     {/* Status badges */}
                     <div className="holdem-opp-badges">
@@ -342,27 +342,33 @@ export function HoldemTable({
               </div>
             </div>
 
-            {/* Your side: local player area */}
+            {/* Your side: local player area. Two columns on wide viewports --
+                hole cards on the left, chip bank + controls on the right, so
+                the controls sit beside the cards instead of forcing a long
+                scroll below them. */}
             <div className="holdem-your-side">
-              {/* Chip bank - prominent display */}
+              {/* Your hole cards */}
+              <div className="holdem-your-hand-col">
+                {privateState.hand.length > 0 && (
+                  <div className="holdem-your-cards">
+                    {privateState.hand.map((card, i) => (
+                      <PlayingCard
+                        key={i}
+                        rank={card.rank as any}
+                        suit={card.suit as any}
+                        size="hand"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Chip bank + action controls column */}
+              <div className="holdem-your-controls">
               <div className="holdem-chip-bank">
                 <div className="holdem-chip-bank-label">Chips</div>
                 <div className="holdem-chip-bank-value">{myChips}</div>
               </div>
-
-              {/* Your hole cards */}
-              {privateState.hand.length > 0 && (
-                <div className="holdem-your-cards">
-                  {privateState.hand.map((card, i) => (
-                    <PlayingCard
-                      key={i}
-                      rank={card.rank as any}
-                      suit={card.suit as any}
-                      size="hand"
-                    />
-                  ))}
-                </div>
-              )}
 
               {/* Action area - fold/check/call/bet-raise */}
               {canAct && (
@@ -508,6 +514,7 @@ export function HoldemTable({
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </>
         )}

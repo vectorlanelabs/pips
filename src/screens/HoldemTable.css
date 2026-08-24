@@ -118,7 +118,18 @@
   border-width: 4px;
 }
 
+/* Identity (dot/name/turn tag) on the left, chip badge on the right --
+   uses the tile's full width instead of stacking chips/bet as their own
+   lines below the name. */
 .holdem-opp-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.holdem-opp-identity {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -156,15 +167,35 @@
 
 /* ---- Opponent tile content ---- */
 
-.holdem-opp-chips {
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--body-text);
+/* Chip badge: a compact yellow pill (mirrors the local chip bank's accent
+   color at a smaller scale) instead of chips just being another line of
+   plain body text -- makes opponents' stacks scannable at a glance. */
+.holdem-opp-chip-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+  gap: 1px;
+  padding: 4px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--yellow);
 }
 
-.holdem-opp-bet {
-  font-size: 12px;
-  color: var(--body-text);
+.holdem-opp-chip-value {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.holdem-opp-bet-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  opacity: 0.75;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .holdem-opp-badges {
@@ -227,13 +258,34 @@
   color: var(--ink);
 }
 
-/* ---- Your side: local player area ---- */
+/* ---- Your side: local player area ----
+   Two columns on wide viewports: hole cards on the left (grows to fill
+   available width), chip bank + action controls in a fixed-width column
+   on the right -- so acting on a hand never requires scrolling past a
+   wide empty gutter to reach the buttons below it. Wraps to a single
+   stacked column on narrow viewports. */
 
 .holdem-your-side {
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: clamp(20px, 3vw, 32px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.holdem-your-hand-col {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.holdem-your-controls {
+  flex: 1 1 340px;
+  min-width: 280px;
+  max-width: 420px;
+  display: flex;
   flex-direction: column;
   gap: clamp(12px, 2vw, 20px);
-  padding-top: clamp(12px, 2vw, 20px);
 }
 
 /* Chip bank: prominent display with chunky emphasis treatment */
@@ -273,7 +325,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 12px;
 }
 
 .holdem-action-buttons {
