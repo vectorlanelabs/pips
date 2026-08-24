@@ -158,6 +158,10 @@ type DominoesView = { revision: number; publicState: DominoesPublicState; privat
 type WahooView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: WahooPublicState; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type CheckersView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: CheckersPublicState; names: Record<string, string> }
@@ -183,9 +187,6 @@ type ScrabbleView =
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
-// Extra wait after a Wahoo pass/bust (turn moves with nothing to click) so
-// the die-flicker animation always finishes before the next actor starts.
-const PASS_ANIMATION_BUFFER_MS = 450
 // MT-specific pacing: measured against the actual sound assets so bot turns
 // don't outrun their own sounds. domino-play/domino-draw run ~1.03s; a bare
 // BASE_MS (900ms) gap between actions clips their tail.
@@ -215,6 +216,17 @@ const RUMMY_ACTION_MS = 1600
 // Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
 // render/paint time on top of estimateDealIntroMs's pure animation estimate.
 const RUMMY_DEAL_HOLD_BUFFER_MS = 700
+// Wahoo: reused bare BASE_MS (900ms) + a 450ms pass/bust-only buffer, which cuts off the game's
+// own sounds — measured dice-roll runs 1.392s and piece-drop runs 1.032s, both longer than a
+// bare 900ms gap between actions. WAHOO_ACTION_MS covers every ordinary action (roll or move)
+// with headroom over the longer of the two. A full 4-seat table means up to 3 bots' worth of
+// these can land between a human's own turns (CLAUDE.md: judge pacing at a maxed-out table).
+const WAHOO_ACTION_MS = 1600
+// farkle-bust (the triple-six sound) runs 2.904s — far longer than any ordinary action's sound
+// and than the old 450ms buffer. WAHOO_ACTION_MS alone (1600ms) would still cut it off, so a
+// bust gets extra hold on top so the total gap before the next bot action is comfortably past
+// the full cue (1600 + 1600 = 3200ms > 2904ms, with margin for network/render latency).
+const WAHOO_BUST_EXTRA_MS = 1600
 const MT_ACTION_MS = 1100
 // Yahtzee was reusing bare BASE_MS across its 3-roll/2-hold/1-score turn shape, which measured at
 // ~4.6s per bot turn against a human averaging ~10-13s per turn on the same table (see spec/
@@ -473,6 +485,7 @@ export default function App() {
   const wahooBotSeatsRef = useRef<Set<string>>(new Set())
   const wahooBotCounterRef = useRef(0)
   const wahooDroppedRef = useRef<string[]>([])
+  const wahooRejectionNoticeRef = useRef<string | null>(null)
   const checkersSessionRef = useRef<CheckersSession | null>(null)
   const checkersHostRef = useRef<HostHandle<CheckersView> | null>(null)
   const checkersGuestRef = useRef<GuestHandle<CheckersAction> | null>(null)
@@ -919,6 +932,7 @@ export default function App() {
     wahooBotSeatsRef.current.clear()
     wahooBotCounterRef.current = 0
     wahooNamesRef.current = {}
+    wahooRejectionNoticeRef.current = null
     // Checkers
     checkersHostRef.current?.destroy()
     checkersHostRef.current = null
@@ -2629,6 +2643,19 @@ export default function App() {
 
   // ---- Wahoo helpers ----
 
+  // `${stage}:${turnNumber}` identifies "this is still the same bot's turn window" for
+  // wahooStale below: every current transition that hands the turn off or grants an extra
+  // roll goes through advanceTurn/extraTurn (both bump turnNumber), so this is exact today.
+  // It is a fragile contract, though: it's tempting to "fix" it by folding in
+  // wh.session.revision (which bumps on every accepted action, same-turn ones included), but
+  // that would break the ROLL-then-MOVE sequence within a single bot turn — a plain ROLL uses
+  // setPhase (no turnNumber change) but still bumps revision, so runWahooBots's inner while
+  // loop would see the key change and abort right after ROLL, before ever submitting MOVE.
+  // Making this robust against a hypothetical future same-turn action that hands off the
+  // actor WITHOUT going through advanceTurn/extraTurn would need a turn-engine-level concept
+  // (e.g. an explicit "actor generation" distinct from both turnNumber and revision) — that's
+  // a shared src/engine/turn-engine.ts change affecting every game on this engine, not a
+  // Wahoo-local fix, so it's left as a known constraint rather than guessed at here.
   function wahooActorKey(wh: WahooSession): string {
     const ps = wh.session.publicState
     return `${ps.stage}:${ps.turn.turnNumber}`
@@ -2698,7 +2725,12 @@ export default function App() {
         if (!session) return
         if (!wahooSeatsRef.current.some((s) => s.playerId === guestId)) return
         const result = applyWahooAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          wahooHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         wahooSessionRef.current = result.wh
         wahooBroadcast()
       },
@@ -2769,7 +2801,7 @@ export default function App() {
 
   async function runWahooBots(botId: string, key: string) {
     while (!wahooStale(key)) {
-      await wait(BASE_MS)
+      await wait(WAHOO_ACTION_MS)
       if (wahooStale(key)) return
       const session = wahooSessionRef.current!
       const ps = session.session.publicState
@@ -2780,8 +2812,10 @@ export default function App() {
       if (!result.outcome.ok) return
       wahooSessionRef.current = result.wh
       wahooBroadcast()
+      // farkle-bust runs far longer than WAHOO_ACTION_MS alone covers — hold extra so the
+      // next bot action doesn't cut off the cue (see WAHOO_BUST_EXTRA_MS above).
       const kind = result.wh.session.publicState.lastEvent?.kind
-      if (kind === 'pass' || kind === 'bust') await wait(PASS_ANIMATION_BUFFER_MS)
+      if (kind === 'bust') await wait(WAHOO_BUST_EXTRA_MS)
     }
   }
 
@@ -2813,8 +2847,19 @@ export default function App() {
           setWahooView(view)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // wahooView/localRevision, so it can't be mistaken for (or block) a real state update.
+          wahooRejectionNoticeRef.current = view.message
+          setWahooNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setWahooNotice((prev) => (prev !== null && prev === wahooRejectionNoticeRef.current ? null : prev))
+        wahooRejectionNoticeRef.current = null
         setWahooView(view)
         setWahooStarted(true)
       },
@@ -2846,7 +2891,18 @@ export default function App() {
       const session = wahooSessionRef.current
       if (!session) return
       const result = applyWahooAction(session, wahooLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        wahooRejectionNoticeRef.current = reason
+        setWahooNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (wahooNotice !== null && wahooNotice === wahooRejectionNoticeRef.current) {
+        setWahooNotice(null)
+      }
+      wahooRejectionNoticeRef.current = null
       wahooSessionRef.current = result.wh
       wahooBroadcast()
     } else if (wahooRole === 'guest') {
@@ -5363,7 +5419,6 @@ export default function App() {
           publicState={wahooView.publicState}
           onRoll={() => wahooDispatch({ type: 'ROLL' })}
           onMove={(move) => wahooDispatch({ type: 'MOVE', move })}
-          onOpenRules={() => {}}
           onLeave={resetToEntry}
         />
       </>

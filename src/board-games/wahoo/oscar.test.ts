@@ -143,6 +143,41 @@ describe('attack: move forgery', () => {
     expect(forged2.outcome.ok).toBe(false)
   })
 
+  it('rejects (not throws) a MOVE with a missing move field (Blocking #2)', () => {
+    const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    // Simulates a malformed/hostile guest payload arriving over PeerJS as `unknown` at
+    // runtime -- the WahooAction union's `move` field is compile-time only.
+    expect(() =>
+      applyWahooAction(wh, 'p1', { type: 'MOVE' } as unknown as Parameters<typeof applyWahooAction>[2]),
+    ).not.toThrow()
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE' } as unknown as Parameters<typeof applyWahooAction>[2])
+    expect(r.outcome.ok).toBe(false)
+    // Canonical state must be untouched by the rejected action.
+    expect(r.wh.session.publicState).toEqual(wh.session.publicState)
+  })
+
+  it('rejects (not throws) a MOVE with move: null (Blocking #2)', () => {
+    const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    expect(() =>
+      applyWahooAction(wh, 'p1', { type: 'MOVE', move: null } as unknown as Parameters<typeof applyWahooAction>[2]),
+    ).not.toThrow()
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: null } as unknown as Parameters<typeof applyWahooAction>[2])
+    expect(r.outcome.ok).toBe(false)
+    expect(r.wh.session.publicState).toEqual(wh.session.publicState)
+  })
+
+  it('rejects (not throws) a MOVE whose move is a non-object primitive', () => {
+    const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    for (const badMove of ['advance', 42, true, undefined]) {
+      const r = applyWahooAction(
+        wh,
+        'p1',
+        { type: 'MOVE', move: badMove } as unknown as Parameters<typeof applyWahooAction>[2],
+      )
+      expect(r.outcome.ok).toBe(false)
+    }
+  })
+
   it('rejects an unknown move kind string at the JSON boundary (untyped client payload)', () => {
     const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     const forged = applyWahooAction(wh, 'p1', {
@@ -319,6 +354,67 @@ describe('attack: six-chain integrity', () => {
     expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
     expect(pub.positions['p1']).toEqual([-1, -2, -1, -1]) // marble 0 busted, marble 1 still centered
     expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] })
+  })
+
+  it('a stale lastMoved from an EARLIER, already-ended turn is never sent home by a later moveless six-chain bust (Blocking #1)', () => {
+    // Reproduces the review's exact scenario: p1 moves a marble (ending its
+    // turn on a non-six), p2 takes a non-six no-move pass, then p1 rolls a
+    // moveless triple-six chain. Before the fix, lastMoved stayed set from
+    // p1's EARLIER move (never cleared when that non-six move ended the
+    // turn), so the third six would incorrectly send that old marble home
+    // even though nothing was moved in this new chain.
+    // seed 618: rng calls in order are 4 (p2's pass), then 6, 6, 6 (p1's chain).
+    let wh = buildWahoo({
+      phase: 'move',
+      die: 3,
+      rngSeed: 618,
+      // p1 marble 0 moves 58 -> 61 (still on-track, not lane); marbles 1-3
+      // already deep in the lane and can never move again. After the move,
+      // marble 0 at 61 also can't move on a later 6 (61+6=67 overshoots),
+      // so p1's next chain has NO legal move at all -- the setup for the
+      // moveless triple-six chain below.
+      positions: { p1: [58, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
+    })
+
+    // p1 moves (non-six): the turn -- and the six-chain -- ends here.
+    let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(r.outcome.ok).toBe(true)
+    wh = r.wh
+    expect(wh.session.publicState.positions['p1']).toEqual([61, LANE_START, LANE_START + 1, LANE_START + 2])
+    expect(wh.session.publicState.lastMoved).toBeNull() // cleared: the chain ended on a non-six
+    expect(currentPlayer(wh.session.publicState.turn)).toBe('p2')
+
+    // p2 rolls a non-six with no legal move (all marbles in base): a pass,
+    // handing the turn back to p1 with a clean slate.
+    r = applyWahooAction(wh, 'p2', { type: 'ROLL' })
+    expect(r.outcome.ok).toBe(true)
+    wh = r.wh
+    expect(wh.session.publicState.lastEvent).toEqual({ kind: 'pass', by: 'p2', die: 4 })
+    expect(wh.session.publicState.lastMoved).toBeNull()
+    expect(currentPlayer(wh.session.publicState.turn)).toBe('p1')
+
+    // p1's new chain: three consecutive sixes, NONE of which have any legal
+    // move (marble 0 overshoots at 61+6=67; the lane marbles all overshoot
+    // too) -- nothing is moved in this chain before the bust.
+    expect(legalMoves(wh.session.publicState, 'p1', 6)).toEqual([])
+    for (let i = 1; i <= 2; i++) {
+      r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+      expect(r.outcome.ok).toBe(true)
+      wh = r.wh
+      expect(wh.session.publicState.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 6 })
+      expect(wh.session.publicState.sixStreak).toBe(i)
+    }
+
+    // The third six busts -- but with lastMoved chain-scoped and null, there
+    // is nothing to send home: p1's positions (including marble 0 at 61,
+    // moved in the PRIOR, already-ended turn) must be completely untouched.
+    r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.wh.session.publicState
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
+    expect(pub.sixStreak).toBe(0)
+    expect(pub.positions['p1']).toEqual([61, LANE_START, LANE_START + 1, LANE_START + 2])
+    expect(currentPlayer(pub.turn)).toBe('p2')
   })
 
   it('a non-six pass also resets a nonzero sixStreak (no residual chain state leaks across a pass)', () => {

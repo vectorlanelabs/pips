@@ -131,9 +131,11 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
         sixStreak: streak,
         lastEvent: { kind: 'roll', by: playerId, die },
       }
-      // No legal move: resolve the turn immediately. A non-six ends the turn; a
-      // six (even moveless) still grants another roll — the streak already
-      // accounts for it above.
+      // No legal move: resolve the turn immediately. A non-six ends the turn —
+      // and with it the current six-chain, so lastMoved is cleared (see the
+      // MOVE handler below for the matching non-six clear). A six (even
+      // moveless) still grants another roll and keeps the chain's lastMoved
+      // alive — the streak already accounts for it above.
       if (legalMoves(rolled, playerId, die).length === 0) {
         return {
           ok: true,
@@ -141,6 +143,7 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
             ...rolled,
             turn: die === 6 ? extraTurn(publicState.turn, 'roll') : advanceTurn(publicState.turn, 'roll'),
             die: null,
+            lastMoved: die === 6 ? publicState.lastMoved : null,
             lastEvent: { kind: 'pass', by: playerId, die },
           },
           privateStates,
@@ -151,6 +154,12 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
 
     if (action.type === 'MOVE') {
       if (publicState.turn.phase !== 'move') return { ok: false, reason: 'roll first' }
+      // action.move arrives over the wire as `unknown` at runtime — the WahooAction
+      // union is compile-time only, so a malformed/stale/hostile guest payload (missing
+      // or null `move`) must be rejected here rather than dereferencing straight through.
+      if (typeof action.move !== 'object' || action.move === null) {
+        return { ok: false, reason: 'invalid move' }
+      }
       const die = publicState.die!
       const moves = legalMoves(publicState, playerId, die)
       const move = moves.find((m) => m.marbleIdx === action.move.marbleIdx && m.kind === action.move.kind)
@@ -185,11 +194,17 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
         }
       }
 
+      // A non-six ends the turn, and with it the current six-chain: clear
+      // lastMoved so it can never be read as "the marble moved this chain" on
+      // a LATER turn (a triple-six bust only trusts a chain-scoped lastMoved —
+      // see the streak >= 3 branch above). A six keeps the chain (and this
+      // move's lastMoved) alive for the extra roll.
       return {
         ok: true,
         publicState: {
           ...movedState,
           die: null,
+          lastMoved: die === 6 ? lastMoved : null,
           turn: die === 6 ? extraTurn(publicState.turn, 'roll') : advanceTurn(publicState.turn, 'roll'),
         },
         privateStates,

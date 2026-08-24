@@ -25,7 +25,6 @@ export interface WahooTableProps {
   publicState: WahooPublicState
   onRoll: () => void
   onMove: (move: WahooMove) => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -85,8 +84,8 @@ function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; s
 // The center drop-target ring scales to this same size.
 const CENTER_DIAMETER = 0.9
 
-// The physical hole a marble currently occupies (-1 base, -2 center, 0..57
-// track relative to the arm's come-out, 58..61 home lane, outermost first).
+// The physical hole a marble currently occupies (-1 base, -2 center, 0..62
+// track relative to the arm's come-out, 63..66 home lane, outermost first).
 function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, marbleIdx: number): Hole {
   const arm = publicState.seatArms[playerId]
   const p = publicState.positions[playerId][marbleIdx]
@@ -190,11 +189,9 @@ export function WahooTable({
   publicState,
   onRoll,
   onMove,
-  onOpenRules,
   onLeave,
 }: WahooTableProps) {
   void localName // preserved in props for M4 wiring; unused in this presentational milestone
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Derived ----
   const myTurn = currentPlayer(publicState.turn) === localPlayerId

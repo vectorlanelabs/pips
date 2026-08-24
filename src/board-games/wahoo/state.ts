@@ -87,6 +87,9 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
 // then shuffled between them. 3 players drop one random arm (mutedArm). 4
 // players take all four arms shuffled. Turn order is the given playerIds order.
 export function createWahooGame(playerIds: string[], seed: number): WahooSession {
+  if (playerIds.length < 2 || playerIds.length > 4) {
+    throw new Error(`createWahooGame requires 2-4 players, got ${playerIds.length}`)
+  }
   const rng = createRng(seed)
   const ALL_ARMS = [0, 1, 2, 3]
   let seatArms: Record<string, number>

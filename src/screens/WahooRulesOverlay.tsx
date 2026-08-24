@@ -5,6 +5,7 @@ export function WahooRulesOverlay({ onClose }: { onClose: () => void }) {
     'Roll a 6, roll again — but three 6s in a row sends the marble you just moved home.',
     'The center is a shortcut: land on it exactly (one step past a corner on your way around) and leave on a 1 or 6, coming out at the diagonally opposite corner.',
     'Get all four marbles up your home lane to win. Exact counts, no jumping your own.',
+    'With three players, one arm sits unused and greyed out for the match — nobody starts there.',
   ]
 
   return (

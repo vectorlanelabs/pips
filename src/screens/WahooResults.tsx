@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { LANE_START } from '../board-games/wahoo/board'
 import type { WahooPublicState } from '../board-games/wahoo/state'
 import { useSound } from '../hooks/useSound'
 
@@ -19,6 +20,32 @@ export interface WahooResultsProps {
 
 const ARM_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
 
+// ---- Ranking ----
+
+export interface WahooResultRow {
+  id: string
+  name: string
+  color: string
+  home: number
+  base: number
+}
+
+// Ranked rows: every seated player by marbles home (descending). "Home" must use the engine's
+// actual win threshold (LANE_START, 63) — a marble at 52..62 is still on the shared track, not
+// in the lane, even though it's close. Extracted as a pure function so the boundary (52 vs 63)
+// is unit-testable without rendering the component.
+export function rankWahooResults(publicState: WahooPublicState, names: Record<string, string>): WahooResultRow[] {
+  return publicState.turn.playerOrder
+    .map((id) => ({
+      id,
+      name: names[id] ?? id,
+      color: ARM_COLORS[publicState.seatArms[id]],
+      home: (publicState.positions[id] ?? []).filter((p) => p >= LANE_START).length,
+      base: (publicState.positions[id] ?? []).filter((p) => p === -1).length,
+    }))
+    .sort((a, b) => b.home - a.home)
+}
+
 // ---- WahooResults ----
 
 export function WahooResults({
@@ -33,34 +60,19 @@ export function WahooResults({
 }: WahooResultsProps) {
   void localName // kept in props for symmetry with the other results screens; the headline uses the winner's name
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.winnerId === localPlayerId
+  // Only the winner hears the victory cue — the loser hearing the same 'game-win' fanfare would
+  // contradict the "X takes it!" headline they're looking at.
+  useEffect(() => { if (isLocalWinner) play('game-win') }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (publicState.stage !== 'over' || publicState.winnerId === null) return null
 
   const winnerId = publicState.winnerId
-  const isLocalWinner = winnerId === localPlayerId
   const headline = isLocalWinner ? 'You take it!' : `${names[winnerId] ?? winnerId} takes it!`
   const headlineColor = ARM_COLORS[publicState.seatArms[winnerId]]
 
-  // Build ranked rows: every seated player by marbles home
-  interface Row {
-    id: string
-    name: string
-    color: string
-    home: number
-    base: number
-  }
-
-  const rows: Row[] = publicState.turn.playerOrder
-    .map((id) => ({
-      id,
-      name: names[id] ?? id,
-      color: ARM_COLORS[publicState.seatArms[id]],
-      home: (publicState.positions[id] ?? []).filter((p) => p >= 52).length,
-      base: (publicState.positions[id] ?? []).filter((p) => p === -1).length,
-    }))
-    .sort((a, b) => b.home - a.home)
+  const rows = rankWahooResults(publicState, names)
 
   return (
     <div style={{
