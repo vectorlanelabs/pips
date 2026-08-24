@@ -1,18 +1,20 @@
 import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
-import { advanceTurn, currentPlayer, skipNext } from '../../engine/turn-engine.ts'
+import { advanceTurn, currentPlayer } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, addCards, cardCount, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
 import { premiumAt } from './board.ts'
-import type {
-  ScrabbleTile,
-  ScrabbleAction,
-  ScrabblePrivateState,
-  ScrabblePublicState,
-  ScrabbleSession,
-  BoardCell,
-  LastPlacement,
+import {
+  LETTER_POINTS,
+  RACK_SIZE,
+  type ScrabbleTile,
+  type ScrabbleAction,
+  type ScrabblePrivateState,
+  type ScrabblePublicState,
+  type ScrabbleSession,
+  type BoardCell,
+  type LastPlacement,
 } from './state.ts'
 import type { ScrabbleDictionary } from './dictionary.ts'
 
@@ -248,12 +250,7 @@ function scoreWordsWithBreakdown(
 
 // Helper to get tile points
 function getTilePoints(letter: string): number {
-  const pointsMap: Record<string, number> = {
-    A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
-    K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
-    U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
-  }
-  return pointsMap[letter] ?? 0
+  return LETTER_POINTS[letter] ?? 0
 }
 
 function makeValidator(
@@ -304,7 +301,6 @@ function makeValidator(
 
         // Return tiles to original placer's rack
         const originalRack = privateStates[originalPlacerId].rack
-        const numTilesPlaced = lastPlacement.tiles.length
 
         // Create the returned tile objects
         const returnedTiles = lastPlacement.tiles.map((t): ScrabbleTile => {
@@ -316,10 +312,11 @@ function makeValidator(
           }
         })
 
-        // Remove the most-recently-drawn tiles from the rack (the ones that replaced the placed tiles)
-        // These go back into the bag
-        const tilesToRemoveFromRack = originalRack.cards.slice(-numTilesPlaced)
-        const { zone: shrunkRack, removed: removedTiles } = removeCardsById(originalRack, tilesToRemoveFromRack.map((t) => t.id))
+        // Remove the tiles that were drawn from the bag as refill for this placement
+        // (recorded at placement time) — these go back into the bag. Driven by the
+        // recorded ID list rather than a positional slice of the rack, which would be
+        // wrong whenever the bag ran low and the placer got a partial refill.
+        const { zone: shrunkRack, removed: removedTiles } = removeCardsById(originalRack, lastPlacement.drawnTileIds)
 
         // Add the removed tiles back to the bag
         let newBag = addCards(bag, removedTiles)
@@ -351,12 +348,24 @@ function makeValidator(
           },
         }
       } else {
-        // Challenge fails: skip challenger's next turn
+        // Challenge fails: the challenger's own pending turn is forfeit.
+        // currentIndex points at whoever's real turn is next to be taken
+        // (CHALLENGE doesn't consume it -- a successful challenge leaves
+        // `turn` untouched precisely because the challenger still gets to
+        // act). When the challenger IS that pending player, a single
+        // advanceTurn correctly moves past them to the next player -- that
+        // single step IS the penalty. skipNext would be wrong here: its
+        // real, tested semantics (see turn-engine.test.ts) are "skip the
+        // player AFTER the current one," which would skip an unrelated
+        // third player while leaving the challenger's own turn untouched.
+        // CHALLENGE is deliberately not turn-gated (see above), so a
+        // non-current player can challenge out of turn; they have no
+        // pending turn to forfeit, so nothing to skip -- leave turn as is.
         return {
           ok: true,
           publicState: {
             ...publicState,
-            turn: skipNext(publicState.turn, 'play'),
+            turn: playerId === currentPlayer(publicState.turn) ? advanceTurn(publicState.turn, 'play') : publicState.turn,
             lastPlacement: { ...publicState.lastPlacement, challengeable: false },
           },
           privateStates,
@@ -403,7 +412,6 @@ function makeValidator(
         newBoard[tile.row][tile.col] = {
           letter: tile.letter,
           isBlank: tile.isBlank,
-          premiumConsumed: true,
         }
       }
 
@@ -414,8 +422,10 @@ function makeValidator(
       const toRefill = RACK_SIZE - cardCount(newRack)
       let refilled = newRack
       let newBag = bag
+      const drawnTileIds: string[] = []
       for (let i = 0; i < toRefill && cardCount(newBag) > 0; i++) {
         const tile = newBag.cards[newBag.cards.length - 1]
+        drawnTileIds.push(tile.id)
         const { from, to } = moveCards(newBag, refilled, [tile.id])
         newBag = from
         refilled = to
@@ -442,6 +452,7 @@ function makeValidator(
           score: wordScores[idx] ?? 0,
         })),
         totalScore: placedScore,
+        drawnTileIds,
         challengeable: true,
       }
 
@@ -470,6 +481,9 @@ function makeValidator(
     }
 
     if (action.type === 'EXCHANGE_TILES') {
+      if (action.tileIds.length === 0) {
+        return { ok: false, reason: 'must exchange at least one tile' }
+      }
       if (cardCount(bag) < action.tileIds.length) {
         return { ok: false, reason: 'not enough tiles in bag' }
       }
@@ -540,8 +554,6 @@ function makeValidator(
   }
 }
 
-const RACK_SIZE = 7
-
 // Validate PLACE_WORD structural legality
 function validatePlacement(
   publicState: ScrabblePublicState,
@@ -555,7 +567,25 @@ function validatePlacement(
     }
   }
 
-  // 2. Every target cell is empty and in bounds
+  // 2. No two tiles share a target cell
+  for (let i = 0; i < action.tiles.length; i++) {
+    for (let j = i + 1; j < action.tiles.length; j++) {
+      if (action.tiles[i].row === action.tiles[j].row && action.tiles[i].col === action.tiles[j].col) {
+        return 'duplicate cell in placement'
+      }
+    }
+  }
+
+  // 3. No tile is used more than once
+  for (let i = 0; i < action.tiles.length; i++) {
+    for (let j = i + 1; j < action.tiles.length; j++) {
+      if (action.tiles[i].tileId === action.tiles[j].tileId) {
+        return 'duplicate tile in placement'
+      }
+    }
+  }
+
+  // 4. Every target cell is empty and in bounds
   for (const tile of action.tiles) {
     if (tile.row < 0 || tile.row >= 15 || tile.col < 0 || tile.col >= 15) {
       return 'placement out of bounds'
@@ -565,7 +595,7 @@ function validatePlacement(
     }
   }
 
-  // 3. All placed cells in a single row or column
+  // 5. All placed cells in a single row or column
   const rows = action.tiles.map((t) => t.row)
   const cols = action.tiles.map((t) => t.col)
   const singleRow = rows.every((r) => r === rows[0])
@@ -574,7 +604,7 @@ function validatePlacement(
     return 'tiles must be in a single row or column'
   }
 
-  // 4. No gaps in the placement
+  // 6. No gaps in the placement
   if (singleRow) {
     const minCol = Math.min(...cols)
     const maxCol = Math.max(...cols)
@@ -599,7 +629,7 @@ function validatePlacement(
 
   const isFirstPlacement = publicState.board.every((row) => row.every((cell) => cell === null))
 
-  // 5. First placement must cover center and be 2+ tiles
+  // 7. First placement must cover center and be 2+ tiles
   if (isFirstPlacement) {
     if (action.tiles.length < 2) {
       return 'first placement must be at least 2 tiles'
@@ -609,7 +639,7 @@ function validatePlacement(
       return 'first placement must cover the center square (7,7)'
     }
   } else {
-    // 6. Must connect to existing tiles
+    // 8. Must connect to existing tiles
     let connects = false
     for (const tile of action.tiles) {
       // Check orthogonal adjacency
@@ -626,7 +656,7 @@ function validatePlacement(
     }
   }
 
-  // 7. Blank tile letter validation
+  // 9. Blank tile letter validation
   for (const placedTile of action.tiles) {
     const rackTile = rack.cards.find((t) => t.id === placedTile.tileId)!
     if (rackTile.letter === '') {

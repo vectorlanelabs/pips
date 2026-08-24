@@ -297,6 +297,13 @@
   color: var(--muted-text);
 }
 
+/* Newly placed tiles from the most recent turn -- with bots playing
+   back-to-back, nothing else marks what just changed on the board. */
+.scr-tile-face--last-move {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 1px var(--coral);
+}
+
 .scr-tile-points {
   position: absolute;
   bottom: 2px;

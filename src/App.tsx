@@ -234,6 +234,14 @@ const BLACKJACK_DEAL_HOLD_BUFFER_MS = 700
 // must cover both stages, not just the deal.
 const HOLDEM_BLIND_STAGE_MS = 900 * 2
 const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
+// Scrabble: when a bot is about to act on a still-challengeable placement it
+// didn't make (either to challenge it or, if it declines, to immediately play
+// its own word over it), a human elsewhere at the table needs real time to
+// read what happened and hit Challenge before the placement is gone. BASE_MS
+// (900ms) is sized for routine turn pacing, not for "notice a word appeared,
+// decide if it's real, and click a button" — this is closer to the other
+// games' read-and-react windows (YAHTZEE_ACTION_MS, MT_HORN_BUFFER_MS).
+const SCRABBLE_CHALLENGE_WINDOW_MS = 2500
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -390,6 +398,10 @@ export default function App() {
   const [scrabbleView, setScrabbleView] = useState<ScrabbleView | null>(null)
   const [scrabbleConnection, setScrabbleConnection] = useState<'connected' | 'disconnected'>('connected')
   const [scrabbleNotice, setScrabbleNotice] = useState<string | null>(null)
+  // Tracks the exact text scrabbleDispatch last set on a rejected action, so a
+  // subsequent successful dispatch only clears ITS OWN rejection message --
+  // not an unrelated notice (e.g. "X disconnected") that arrived in between.
+  const scrabbleRejectionNoticeRef = useRef<string | null>(null)
   const [scrabbleStarted, setScrabbleStarted] = useState(false)
   const [scrabbleSeats, setScrabbleSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [scrabbleDifficulty, setScrabbleDifficulty] = useState<BotDifficulty>('medium')
@@ -1059,6 +1071,7 @@ export default function App() {
     setScrabbleView(null)
     setScrabbleConnection('connected')
     setScrabbleNotice(null)
+    scrabbleRejectionNoticeRef.current = null
     setScrabbleStarted(false)
     scrabbleStartedRef.current = false
     setScrabbleSeats([])
@@ -4188,6 +4201,7 @@ export default function App() {
         setScrabbleSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
         scrabbleSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
         setScrabbleNotice(null)
+        scrabbleRejectionNoticeRef.current = null
         scrabbleBroadcast()
       },
       onJoin(guestId, guestName) {
@@ -4279,8 +4293,18 @@ export default function App() {
 
   async function runScrabbleBot(botId: string, key: string) {
     while (!scrabbleStale(key)) {
+      const psBeforeWait = scrabbleSessionRef.current!.session.publicState
+      // A human at the table can still challenge this placement, and this
+      // bot is about to act on it (challenge it, or -- if it declines --
+      // immediately play its own word over it). Give the table the longer
+      // read-and-react window instead of routine turn pacing.
+      const pendingChallengeForHuman =
+        psBeforeWait.lastPlacement !== null &&
+        psBeforeWait.lastPlacement.challengeable &&
+        psBeforeWait.lastPlacement.by !== botId &&
+        psBeforeWait.turn.playerOrder.some((pid) => !scrabbleBotSeatsRef.current.has(pid))
       const holdRemaining = scrabbleBotsHeldUntilRef.current - Date.now()
-      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
+      await wait(holdRemaining > 0 ? holdRemaining : pendingChallengeForHuman ? SCRABBLE_CHALLENGE_WINDOW_MS : BASE_MS)
       if (scrabbleStale(key)) return
       if (Date.now() < scrabbleBotsHeldUntilRef.current) continue
       const session = scrabbleSessionRef.current!
@@ -4379,7 +4403,19 @@ export default function App() {
       const session = scrabbleSessionRef.current
       if (!session) return
       const result = applyScrabbleAction(session, scrabbleLocalPlayerId, action, scrabbleDictionaryRef.current)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        scrabbleRejectionNoticeRef.current = reason
+        setScrabbleNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same
+      // function set -- don't stomp an unrelated notice (e.g. a disconnect
+      // banner) that may have arrived since.
+      if (scrabbleNotice !== null && scrabbleNotice === scrabbleRejectionNoticeRef.current) {
+        setScrabbleNotice(null)
+      }
+      scrabbleRejectionNoticeRef.current = null
       scrabbleSessionRef.current = result.session
       scrabbleBroadcast()
       runScrabbleBotsIfNeeded()
@@ -4391,7 +4427,7 @@ export default function App() {
   function scrabbleRematch() {
     if (scrabbleRole !== 'host' || !scrabbleSessionRef.current) return
     const ps = scrabbleSessionRef.current.session.publicState
-    if (ps.stage !== 'over' || ps.winnerId === null) return
+    if (ps.stage !== 'over') return
     const prevRevision = scrabbleSessionRef.current.session.revision
     const playerIds = [...ps.turn.playerOrder]
     const seed = Math.floor(Math.random() * 2147483647)

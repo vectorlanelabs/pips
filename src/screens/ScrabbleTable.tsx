@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ScrabblePublicState, ScrabbleTile } from '../board-games/scrabble/state'
+import { LETTER_POINTS, type ScrabblePublicState, type ScrabbleTile } from '../board-games/scrabble/state'
 import { premiumAt } from '../board-games/scrabble/board'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
@@ -67,15 +67,12 @@ function computeEventLine(
 }
 
 function computePromptLine(
-  publicState: ScrabblePublicState,
-  localPlayerId: string,
   isMyTurn: boolean,
   hasStagedTiles: boolean,
   canPlayWord: boolean,
 ): string {
   if (!isMyTurn) {
-    const currentId = currentPlayer(publicState.turn)
-    return currentId === localPlayerId ? 'Your move…' : 'Their move…'
+    return 'Their move…'
   }
 
   if (hasStagedTiles) {
@@ -104,8 +101,7 @@ export function ScrabbleTable({
   onChallenge,
   onLeave,
 }: ScrabbleTableProps) {
-  void localName // preserved in props for future wiring
-  void connection // preserved in props for future wiring
+  void localName // preserved in props for future wiring (matches RummyTable's identical M4b-deferred pattern)
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [showIntro, setShowIntro] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -123,6 +119,14 @@ export function ScrabbleTable({
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && publicState.stage === 'play'
   const opponentIds = publicState.turn.playerOrder.filter((id) => id !== localPlayerId)
+
+  // Sorted for display only (dealt/refill order is otherwise meaningless to
+  // the player, and every other card game in this app sorts the hand).
+  // Selection/staging key off tile.id, not array position, so this is safe.
+  const sortedRack = useMemo(
+    () => [...myRack].sort((a, b) => a.letter.localeCompare(b.letter)),
+    [myRack],
+  )
 
   // Deal intro on mount only (when board is empty)
   useEffect(() => {
@@ -294,17 +298,18 @@ export function ScrabbleTable({
   const promptLine = useMemo(
     () =>
       computePromptLine(
-        publicState,
-        localPlayerId,
         isMyTurn,
         stagedPlacements.length > 0,
         canPlayWord,
       ),
-    [publicState, localPlayerId, isMyTurn, stagedPlacements, canPlayWord],
+    [isMyTurn, stagedPlacements, canPlayWord],
   )
 
   // Render the board
   const boardCells = useMemo(() => {
+    const lastMoveCells = new Set(
+      publicState.lastPlacement?.tiles.map((t) => `${t.row}-${t.col}`) ?? [],
+    )
     const cells = []
     for (let row = 0; row < 15; row++) {
       for (let col = 0; col < 15; col++) {
@@ -313,19 +318,20 @@ export function ScrabbleTable({
         const blank = blankAssignments.find((a) => a.tileId === staged?.tileId)
         const premium = premiumAt(row, col)
         const isCenter = row === 7 && col === 7
+        const isLastMove = lastMoveCells.has(`${row}-${col}`)
 
-        cells.push({ row, col, cell, staged, blank, premium, isCenter })
+        cells.push({ row, col, cell, staged, blank, premium, isCenter, isLastMove })
       }
     }
     return cells
-  }, [publicState.board, stagedPlacements, blankAssignments])
+  }, [publicState.board, publicState.lastPlacement, stagedPlacements, blankAssignments])
 
   return (
     <div className="scr-table">
       <TableHeader
         gameLabel="Scrabble"
         gameColor={BRAND}
-        meta={`${code} · ${publicState.turn.playerOrder.length} players`}
+        meta={connection === 'connected' ? `${code} · ${publicState.turn.playerOrder.length} players` : 'connection lost'}
         onRules={() => setRulesOpen(true)}
         onLeave={onLeave}
         enabled={enabled}
@@ -354,7 +360,7 @@ export function ScrabbleTable({
             {/* Board (left column on wide viewports) */}
             <div className="scr-board-col">
               <div className="scr-board">
-                {boardCells.map(({ row, col, cell, staged, premium, isCenter }) => (
+                {boardCells.map(({ row, col, cell, staged, premium, isCenter, isLastMove }) => (
                   <div
                     key={`${row}-${col}`}
                     className={`scr-board-cell${
@@ -370,7 +376,7 @@ export function ScrabbleTable({
                           (cell?.isBlank || (staged && myRack.find((t) => t.id === staged.tileId)?.letter === ''))
                             ? ' scr-tile-face--blank'
                             : ''
-                        }`}
+                        }${isLastMove && !staged ? ' scr-tile-face--last-move' : ''}`}
                       >
                         {(cell?.letter || staged?.letter || '').toUpperCase()}
                         <span className="scr-tile-points">
@@ -380,11 +386,7 @@ export function ScrabbleTable({
                               return tile?.points ?? 0
                             }
                             return cell?.letter
-                              ? {
-                                  A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
-                                  K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
-                                  U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
-                                }[cell.letter] ?? 0
+                              ? LETTER_POINTS[cell.letter] ?? 0
                               : 0
                           })()}
                         </span>
@@ -451,7 +453,7 @@ export function ScrabbleTable({
                   </span>
                 </div>
                 <div className="scr-hand-row">
-                  {myRack.map((tile) => {
+                  {sortedRack.map((tile) => {
                     const isSelected = selectedTileId === tile.id
                     const isStaged = stagedPlacements.some((p) => p.tileId === tile.id)
                     const isExchangeSelected = selectedExchangeTileIds.has(tile.id)

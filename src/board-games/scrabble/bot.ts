@@ -1,5 +1,5 @@
 import type { BotStrategy } from '../../engine/bot.ts'
-import type { ScrabbleAction, ScrabblePrivateState, ScrabblePublicState } from './state.ts'
+import { LETTER_POINTS, type ScrabbleAction, type ScrabblePrivateState, type ScrabblePublicState } from './state.ts'
 import type { ScrabbleDictionary } from './dictionary.ts'
 import type { BotDifficulty } from '../../types.ts'
 
@@ -162,11 +162,11 @@ function generateMovesForAnchor(
 
   // Try horizontal placements through this anchor
   const hMoves = generateMovesInDirection(row, col, rack, board, dictionary, true, permutationCache, searchStartTime, budgetMs)
-  moves.push(...hMoves)
+  for (const move of hMoves) moves.push(move)
 
   // Try vertical placements through this anchor
   const vMoves = generateMovesInDirection(row, col, rack, board, dictionary, false, permutationCache, searchStartTime, budgetMs)
-  moves.push(...vMoves)
+  for (const move of vMoves) moves.push(move)
 
   return moves
 }
@@ -178,7 +178,8 @@ function generateMovesForAnchor(
  * to fill empty slots, validates blanks against dictionary, and checks cross-words.
  * Permutation bound is reasonable since rack size ≤ 7 (7! = 5040 max per anchor/dir).
  *
- * Time budget is checked at the top of each word-length iteration to prevent
+ * Time budget is checked at the top of each word-length iteration AND inside
+ * generateValidPermutations (at the top of each rack permutation) to prevent
  * a single anchor from exceeding the search budget.
  */
 function generateMovesInDirection(
@@ -257,9 +258,16 @@ function generateMovesInDirection(
         dictionary,
         isHorizontal,
         permutationCache,
+        searchStartTime,
+        budgetMs,
       )
 
-      results.push(...validPlacements)
+      // Accumulate one element at a time: spreading a huge validPlacements
+      // array (tens/hundreds of thousands of entries with blank tiles on a
+      // dense board) blows the call stack via Function.prototype.apply.
+      for (const placement of validPlacements) {
+        results.push(placement)
+      }
     }
   }
 
@@ -275,6 +283,12 @@ function generateMovesInDirection(
  *
  * Uses permutationCache to avoid recomputing the same rack permutations
  * multiple times within a single bot strategy call.
+ *
+ * Time budget is checked at the top of each permutation iteration: this is
+ * where the real cost lives (every cached rack permutation × every blank
+ * letter combination does a dictionary lookup + cross-word validation), so
+ * without a check here a single anchor/word-length pair can run far past
+ * the search budget. Returns partial results if the budget is exceeded.
  */
 function generateValidPermutations(
   rack: RackTile[],
@@ -284,6 +298,8 @@ function generateValidPermutations(
   dictionary: ScrabbleDictionary,
   isHorizontal: boolean,
   permutationCache: Map<number, RackTile[][]>,
+  searchStartTime: number,
+  budgetMs: number,
 ): PlacedTile[][] {
   const validPlacements: PlacedTile[][] = []
 
@@ -297,6 +313,13 @@ function generateValidPermutations(
   }
 
   for (const permutation of permutations) {
+    // Check time budget at the top of each permutation — the tightest loop
+    // granularity that matters, since this is where the search cost actually
+    // lives (each permutation fans out into up to ~100 blank letter combos,
+    // each with a dictionary lookup + cross-word validation).
+    if (performance.now() - searchStartTime > budgetMs) {
+      break // Time budget exceeded, return what we've found so far
+    }
     if (permutation.length < emptySlots.length) continue
 
     // Identify which slots have blanks (need multiple letter assignments)
@@ -592,10 +615,5 @@ function calculatePlacementScore(
 }
 
 function getLetterPoints(letter: string): number {
-  const points: Record<string, number> = {
-    A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
-    K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
-    U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
-  }
-  return points[letter] ?? 0
+  return LETTER_POINTS[letter] ?? 0
 }
