@@ -2,15 +2,26 @@
 
 Charter: Blackjack + Texas Hold'em — see `CHARTER.md`.
 
-## Charter: Blackjack + Texas Hold'em (2026-08-23) — in progress
+## Charter: Blackjack + Texas Hold'em (2026-08-23) — done
 
-Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
-(branch `worktree-poker-blackjack-loop`) per user instruction.
-
-## Next up
-1. M5 — Hold'em wiring (spec 57) — final milestone
+**Charter complete.** Both Blackjack (2-6 players, vs. the house) and
+Texas Hold'em (2-8 players, no-limit cash game) are fully playable end
+to end — engine, screens, and wiring for both, live-verified in a real
+browser at each game's max seat count. Running in isolated worktree
+`.claude/worktrees/poker-blackjack-loop` (branch
+`worktree-poker-blackjack-loop`) per explicit user instruction.
+Uncommitted to `main`/`origin` — pending the user's explicit "push".
 
 ## Done
+- [cycle 8] M5 — Hold'em wiring (spec 57): App.tsx per-guest sendTo
+  broadcast (privacy-correct, not Blackjack's single-broadcast
+  shortcut), single-current-player bot loop, route/Landing/README.
+  Found and fixed a permanent-hang risk (bot strategy could propose an
+  illegal re-raise; fixed at the source plus a wiring-level fallback-
+  to-fold safety net). **Full live playthrough at a maxed 8-seat table**:
+  multiple hands, correct betting/privacy/side-pot payout/hand
+  advancement, zero errors, bot pacing measured at 845-951ms gaps
+  (matches BASE_MS). 1398 tests / tsc / build clean.
 - [cycle 7] M4 — Hold'em screens (spec 56): Room/Table/Board/
   RulesOverlay, correct private-hand rendering (mirrors Rummy, not
   Blackjack). One severe bug found and fixed: the action area made

@@ -4606,3 +4606,38 @@ shipping each verified charter promptly.
   pacing) is the last remaining step before the charter's definition
   of done is actually met.
 - **Continue?** Yes — live verification next.
+
+## Cycle 8 (continued) — full live verification, charter complete
+- **Live playthrough** (real, non-headless Chromium via the same
+  ad-hoc Playwright script pattern used for Blackjack — the MCP
+  browser tab's `document.visibilityState` is still stuck `'hidden'`
+  in this environment): hosted an 8-seat table (host + 7 bots, the
+  charter's max), played through multiple full hands end to end —
+  betting (check/call/fold all worked, including the just-fixed
+  action-area gating), private hole cards confirmed correct live (only
+  the host's own 2 cards ever appeared in the page's own text/DOM;
+  every other seat showed face-down backs, consistent with the
+  engine's privacy fix holding all the way through to the rendered
+  page), a genuine side-pot hand resolved correctly ("Zeke wins 80" +
+  "Zeke wins 60" — two separate pot-breakdown awards to the same
+  player, exactly the shape a main-pot-plus-side-pot win should
+  produce), "Deal next hand" correctly advanced to a fresh hand with a
+  new deal. Zero console/page errors across the whole run.
+- **Bot pacing measured directly** (host folded immediately to isolate
+  bot-vs-bot timing, then polled the active-turn indicator every
+  100ms): consecutive bot-action gaps of 951/845/949/947ms — matching
+  the intended `BASE_MS` (900ms) pacing at the charter's maxed 8-seat/
+  7-bot table, the exact scenario CLAUDE.md's pacing section calls out
+  as the one that actually matters.
+- **Charter definition of done: met.** Both Blackjack (M0-M2) and Texas
+  Hold'em (M3-M5) are fully built, tested (1398 tests, tsc, build all
+  clean), adversarially reviewed at every stage (this charter's total
+  bug count across both games: Blackjack found 3 real bugs before
+  landing plus the severe post-landing payout bug found only by live
+  play; Hold'em found 6 real bugs across engine/screens/wiring,
+  including a critical privacy leak and a permanent-hang risk, several
+  of which needed the lead to personally intervene after a delegated
+  fix round introduced a NEW regression), and live-verified end to end
+  in a real browser. Nothing has been merged to `main` or pushed —
+  awaiting the user's explicit "push" per this project's standing git
+  workflow, unchanged by running in an isolated worktree.
