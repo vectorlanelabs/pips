@@ -767,6 +767,80 @@ describe('Scrabble regression tests', () => {
       expect(bagCountAfterChallenge).toBe(initialBagCount)
     }
   })
+
+  it('[Bug 6] skips the failed challenger\'s next turn when they are the current player', () => {
+    // p1 places a VALID word (per mockDictionary), so p2's challenge fails.
+    let game = createScrabbleGame(['p1', 'p2'], 42)
+    game.session.privateStates.p1.rack.cards = [
+      { id: 'c1', letter: 'C', points: 3 },
+      { id: 'c2', letter: 'A', points: 1 },
+      { id: 'c3', letter: 'T', points: 1 },
+    ]
+    const placeResult = applyScrabbleAction(
+      game,
+      'p1',
+      {
+        type: 'PLACE_WORD',
+        tiles: [
+          { tileId: 'c1', row: 7, col: 6, letter: 'C' },
+          { tileId: 'c2', row: 7, col: 7, letter: 'A' },
+          { tileId: 'c3', row: 7, col: 8, letter: 'T' },
+        ],
+      },
+      mockDictionary,
+    )
+    expect(placeResult.outcome.ok).toBe(true)
+    game = placeResult.session
+
+    // Turn is now p2's (the only other player) -- p2 challenges and is wrong.
+    expect(currentPlayer(game.session.publicState.turn)).toBe('p2')
+    const challengeResult = applyScrabbleAction(game, 'p2', { type: 'CHALLENGE' }, mockDictionary)
+    expect(challengeResult.outcome.ok).toBe(true)
+    if (!challengeResult.outcome.ok) return
+
+    // p2 (the challenger, who was also the current player) is skipped: with
+    // only 2 players, skipping p2's turn lands back on p1.
+    expect(currentPlayer(challengeResult.session.session.publicState.turn)).toBe('p1')
+  })
+
+  it('[Bug 6] does not skip an unrelated player\'s turn when a non-current player challenges out of turn and is wrong', () => {
+    // CHALLENGE is intentionally not turn-gated, so in a 3+ player game a
+    // player who ISN'T up next can still challenge. If they're wrong, the
+    // penalty must not fall on whichever unrelated player actually is next --
+    // that player did nothing wrong and shouldn't be skipped in their place.
+    let game = createScrabbleGame(['p1', 'p2', 'p3'], 42)
+    game.session.privateStates.p1.rack.cards = [
+      { id: 'c1', letter: 'C', points: 3 },
+      { id: 'c2', letter: 'A', points: 1 },
+      { id: 'c3', letter: 'T', points: 1 },
+    ]
+    const placeResult = applyScrabbleAction(
+      game,
+      'p1',
+      {
+        type: 'PLACE_WORD',
+        tiles: [
+          { tileId: 'c1', row: 7, col: 6, letter: 'C' },
+          { tileId: 'c2', row: 7, col: 7, letter: 'A' },
+          { tileId: 'c3', row: 7, col: 8, letter: 'T' },
+        ],
+      },
+      mockDictionary,
+    )
+    expect(placeResult.outcome.ok).toBe(true)
+    game = placeResult.session
+
+    // Turn is now p2's. p3 (not the current player) challenges out of turn
+    // and is wrong (CAT is a valid word per mockDictionary).
+    expect(currentPlayer(game.session.publicState.turn)).toBe('p2')
+    const challengeResult = applyScrabbleAction(game, 'p3', { type: 'CHALLENGE' }, mockDictionary)
+    expect(challengeResult.outcome.ok).toBe(true)
+    if (!challengeResult.outcome.ok) return
+
+    // p2 did nothing wrong and must still be the current player -- the
+    // turn pointer is untouched by p3's out-of-turn wrong challenge.
+    expect(currentPlayer(challengeResult.session.session.publicState.turn)).toBe('p2')
+  })
 })
 
 // ---------------------------------------------------------------------------

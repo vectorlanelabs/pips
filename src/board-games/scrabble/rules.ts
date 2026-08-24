@@ -1,7 +1,7 @@
 import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
-import { advanceTurn, currentPlayer, skipNext } from '../../engine/turn-engine.ts'
+import { advanceTurn, currentPlayer } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, addCards, cardCount, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
 import { premiumAt } from './board.ts'
@@ -347,12 +347,24 @@ function makeValidator(
           },
         }
       } else {
-        // Challenge fails: skip challenger's next turn
+        // Challenge fails: the challenger's own pending turn is forfeit.
+        // currentIndex points at whoever's real turn is next to be taken
+        // (CHALLENGE doesn't consume it -- a successful challenge leaves
+        // `turn` untouched precisely because the challenger still gets to
+        // act). When the challenger IS that pending player, a single
+        // advanceTurn correctly moves past them to the next player -- that
+        // single step IS the penalty. skipNext would be wrong here: its
+        // real, tested semantics (see turn-engine.test.ts) are "skip the
+        // player AFTER the current one," which would skip an unrelated
+        // third player while leaving the challenger's own turn untouched.
+        // CHALLENGE is deliberately not turn-gated (see above), so a
+        // non-current player can challenge out of turn; they have no
+        // pending turn to forfeit, so nothing to skip -- leave turn as is.
         return {
           ok: true,
           publicState: {
             ...publicState,
-            turn: skipNext(publicState.turn, 'play'),
+            turn: playerId === currentPlayer(publicState.turn) ? advanceTurn(publicState.turn, 'play') : publicState.turn,
             lastPlacement: { ...publicState.lastPlacement, challengeable: false },
           },
           privateStates,
