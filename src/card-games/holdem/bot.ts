@@ -90,14 +90,20 @@ export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateStat
         return { type: 'CHECK' }
       }
 
-      if (strength === 'premium') {
+      if (strength === 'premium' && publicState.reRaiseEligible[playerId]) {
         // Raise by at least the legal minimum increment (not a flat BB -- a
         // prior raise may have set a larger lastFullRaiseIncrement, and
         // raising by less than that would be rejected by the validator).
+        // Only attempted when reRaiseEligible: a bot that already acted since
+        // the last full raise (only a short all-in has happened since) is not
+        // allowed to re-raise -- the validator would reject it every time,
+        // and since this strategy is deterministic, a caller that blindly
+        // retries a rejected action would retry the identical rejected
+        // action forever, permanently hanging the bot's turn.
         const minIncrement = Math.max(publicState.lastFullRaiseIncrement, HOLDEM_BIG_BLIND)
         const raiseAmount = Math.min(currentBet + minIncrement, playerChips + playerBetThisStreet)
         return { type: 'RAISE', amount: raiseAmount }
-      } else if (strength === 'good') {
+      } else if (strength === 'premium' || strength === 'good') {
         // Call
         return { type: 'CALL' }
       } else {

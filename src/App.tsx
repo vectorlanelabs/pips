@@ -120,6 +120,13 @@ import { blackjackBotStrategy } from './card-games/blackjack/bot'
 import { BlackjackTable } from './screens/BlackjackTable'
 import { BlackjackRoom } from './screens/BlackjackRoom'
 
+// ---- Texas Hold'em (separate parallel session, per CHARTER.md resolution #7) ----
+import { createHoldemGame, HOLDEM_MAX_SEATS, HOLDEM_MIN_SEATS, type HoldemSession, type HoldemPublicState, type HoldemPrivateState, type HoldemAction } from './card-games/holdem/state'
+import { applyHoldemAction, runHoldemBotTurn } from './card-games/holdem/rules'
+import { holdemBotStrategy } from './card-games/holdem/bot'
+import { HoldemTable } from './screens/HoldemTable'
+import { HoldemRoom } from './screens/HoldemRoom'
+
 // ---- Solitaire (single-player local session) ----
 import { createSolitaireGame, type SolitaireState, type SolitaireMode, type SolitaireMove } from './card-games/solitaire/state'
 import { applyAnyMove as applySolitaireMove } from './card-games/solitaire/dispatch'
@@ -163,6 +170,9 @@ type SkipBoView =
 type BlackjackView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: BlackjackPublicState; names: Record<string, string> }
+type HoldemView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
+  | { kind: 'game'; revision: number; publicState: HoldemPublicState; privateState: HoldemPrivateState; names: Record<string, string> }
 type ScrabbleView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
   | { kind: 'game'; revision: number; publicState: ScrabblePublicState; rack: ScrabbleTile[]; names: Record<string, string> }
@@ -346,6 +356,16 @@ export default function App() {
   const [blackjackStarted, setBlackjackStarted] = useState(false)
   const [blackjackSeats, setBlackjackSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
+  // ---- Texas Hold'em ----
+  const [holdemRole, setHoldemRole] = useState<'host' | 'guest' | null>(null)
+  const [holdemCode, setHoldemCode] = useState('')
+  const [holdemLocalPlayerId, setHoldemLocalPlayerId] = useState<string | null>(null)
+  const [holdemView, setHoldemView] = useState<HoldemView | null>(null)
+  const [holdemConnection, setHoldemConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [holdemNotice, setHoldemNotice] = useState<string | null>(null)
+  const [holdemStarted, setHoldemStarted] = useState(false)
+  const [holdemSeats, setHoldemSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
   // ---- Solitaire ----
   const [solitaireOpen, setSolitaireOpen] = useState(false)
   const [solitaireMode, setSolitaireMode] = useState<SolitaireMode>('klondike')
@@ -486,6 +506,17 @@ export default function App() {
   const blackjackNamesRef = useRef<Record<string, string>>({})
   const blackjackBotSeatsRef = useRef<Set<string>>(new Set())
   const blackjackBotCounterRef = useRef(0)
+  const holdemSessionRef = useRef<HoldemSession | null>(null)
+  const holdemHostRef = useRef<HostHandle<HoldemView> | null>(null)
+  const holdemGuestRef = useRef<GuestHandle<HoldemAction> | null>(null)
+  const holdemBotBusyRef = useRef(false)
+  const holdemLocalPlayerIdRef = useRef<string | null>(null)
+  const holdemSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const holdemStartedRef = useRef(false)
+  const holdemNamesRef = useRef<Record<string, string>>({})
+  const holdemBotSeatsRef = useRef<Set<string>>(new Set())
+  const holdemBotCounterRef = useRef(0)
+  const holdemCardBackRef = useRef(savedCardBack())
   const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
   const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
   const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
@@ -528,6 +559,10 @@ export default function App() {
     unoGuestRef.current?.destroy()
     skipBoHostRef.current?.destroy()
     skipBoGuestRef.current?.destroy()
+    blackjackHostRef.current?.destroy()
+    blackjackGuestRef.current?.destroy()
+    holdemHostRef.current?.destroy()
+    holdemGuestRef.current?.destroy()
     scrabbleHostRef.current?.destroy()
     scrabbleGuestRef.current?.destroy()
   }, [])
@@ -970,6 +1005,28 @@ export default function App() {
     blackjackBotSeatsRef.current.clear()
     blackjackBotCounterRef.current = 0
     blackjackNamesRef.current = {}
+    // Card back deliberately survives a reset — it's the host's saved preference.
+    // Texas Hold'em
+    holdemHostRef.current?.destroy()
+    holdemHostRef.current = null
+    holdemGuestRef.current?.destroy()
+    holdemGuestRef.current = null
+    holdemSessionRef.current = null
+    setHoldemRole(null)
+    setHoldemCode('')
+    setHoldemLocalPlayerId(null)
+    holdemLocalPlayerIdRef.current = null
+    setHoldemView(null)
+    setHoldemConnection('connected')
+    setHoldemNotice(null)
+    setHoldemStarted(false)
+    holdemStartedRef.current = false
+    setHoldemSeats([])
+    holdemSeatsRef.current = []
+    holdemBotBusyRef.current = false
+    holdemBotSeatsRef.current.clear()
+    holdemBotCounterRef.current = 0
+    holdemNamesRef.current = {}
     // Card back deliberately survives a reset — it's the host's saved preference.
     // Solitaire
     setSolitaireOpen(false)
@@ -1593,6 +1650,244 @@ export default function App() {
   }
 
   // ---- End Blackjack helpers ----
+
+  // ---- Texas Hold'em helpers ----
+
+  function holdemActorKey(session: HoldemSession): string {
+    const ps = session.session.publicState
+    // Key on hand number, street, and current player index to detect state changes
+    return `${ps.handNumber}:${ps.turn.phase}:${ps.turn.currentIndex}:${ps.pot}`
+  }
+
+  function holdemStale(key: string): boolean {
+    return !holdemSessionRef.current || holdemActorKey(holdemSessionRef.current) !== key
+  }
+
+  function holdemBroadcast() {
+    if (!holdemStartedRef.current) {
+      const view: HoldemView = {
+        kind: 'lobby',
+        roster: holdemSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerIdRef.current })),
+        cardBack: holdemCardBackRef.current,
+      }
+      setHoldemView(view)
+      holdemHostRef.current?.broadcast(view)
+      return
+    }
+    const session = holdemSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, holdemLocalPlayerIdRef.current!)
+    setHoldemView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      privateState: hostSnap.privateState!,
+      names: { ...holdemNamesRef.current },
+    })
+    const names = { ...holdemNamesRef.current }
+    for (const seat of holdemSeatsRef.current) {
+      if (seat.playerId === holdemLocalPlayerIdRef.current) continue
+      if (holdemBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      holdemHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        privateState: guestSnap.privateState!,
+        names,
+      })
+    }
+  }
+
+  function startHoldemHost() {
+    setError(null)
+    holdemHostRef.current = createHost<HoldemView, HoldemAction>(() => `HE-${generateCode()}`, {
+      onReady(code) {
+        const hostId = peerIdForCode(code)
+        setHoldemRole('host')
+        writeNameCookie(name)
+        pushGameUrl('holdem')
+        setHoldemCode(code)
+        setHoldemLocalPlayerId(hostId)
+        holdemLocalPlayerIdRef.current = hostId
+        setHoldemStarted(false)
+        holdemStartedRef.current = false
+        setHoldemSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        holdemSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setHoldemNotice(null)
+        holdemBroadcast()
+      },
+      onJoin(guestId, guestName) {
+        if (holdemStartedRef.current) {
+          holdemHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (holdemSeatsRef.current.length >= HOLDEM_MAX_SEATS) {
+          holdemHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        holdemSeatsRef.current = [...holdemSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setHoldemSeats(holdemSeatsRef.current)
+        holdemBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!holdemStartedRef.current) return
+        const session = holdemSessionRef.current
+        if (!session) return
+        if (!holdemSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyHoldemAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        holdemSessionRef.current = result.holdemSession
+        holdemBroadcast()
+      },
+      onLeave(guestId) {
+        if (!holdemStartedRef.current) {
+          holdemSeatsRef.current = holdemSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setHoldemSeats(holdemSeatsRef.current)
+          holdemBroadcast()
+          return
+        }
+        const seat = holdemSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setHoldemNotice(`${seat.name} disconnected.`)
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addHoldemHouseBot() {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    if (holdemSeatsRef.current.length >= HOLDEM_MAX_SEATS) return
+    holdemBotCounterRef.current += 1
+    const botId = `bot-${holdemBotCounterRef.current}`
+    const botName = randomBotName(holdemSeatsRef.current.map((s) => s.name))
+    holdemSeatsRef.current = [...holdemSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setHoldemSeats(holdemSeatsRef.current)
+    holdemBotSeatsRef.current.add(botId)
+    holdemBroadcast()
+  }
+
+  function holdemStart() {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    const seats = holdemSeatsRef.current
+    if (seats.length < HOLDEM_MIN_SEATS || seats.length > HOLDEM_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
+    const seed = Math.floor(Math.random() * 2147483647)
+    holdemSessionRef.current = createHoldemGame(playerIds, seed, holdemCardBackRef.current)
+    holdemNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    holdemStartedRef.current = true
+    setHoldemStarted(true)
+    holdemBroadcast()
+  }
+
+  async function runHoldemBot(botId: string, key: string) {
+    while (!holdemStale(key)) {
+      await wait(BASE_MS)
+      if (holdemStale(key)) return
+      const session = holdemSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.handOver || ps.gameOverWinnerId) return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!holdemBotSeatsRef.current.has(botId)) return
+      const result = runHoldemBotTurn(session, botId, holdemBotStrategy)
+      if (result.outcome.ok) {
+        holdemSessionRef.current = result.holdemSession
+        holdemBroadcast()
+        continue
+      }
+      // The strategy's chosen action was rejected by the validator. This
+      // should not happen (the strategy is written to only propose legal
+      // actions), but the strategy is deterministic -- if it did happen and
+      // we just gave up, the next retry would derive the identical action
+      // from the identical state and be rejected again, forever, hanging
+      // this bot's turn permanently. Fall back to FOLD, which is always
+      // legal whenever it's genuinely this seat's turn.
+      const foldResult = applyHoldemAction(session, botId, { type: 'FOLD' })
+      if (!foldResult.outcome.ok) return
+      holdemSessionRef.current = foldResult.holdemSession
+      holdemBroadcast()
+    }
+  }
+
+  async function runHoldemBotsIfNeeded() {
+    if (holdemBotBusyRef.current) return
+    const session = holdemSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.handOver || ps.gameOverWinnerId) return
+    const currentId = currentPlayer(ps.turn)
+    if (!holdemBotSeatsRef.current.has(currentId)) return
+    holdemBotBusyRef.current = true
+    const key = holdemActorKey(session)
+    try {
+      await runHoldemBot(currentId, key)
+    } finally {
+      holdemBotBusyRef.current = false
+      setTimeout(() => runHoldemBotsIfNeeded(), 50)
+    }
+  }
+
+  function startHoldemGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<HoldemView, HoldemAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setHoldemView(view)
+          setHoldemStarted(false)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setHoldemView(view)
+        setHoldemStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setHoldemConnection('connected')
+      },
+      onDisconnected() {
+        setHoldemConnection('disconnected')
+      },
+    })
+    holdemGuestRef.current = handle
+    setHoldemRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('holdem')
+    setHoldemCode(code)
+    handle.peerId.then((id) => { setHoldemLocalPlayerId(id); holdemLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function holdemDispatch(action: HoldemAction) {
+    if (holdemRole === 'host' && holdemLocalPlayerId) {
+      const session = holdemSessionRef.current
+      if (!session) return
+      const result = applyHoldemAction(session, holdemLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      holdemSessionRef.current = result.holdemSession
+      holdemBroadcast()
+    } else if (holdemRole === 'guest') {
+      holdemGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function holdemSetCardBack(id: string) {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    holdemCardBackRef.current = id
+    setHoldemView(null)
+    holdemBroadcast()
+  }
+
+  // ---- End Texas Hold'em helpers ----
 
   // ---- End Rummy helpers ----
 
@@ -3541,6 +3836,7 @@ export default function App() {
   // Seat inks: same 4-entry palette as Rummy (Skip-Bo also caps at 4 seats).
   const SKIPBO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
   const BLACKJACK_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0']
+  const HOLDEM_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0', '#ec4899', '#06b6d4']
   const SCRABBLE_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
 
   // The actor key must re-key on any field that can change within the SAME
@@ -4475,11 +4771,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blackjackRole, blackjackView])
 
+  // Bot turn trigger for Hold'em (single current-player pattern like Rummy)
+  useEffect(() => {
+    if (holdemRole !== 'host' || !holdemView || holdemView.kind !== 'game') return
+    runHoldemBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdemRole, holdemView])
+
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Blackjack, Solitaire, and Scrabble are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !blackjackRole && !solitaireOpen && !scrabbleRole) {
+  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, Blackjack, Hold'em, Solitaire, and Scrabble are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !blackjackRole && !holdemRole && !solitaireOpen && !scrabbleRole) {
     return (
       <Landing
         name={name}
@@ -4499,6 +4802,7 @@ export default function App() {
           else if (code.startsWith('UN-')) startUnoGuest(code)
           else if (code.startsWith('SB-')) startSkipBoGuest(code)
           else if (code.startsWith('BK-')) startBlackjackGuest(code)
+          else if (code.startsWith('HE-')) startHoldemGuest(code)
           else if (code.startsWith('SCR-')) startScrabbleGuest(code)
           else startGuest(code)
         }}
@@ -4514,6 +4818,7 @@ export default function App() {
         onPickUno={startUnoHost}
         onPickSkipBo={startSkipBoHost}
         onPickBlackjack={startBlackjackHost}
+        onPickHoldem={startHoldemHost}
         onPickSolitaire={startSolitaire}
         onPickScrabble={startScrabbleHost}
         error={error}
@@ -5397,6 +5702,54 @@ export default function App() {
         onDouble={() => blackjackDispatch({ type: 'DOUBLE' })}
         onSplit={() => blackjackDispatch({ type: 'SPLIT' })}
         onStartNextRound={() => blackjackDispatch({ type: 'START_NEXT_ROUND' })}
+        onLeaveTable={resetToEntry}
+      />
+    )
+  }
+
+  // Hold'em lobby
+  if (holdemRole && !holdemStarted) {
+    const roster = holdemRole === 'host'
+      ? holdemSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerId }))
+      : (holdemView?.kind === 'lobby' ? holdemView.roster : [])
+    const viewCardBack = holdemRole === 'host'
+      ? holdemCardBackRef.current
+      : (holdemView?.kind === 'lobby' ? holdemView.cardBack : DEFAULT_CARD_BACK)
+    return (
+      <HoldemRoom
+        code={holdemCode}
+        localName={name}
+        isHost={holdemRole === 'host'}
+        seats={roster}
+        notice={holdemNotice ?? error}
+        cardBack={viewCardBack}
+        onSelectCardBack={holdemSetCardBack}
+        onAddHouseBot={addHoldemHouseBot}
+        onStartGame={holdemStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Hold'em table (active game)
+  if (holdemView?.kind === 'game' && holdemLocalPlayerId) {
+    const holdemColors = Object.fromEntries(holdemView.publicState.seatOrder.map((id, i) => [id, HOLDEM_SEAT_INKS[i]]))
+    return (
+      <HoldemTable
+        code={holdemCode}
+        localPlayerId={holdemLocalPlayerId}
+        names={holdemView.names}
+        colors={holdemColors}
+        connection={holdemConnection}
+        notice={holdemNotice ?? error}
+        publicState={holdemView.publicState}
+        privateState={holdemView.privateState}
+        onFold={() => holdemDispatch({ type: 'FOLD' })}
+        onCheck={() => holdemDispatch({ type: 'CHECK' })}
+        onCall={() => holdemDispatch({ type: 'CALL' })}
+        onBet={(amount) => holdemDispatch({ type: 'BET', amount })}
+        onRaise={(amount) => holdemDispatch({ type: 'RAISE', amount })}
+        onStartNextHand={() => holdemDispatch({ type: 'START_NEXT_HAND' })}
         onLeaveTable={resetToEntry}
       />
     )

@@ -4569,3 +4569,40 @@ shipping each verified charter promptly.
   final milestone. Live browser verification of the full Hold'em build
   (matching the depth of Blackjack's live check, including this exact
   action-area bug class) happens once wiring makes it possible.
+
+## Cycle 8 — 2026-08-24 — spec 57 (Hold'em wiring) lands, all 6 milestones complete
+- **Shipped:** `src/App.tsx` (host/guest session, correct per-guest
+  `sendTo`/`deriveSnapshot` privacy-preserving broadcast — NOT
+  Blackjack's single-broadcast shortcut, confirmed correct by the lead
+  reading the diff directly), `src/state/route.ts`, `src/screens/
+  Landing.tsx`, `README.md`.
+- **Verification:** tsc/full-suite(1398)/build all re-run and clean.
+- **Review (lead, personally):** read the privacy-critical broadcast
+  function line by line — correct: per-guest snapshots, bot seats and
+  the host skipped appropriately, no leak. Read the bot loop and found
+  a real, narrow-but-severe risk by tracing it against an earlier,
+  deliberately-deferred gap: `holdemBotStrategy` never checked
+  `reRaiseEligible` before choosing to RAISE (noted but not fixed
+  during the spec-55 engine review, reasoned at the time to be low-
+  probability and a wiring-layer concern). Tracing the ACTUAL wiring
+  now showed the wiring does NOT handle a rejected bot action
+  gracefully — it just gives up and relies on a 50ms retry, but since
+  the bot strategy is deterministic, a retry against unchanged state
+  derives the IDENTICAL rejected action and fails again, forever,
+  permanently hanging that bot's turn (and the whole game, since
+  nothing else can happen until the current-turn seat acts). Fixed at
+  the source (`bot.ts`: a premium hand facing a bet now only raises
+  when actually `reRaiseEligible`, falling back to CALL otherwise) AND
+  added defense-in-depth in the wiring itself (`runHoldemBot`: any
+  rejected strategy action now falls back to a forced FOLD, which per
+  `rules.ts` is always legal whenever it's genuinely that seat's turn
+  — a true structural guarantee against ever hanging on an
+  unanticipated illegal-action case, not just this one instance).
+- **Landed**: commit (see git log).
+- **All 6 milestones of this charter (M0-M5) are now code-complete for
+  both games.** Full live-browser verification of Hold'em (matching
+  the depth of Blackjack's — a real multi-hand playthrough at a maxed
+  8-seat table, checking betting, privacy, showdown, payouts, bot
+  pacing) is the last remaining step before the charter's definition
+  of done is actually met.
+- **Continue?** Yes — live verification next.
