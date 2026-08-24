@@ -97,7 +97,7 @@ function initYahtzee(seats: Seat[]): YahtzeeState {
 function initTtt(seats: Seat[]): TttState {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
-  return { board: Array(9).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins }
+  return { board: Array(9).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, wins, rejection: null }
 }
 
 function initConnect4(seats: Seat[]): Connect4State {
@@ -196,7 +196,7 @@ export function applyAction(state: RoomState, action: Action, by: string): RoomS
     case 'tttPlay':
       return tttPlay(state, by, action.cell)
     case 'tttAdvanceRound':
-      return tttAdvanceRound(state)
+      return tttAdvanceRound(state, by)
     case 'connect4Play':
       return connect4Play(state, by, action.col)
     case 'connect4AdvanceRound':
@@ -373,12 +373,20 @@ function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomSt
 
 // ---------- Tic Tac Toe ----------
 
+function tttReject(state: RoomState, t: TttState, by: string, reason: string): RoomState {
+  return { ...state, ttt: { ...t, rejection: { seatId: by, reason, nonce: Date.now() } } }
+}
+
 function tttPlay(state: RoomState, by: string, cell: number): RoomState {
   if (state.screen !== 'ttt') return state
   const t = state.ttt
-  if (t.roundOver || t.board[cell] !== null) return state
+  // Malformed/crafted payloads (from a stale or hostile PeerJS client) must never reach the
+  // board index below — checked before anything else touches `board[cell]`.
+  if (!Number.isInteger(cell) || cell < 0 || cell > 8) return tttReject(state, t, by, "That's not a real square.")
+  if (t.roundOver) return tttReject(state, t, by, 'This round is already over.')
+  if (t.board[cell] !== null) return tttReject(state, t, by, 'That square is taken.')
   const seatIdx = state.seats.findIndex((s) => s.id === by)
-  if (seatIdx !== state.turnIdx) return state
+  if (seatIdx !== state.turnIdx) return tttReject(state, t, by, "It's not your turn.")
   const board = [...t.board]
   board[cell] = seatIdx
   const winLine = checkWin(board, seatIdx)
@@ -391,24 +399,28 @@ function tttPlay(state: RoomState, by: string, cell: number): RoomState {
     const pendingWinnerId = matchOver ? Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0] : null
     return {
       ...state, seats,
-      ttt: { ...t, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins },
+      ttt: { ...t, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins, rejection: null },
     }
   }
   const turnIdx = (state.turnIdx + 1) % state.seats.length
-  return { ...state, ttt: { ...t, board }, turnIdx }
+  return { ...state, ttt: { ...t, board, rejection: null }, turnIdx }
 }
 
-function tttAdvanceRound(state: RoomState): RoomState {
+// Round advancement is timer-owned (see the host's ROUND_PAUSE_MS effect in App.tsx) — it must
+// never be reachable by a guest action, or an untrusted client can skip the human-readable
+// reveal pause. `by` is checked against the seat marked isHost rather than trusting the caller.
+function tttAdvanceRound(state: RoomState, by: string): RoomState {
   if (state.screen !== 'ttt') return state
   const t = state.ttt
   if (!t.roundOver) return state
+  if (state.seats.find((s) => s.isHost)?.id !== by) return state
   if (t.pendingWinnerId) {
     return { ...state, screen: 'results', winnerId: t.pendingWinnerId }
   }
   const nextStarter = (t.starter + 1) % state.seats.length
   return {
     ...state, turnIdx: nextStarter,
-    ttt: { ...t, board: Array(9).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '' },
+    ttt: { ...t, board: Array(9).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, rejection: null },
   }
 }
 

@@ -60,10 +60,12 @@ export function Results({
   onBackToShelf: () => void
 }) {
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
   const winner = room.seats.find((s) => s.id === room.winnerId) ?? room.seats[0]
   const ranked = [...room.seats].sort((a, b) => b.score - a.score)
   const isMe = winner.id === localSeatId
+  // Only the actual winner hears the win cue — every game reaching this screen shares it,
+  // so a losing player must not get a victory sound just because someone at the table won.
+  useEffect(() => { if (isMe) play('game-win') }, [])
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

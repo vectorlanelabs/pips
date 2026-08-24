@@ -127,8 +127,12 @@ export interface TttState {
   over: boolean
   roundOver: boolean
   pendingWinnerId: string | null
-  status: string
   wins: Record<string, number>
+  // Transient feedback for a rejected tttPlay — set on the room-wide broadcast state, but
+  // only rendered by the seat named in `seatId` (see TttTable). `nonce` lets the same
+  // rejection reason fire visible feedback twice in a row (e.g. two stale clicks on the
+  // same occupied square).
+  rejection: { seatId: string; reason: string; nonce: number } | null
 }
 
 export interface Connect4State {

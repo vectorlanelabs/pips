@@ -267,6 +267,14 @@ const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
 // decide if it's real, and click a button" — this is closer to the other
 // games' read-and-react windows (YAHTZEE_ACTION_MS, MT_HORN_BUFFER_MS).
 const SCRABBLE_CHALLENGE_WINDOW_MS = 2500
+// Tic Tac Toe is strictly 2 seats (GAME_MAX_SEATS.ttt), so there's never more than one bot
+// action landing between a human's own turns — the multi-bot "fast forward" risk other games
+// guard against doesn't apply here. But drawn-x/drawn-circle (the human's own mark sound) run
+// 1.463s/1.071s (measured via afinfo), longer than bare BASE_MS (900ms). A bare BASE_MS gap
+// would let the bot's reply land — and, if that reply ends the round, start round-win on top —
+// while the human's own mark sound is still playing. TTT_ACTION_MS gives the longer of the two
+// mark sounds room to finish before the bot moves.
+const TTT_ACTION_MS = 1600
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -4631,7 +4639,7 @@ export default function App() {
 
   async function runTttBot(seatId: string, key: string) {
     const pace = roomRef.current!.botPace
-    await wait(BASE_MS * pace)
+    await wait(TTT_ACTION_MS * pace)
     if (stale(key)) return
     const state = roomRef.current!
     const me = state.seats.findIndex((s) => s.id === seatId)

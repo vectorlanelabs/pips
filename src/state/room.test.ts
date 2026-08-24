@@ -261,3 +261,121 @@ describe('connect4', () => {
     expect(room.connect4.wins).toEqual({ h1: 0, g1: 0 })
   })
 })
+
+describe('ttt', () => {
+  function tttRoom(): RoomState {
+    let room = makeRoom('TEST-5', 'ttt', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    return applyAction(room, { type: 'startGame' }, 'h1')
+  }
+
+  function play(room: RoomState, cell: number, by = room.seats[room.turnIdx].id) {
+    return applyAction(room, { type: 'tttPlay', cell }, by)
+  }
+
+  it('starts with a fresh board and alternates turns on legal plays', () => {
+    let room = tttRoom()
+    expect(room.screen).toBe('ttt')
+    expect(room.ttt.board).toEqual(Array(9).fill(null))
+    expect(room.turnIdx).toBe(0)
+    room = play(room, 0)
+    expect(room.ttt.board[0]).toBe(0)
+    expect(room.turnIdx).toBe(1)
+    room = play(room, 1)
+    expect(room.ttt.board[1]).toBe(1)
+    expect(room.turnIdx).toBe(0)
+  })
+
+  it('rejects an out-of-turn play, an occupied cell, and a play after the round is over', () => {
+    let room = tttRoom()
+    const outOfTurn = play(room, 0, 'g1')
+    expect(outOfTurn.ttt.board).toEqual(room.ttt.board)
+    expect(outOfTurn.turnIdx).toBe(room.turnIdx)
+
+    room = play(room, 0)
+    const occupied = play(room, 0, 'g1')
+    expect(occupied.ttt.board).toEqual(room.ttt.board)
+
+    const over = { ...room, ttt: { ...room.ttt, roundOver: true } }
+    const afterOver = play(over, 4, 'g1')
+    expect(afterOver.ttt.board).toEqual(over.ttt.board)
+  })
+
+  it('rejects malformed cell values (negative, 9+, fractional, NaN) without mutating the board', () => {
+    const room = tttRoom()
+    for (const cell of [-1, 9, 1.5, NaN, 100, -100]) {
+      const result = play(room, cell)
+      expect(result.ttt.board).toEqual(room.ttt.board)
+      expect(result.turnIdx).toBe(room.turnIdx)
+      expect(result.ttt.rejection?.seatId).toBe('h1')
+    }
+  })
+
+  it('detects a win, which takes precedence over a would-be full-board draw, and awards the round', () => {
+    let room = tttRoom()
+    const moves: [number, string][] = [[0, 'h1'], [3, 'g1'], [1, 'h1'], [4, 'g1'], [2, 'h1']]
+    for (const [cell, by] of moves) room = play(room, cell, by)
+    expect(room.ttt.roundOver).toBe(true)
+    expect(room.ttt.over).toBe(true)
+    expect(room.ttt.winLine).toEqual([0, 1, 2])
+    expect(room.ttt.wins).toEqual({ h1: 1, g1: 0 })
+    expect(room.seats.map((s) => s.score)).toEqual([1, 0])
+  })
+
+  it('detects a full-board draw with no winLine and no score change', () => {
+    let room = tttRoom()
+    const moves: [number, string][] = [
+      [0, 'h1'], [1, 'g1'], [2, 'h1'], [4, 'g1'], [3, 'h1'], [5, 'g1'], [7, 'h1'], [6, 'g1'], [8, 'h1'],
+    ]
+    for (const [cell, by] of moves) room = play(room, cell, by)
+    expect(room.ttt.roundOver).toBe(true)
+    expect(room.ttt.winLine).toEqual([])
+    expect(room.ttt.wins).toEqual({ h1: 0, g1: 0 })
+    expect(room.seats.map((s) => s.score)).toEqual([0, 0])
+  })
+
+  it('advancing the round is host-only — a guest action cannot skip the reveal pause', () => {
+    let room = tttRoom()
+    room = { ...room, ttt: { ...room.ttt, roundOver: true } }
+    const byGuest = applyAction(room, { type: 'tttAdvanceRound' }, 'g1')
+    expect(byGuest).toBe(room)
+
+    room = applyAction(room, { type: 'tttAdvanceRound' }, 'h1')
+    expect(room.ttt.board).toEqual(Array(9).fill(null))
+    expect(room.ttt.roundOver).toBe(false)
+    expect(room.ttt.starter).toBe(1)
+    expect(room.turnIdx).toBe(1)
+  })
+
+  it('sends the match to results once a seat reaches three wins', () => {
+    let room = tttRoom()
+    room = { ...room, ttt: { ...room.ttt, roundOver: true, pendingWinnerId: 'h1', wins: { h1: 3, g1: 0 } } }
+    room = applyAction(room, { type: 'tttAdvanceRound' }, 'h1')
+    expect(room.screen).toBe('results')
+    expect(room.winnerId).toBe('h1')
+  })
+
+  it('adds a zeroed win entry for a new seat', () => {
+    const room = addSeat(makeRoom('TEST-6', 'ttt', 'Host', 'h1'), 'g1', 'Guest', false)
+    expect(room.ttt.wins).toEqual({ h1: 0, g1: 0 })
+  })
+
+  it('names the rejected actor in the rejection notice, and clears it on the next legal play', () => {
+    let room = tttRoom()
+    room = play(room, 0, 'g1') // out of turn
+    expect(room.ttt.rejection?.seatId).toBe('g1')
+    expect(room.ttt.rejection?.reason).toBeTruthy()
+    room = play(room, 0, 'h1') // legal
+    expect(room.ttt.rejection).toBeNull()
+  })
+
+  it('keeps over and roundOver moving together through a full game', () => {
+    let room = tttRoom()
+    expect(room.ttt.over).toBe(room.ttt.roundOver)
+    const moves: [number, string][] = [[0, 'h1'], [3, 'g1'], [1, 'h1'], [4, 'g1'], [2, 'h1']]
+    for (const [cell, by] of moves) {
+      room = play(room, cell, by)
+      expect(room.ttt.over).toBe(room.ttt.roundOver)
+    }
+  })
+})

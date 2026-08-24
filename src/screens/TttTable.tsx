@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RoomState } from '../types'
 import { TTT_MARKS } from '../games/ttt'
 import { TableHeader } from '../components/TableHeader'
@@ -41,11 +41,27 @@ export function TttTable({
     if (p.wasMyTurn && markCount > p.markCount) {
       play(mySeatIdx === 1 ? 'drawn-circle' : 'drawn-x')
     }
-    if (!p.roundOver && t.roundOver) {
+    // A draw has no winLine — it's not a win, so it doesn't get the win cue.
+    if (!p.roundOver && t.roundOver && t.winLine.length > 0) {
       play('round-win')
     }
     soundSigRef.current = { roundOver: t.roundOver, markCount, wasMyTurn: isMyTurn }
-  }, [t.roundOver, markCount, isMyTurn, play])
+  }, [t.roundOver, t.winLine, markCount, isMyTurn, play])
+
+  // Rejected actions (occupied square, out of turn, round already over, a stale/malformed
+  // click) are otherwise silent no-ops — surface them briefly to the player who triggered
+  // them so a rejected attempt doesn't read as a dead button. `rejection` is broadcast on
+  // the shared room state but only shown to the seat it names.
+  const [rejectionText, setRejectionText] = useState<string | null>(null)
+  const lastRejectionNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!t.rejection || t.rejection.seatId !== localSeatId) return
+    if (t.rejection.nonce === lastRejectionNonceRef.current) return
+    lastRejectionNonceRef.current = t.rejection.nonce
+    setRejectionText(t.rejection.reason)
+    const timer = setTimeout(() => setRejectionText(null), 2200)
+    return () => clearTimeout(timer)
+  }, [t.rejection, localSeatId])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -74,6 +90,11 @@ export function TttTable({
             >
               {roundStatus ?? (isMyTurn ? 'Pick a square.' : `${activeSeat?.name} is thinking…`)}
             </div>
+            {rejectionText && (
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', margin: '-12px 0 16px' }}>
+                {rejectionText}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'clamp(10px,1.4vw,16px)', maxWidth: 400 }}>
               {t.board.map((cell, i) => {
                 const isWin = t.winLine.includes(i)
