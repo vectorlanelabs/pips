@@ -1,5 +1,11 @@
 # Requests for the human
 
+- [ ] 2026-08-23, Blackjack + Texas Hold'em charter, non-blocking — running
+      in isolated worktree `.claude/worktrees/poker-blackjack-loop` on
+      branch `worktree-poker-blackjack-loop` per your instruction. Will
+      request "push" at wrap-up per standing git workflow, same as every
+      prior charter; the worktree branch merges into `main` at that point.
+
 - [x] 2026-08-09, Wahoo wrap-up — commit the charter: done, pushed
       (verified: full Wahoo commit sequence on `main`, HEAD == origin/main).
 - [x] 2026-08-09, Wahoo wrap-up — real audio: done, user confirmed fine.

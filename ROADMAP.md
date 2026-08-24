@@ -1,6 +1,19 @@
 # Roadmap
 
-Charter: Scrabble — see `CHARTER.md`.
+Charter: Blackjack + Texas Hold'em — see `CHARTER.md`.
+
+## Charter: Blackjack + Texas Hold'em (2026-08-23) — in progress
+
+Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
+(branch `worktree-poker-blackjack-loop`) per user instruction.
+
+## Next up
+1. M0 — Blackjack engine (spec 52)
+2. M1 — Blackjack screens (spec 53)
+3. M2 — Blackjack wiring (spec 54)
+4. M3 — Hold'em engine (spec 55)
+5. M4 — Hold'em screens (spec 56)
+6. M5 — Hold'em wiring (spec 57)
 
 ## Charter: Scrabble (2026-08-22) — done
 

@@ -4047,3 +4047,67 @@ shipping each verified charter promptly.
   environment. Budget real live verification time into any future
   spec that touches routing, asset loading, or cross-game shared
   guards, not just the games' own new code paths.
+
+## Cycle 1 (setup) — 2026-08-23 — Blackjack + Texas Hold'em charter
+- **Shipped:** no code yet. Set up: entered isolated worktree
+  `.claude/worktrees/poker-blackjack-loop` (branch
+  `worktree-poker-blackjack-loop`) per explicit user instruction to run
+  this charter fully isolated. Confirmed git identity already correct in
+  the worktree, ran `npm install`, verified baseline `tsc -b --noEmit`
+  and `npm test` both clean (1246 tests) before touching anything.
+  Wrote `CHARTER.md` (Blackjack + Texas Hold'em, both games net-new
+  territory for this codebase — no existing game has chips/bets/a house
+  role), read `src/card-games/rummy/state.ts`+`rules.ts`,
+  `src/card-games/solitaire/`, `src/components/DealIntro.tsx`,
+  `src/engine/{sync,turn-engine,bot}.ts`, `src/card-engine/{deck,cards}.ts`
+  as the closest siblings and shared primitives per CLAUDE.md's pattern-
+  matching rule. Wrote spec 52 (Blackjack engine) with every numeric/rule
+  decision locked (chip amounts, bet min/max, shoe size/reshuffle
+  threshold, dealer stand-on-soft-17, split/double/insurance rules,
+  payout precedence, bot simplifications) since the user explicitly
+  delegated all of that. Dispatched spec 52 to a Haiku implementer
+  (background, persistent across this charter's cycles).
+- **Verification:** N/A this cycle (no code landed yet).
+- **Review:** N/A this cycle.
+- **Lesson:** n/a yet.
+- **Continue?** Yes — waiting on spec 52's implementer report before
+  independent verification and review.
+
+## Cycle 2 — 2026-08-23 — spec 52 (Blackjack engine) implemented, 1 blocking bug found and sent back
+- **Shipped (in review, not yet landed):** `src/card-games/blackjack/{state,hand-value,rules,bot}.ts`
+  + tests. Haiku implementer reported 74 passed / tsc clean.
+- **Verification:** re-ran `npx tsc -b --noEmit` and the full suite myself
+  (not just the implementer's report): clean, 1320 tests total (1246 +
+  74 new). Read every line of `state.ts`, `hand-value.ts`, `rules.ts`,
+  `bot.ts` directly against spec 52.
+- **Review (lead, personally, fallback adversarial persona — no
+  ai-grouch-claude installed):** found 1 real, LIVE-REPRODUCED blocking
+  bug the implementer's "all green" report entirely missed: insurance
+  resolution (`TAKE_INSURANCE`/`DECLINE_INSURANCE` in `rules.ts`) tracked
+  "has everyone resolved insurance" via `bettingPlayers.indexOf(playerId)`
+  as if it were a monotonic turn counter — but insurance is explicitly
+  order-independent per spec 52 (any eligible seat may resolve in any
+  order). Reproduced with a throwaway test: in a 3-seat game where the
+  dealer shows an Ace, having the LAST-indexed player resolve insurance
+  FIRST caused the engine to immediately (and incorrectly) transition
+  to the acting phase, silently treating the other two players as having
+  declined insurance without ever letting them decide. The already-
+  declared-but-never-wired-up `hasResolvedInsurance?` field in `state.ts`
+  was clearly meant to prevent exactly this — the implementer added the
+  field but never used it. Sent back a decision-locked fix spec (wire up
+  `hasResolvedInsurance` as a genuine per-seat completeness tracker,
+  mirroring how `PLACE_BET`'s existing `.every(...)` check already does
+  this correctly for betting; remove the dead unused `hasPlacedBet?`
+  field; add a deterministic seed-search regression test, not another
+  RNG-skip-if-not-hit test like the existing insurance tests in
+  `rules.test.ts`). In flight.
+- **Lesson:** "every eligible seat may act in any order" is exactly the
+  kind of requirement a cheap implementer will silently downgrade to "act
+  in array order" unless the spec's tests are written to actually force
+  the out-of-order case — the existing insurance tests in this file are
+  all gated behind `if (phase === 'insurance')` and never exercise
+  multi-seat resolution order at all, so they gave false confidence.
+  Worth remembering for the Hold'em betting-round spec (55), which has
+  the same order-independent-among-eligible-seats shape for prompting
+  multiple all-in players.
+- **Continue?** Yes — waiting on the fix round before landing spec 52.
