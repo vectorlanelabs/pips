@@ -79,14 +79,17 @@ describe('holdem state', () => {
       expect(game.session.publicState.pot).toBe(15)
     })
 
-    it('deals hole cards to all players', () => {
+    it('deals hole cards privately, never into public state (hole cards must not leak to other peers)', () => {
       const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
 
+      // publicState.hands[id].cards is broadcast to every peer -- it must stay
+      // empty until a genuine showdown reveal, or every seat could read every
+      // other seat's hole cards straight off the wire.
       for (const pid of ['p1', 'p2', 'p3']) {
-        expect(game.session.publicState.hands[pid].cards).toHaveLength(2)
+        expect(game.session.publicState.hands[pid].cards).toHaveLength(0)
       }
 
-      // Private state should also have hole cards
+      // The real cards live only in each seat's own private channel.
       expect(game.session.privateStates['p1'].hand).toHaveLength(2)
       expect(game.session.privateStates['p2'].hand).toHaveLength(2)
       expect(game.session.privateStates['p3'].hand).toHaveLength(2)

@@ -4452,3 +4452,74 @@ shipping each verified charter promptly.
   this file's history, plan for genuinely thorough live-browser
   verification (not just code review) before M5 wiring is considered
   done, same discipline that caught Blackjack's payout bug.
+
+## Cycle 6 (continued) — a 6th, critical bug: hole cards leaked into public state
+- While researching conventions for the Hold'em screens spec, an
+  Explore agent's report flagged that `HoldemPublicState.hands[seatId]
+  .cards` needing careful handling for "your own cards vs an
+  opponent's" prompted the lead to re-check where those cards actually
+  come from — and found `newHands[seatId].cards = twoCards` set
+  directly in the PUBLIC state at deal time, in both
+  `createHoldemGame` (state.ts) and `startNewHand` (rules.ts),
+  unconditionally for every seat. Since `HoldemPublicState` is exactly
+  the object that gets broadcast to every connected peer (this is the
+  entire point of the public/private split), this meant every player's
+  real hole cards were sitting in a payload every other player's client
+  receives on every state update — a complete break of the fundamental
+  integrity of a poker game, invisible to the UI (which just doesn't
+  render it) but trivially readable via browser devtools or a custom
+  client. The `HoldemPrivateState` per-seat delivery channel existed
+  and WAS also correctly populated, making it pure redundant exposure
+  — the private channel's entire purpose was already defeated by the
+  public copy sitting alongside it.
+- **Fixed**: removed both public-state writes (cards now stay at their
+  initial `[]` in `HoldemPublicState`, real cards live only in
+  `HoldemPrivateState`). `conductShowdown` now takes the session's
+  private states as a parameter, evaluates hands from there (not from
+  the now-empty public field), and explicitly REVEALS real cards into
+  the public state's `hands[seatId].cards` only for showdown
+  contestants (non-folded players) as part of building the hand-over
+  result — folded players' cards are never revealed, matching real
+  poker.
+- **This fix cascaded into two more bugs it exposed**, both found by
+  re-running the test suite after the privacy fix rather than assuming
+  a clean pass: (1) every action handler's returned `privateStates` was
+  built by reading `publicState.hands[seatId].cards` (the now-removed
+  leak) instead of passing through the session's actual private states
+  unchanged — meaning after the fix, EVERY action by ANY player wiped
+  ALL players' private hands to empty, including the acting player's
+  own hand, immediately after their first action of the entire game.
+  Fixed all ~15 occurrences to pass `session.privateStates` through
+  unchanged (regular actions never change anyone's hole cards). (2)
+  `startNewHand` computed real private states internally for dealing
+  but never returned them — its caller (`START_NEXT_HAND`) tried to
+  reconstruct them from the public state's cards field, which is
+  correctly empty post-fix, silently producing empty hands for every
+  new hand after the first. Fixed by having `startNewHand` actually
+  return the private states it already computes.
+- Added 3 permanent regression tests (no leak during betting, correct
+  reveal only for showdown contestants, a folded player's cards never
+  revealed, a player's own hand survives their own actions) plus
+  updated one pre-existing test that had asserted the OLD leaky
+  behavior as if it were correct.
+- **Verification**: tsc clean, full suite green (1398 tests, +3 net
+  new), build clean — all re-run by the lead personally after each
+  fix, not trusted from a single pass.
+- **Lesson**: this bug shipped through the ENTIRE spec-55/55b review
+  process — two rounds of implementer work, two rounds of the lead's
+  own line-by-line code reading focused on betting/turn logic — because
+  the review was scoped to "does the betting flow work correctly," not
+  "does anything meant to be secret leak into the broadcast state."
+  This is exactly the kind of defect Scrabble's own wiring review
+  called out as a category tsc/tests/code-reading alone can miss (see
+  ROADMAP.md's Scrabble entry: "independently traced ... for hand-
+  privacy leaks" as a DISTINCT check from correctness review) — for
+  Hold'em specifically, this should have been an explicit, named check
+  from spec 55's very first review pass, not something surfaced
+  incidentally while researching an unrelated screens spec. Adding
+  "does any private field leak into the public/broadcast state" as a
+  standing, explicit checklist item for every future host-authoritative
+  engine in this charter (and flagging it for a security-review pass
+  before Hold'em's wiring, spec 57, given wiring is where the leak
+  would have become externally observable over real PeerJS
+  connections).

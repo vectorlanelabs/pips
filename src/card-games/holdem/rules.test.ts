@@ -385,6 +385,57 @@ describe('holdem rules', () => {
     })
   })
 
+  describe('hole card privacy (found live by the lead — hole cards were being written into publicState, which is broadcast to every peer, instead of staying in the private per-seat channel)', () => {
+    it('never exposes hole cards in public state during active betting, but reveals them for showdown contestants only', () => {
+      let game = createHoldemGame(['p1', 'p2'], 42)
+      let state = game.session.publicState
+      expect(state.hands['p1'].cards).toHaveLength(0)
+      expect(state.hands['p2'].cards).toHaveLength(0)
+
+      let r = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
+      expect(state.hands['p1'].cards).toHaveLength(0)
+      expect(state.hands['p2'].cards).toHaveLength(0)
+
+      r = applyHoldemAction(game, 'p2', { type: 'CHECK' })
+      expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
+      expect(state.hands['p1'].cards).toHaveLength(0)
+      expect(state.hands['p2'].cards).toHaveLength(0)
+
+      for (let i = 0; i < 3; i++) {
+        r = applyHoldemAction(game, 'p2', { type: 'CHECK' })
+        expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
+        r = applyHoldemAction(game, 'p1', { type: 'CHECK' })
+        expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
+      }
+
+      expect(state.handOver).toBe(true)
+      expect(state.hands['p1'].cards).toHaveLength(2)
+      expect(state.hands['p2'].cards).toHaveLength(2)
+    })
+
+    it('never reveals a folded players cards', () => {
+      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let state = game.session.publicState
+      const first = state.turn.playerOrder[state.turn.currentIndex]
+      const r = applyHoldemAction(game, first, { type: 'FOLD' })
+      expect(r.outcome.ok).toBe(true)
+      state = r.outcome.publicState!
+      expect(state.hands[first].cards).toHaveLength(0)
+    })
+
+    it('a players own private hand survives their own actions (does not get wiped after acting)', () => {
+      let game = createHoldemGame(['p1', 'p2'], 42)
+      const before = game.session.privateStates['p1'].hand
+      expect(before).toHaveLength(2)
+
+      const r = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      expect(r.outcome.ok).toBe(true)
+      const after = r.holdemSession.session.privateStates['p1'].hand
+      expect(after).toEqual(before)
+    })
+  })
+
   describe('betting rules', () => {
     it('enforces minimum raise', () => {
       let game = createHoldemGame(['p1', 'p2', 'p3'], 42)

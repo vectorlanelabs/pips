@@ -93,7 +93,7 @@ function getActivePlayers(publicState: HoldemPublicState): string[] {
 }
 
 // Start the hand: post blinds and deal cards
-function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicState: HoldemPublicState; deck: Card[] } {
+function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicState: HoldemPublicState; deck: Card[]; privateStates: Record<string, HoldemPrivateState> } {
   let newPublicState = { ...publicState }
   let newDeck = deck
   const newChips = { ...publicState.chips }
@@ -130,12 +130,13 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
   newHands[publicState.smallBlindSeat].totalContributedThisHand = sbAmount
   newHands[publicState.bigBlindSeat].totalContributedThisHand = bbAmount
 
-  // Deal hole cards
+  // Deal hole cards. As in createHoldemGame, cards go ONLY into the private
+  // per-seat channel -- never into publicState.hands[seatId].cards, which is
+  // broadcast to every peer and would otherwise leak every seat's hole cards.
   const activeSeats = publicState.seatOrder.filter((seatId) => !publicState.eliminated[seatId])
   for (const seatId of activeSeats) {
     const { dealt: twoCards, remaining } = dealCards(newDeck, 2)
     newDeck = remaining
-    newHands[seatId].cards = twoCards
     newPrivateStates[seatId].hand = twoCards
   }
 
@@ -174,7 +175,7 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
     handResults: null,
   }
 
-  return { publicState: newPublicState, deck: newDeck }
+  return { publicState: newPublicState, deck: newDeck, privateStates: newPrivateStates }
 }
 
 // Move to next street
@@ -366,13 +367,8 @@ function makeValidator(
         eliminated: newEliminated,
       }
 
-      const { publicState: stateAfterStart, deck: deckAfterStart } = startNewHand(newPublicState, newDeck)
+      const { publicState: stateAfterStart, deck: deckAfterStart, privateStates: newPrivateStates } = startNewHand(newPublicState, newDeck)
       onDeckChange(deckAfterStart)
-
-      const newPrivateStates: Record<string, HoldemPrivateState> = {}
-      for (const seatId of publicState.seatOrder) {
-        newPrivateStates[seatId] = { hand: stateAfterStart.hands[seatId].cards }
-      }
       onPrivateStatesChange(newPrivateStates)
 
       return {
@@ -469,7 +465,7 @@ function makeValidator(
           let advancedState = advanceStreet(newPublicStateAfterFold)
 
           if (advancedState.turn.phase === 'showdown') {
-            return conductShowdown(advancedState, deck, onDeckChange, onPrivateStatesChange)
+            return conductShowdown(advancedState, session.privateStates, deck, onDeckChange, onPrivateStatesChange)
           }
 
           const { board: newBoardCards, deck: afterBoardDeck } = dealBoardCards(deck, advancedState)
@@ -481,13 +477,13 @@ function makeValidator(
             onDeckChange(runoutDeck)
 
             if (runoutState.turn.phase === 'showdown') {
-              return conductShowdown(runoutState, runoutDeck, onDeckChange, onPrivateStatesChange)
+              return conductShowdown(runoutState, session.privateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
             }
 
             return {
               ok: true,
               publicState: runoutState,
-              privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: seatId === playerId ? [] : publicState.hands[seatId].cards }])),
+              privateStates: session.privateStates,
             }
           }
 
@@ -496,14 +492,14 @@ function makeValidator(
           return {
             ok: true,
             publicState: advancedState,
-            privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: seatId === playerId ? [] : publicState.hands[seatId].cards }])),
+            privateStates: session.privateStates,
           }
         }
 
         return {
           ok: true,
           publicState: newPublicStateAfterFold,
-          privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: seatId === playerId ? [] : publicState.hands[seatId].cards }])),
+          privateStates: session.privateStates,
         }
       }
 
@@ -525,7 +521,7 @@ function makeValidator(
 
           if (advancedState.turn.phase === 'showdown') {
             // Conduct showdown immediately (no more board to deal)
-            return conductShowdown(advancedState, deck, onDeckChange, onPrivateStatesChange)
+            return conductShowdown(advancedState, session.privateStates, deck, onDeckChange, onPrivateStatesChange)
           }
 
           // Deal the board cards for the new street
@@ -540,13 +536,13 @@ function makeValidator(
             onDeckChange(runoutDeck)
 
             if (runoutState.turn.phase === 'showdown') {
-              return conductShowdown(runoutState, runoutDeck, onDeckChange, onPrivateStatesChange)
+              return conductShowdown(runoutState, session.privateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
             }
 
             return {
               ok: true,
               publicState: runoutState,
-              privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+              privateStates: session.privateStates,
             }
           }
 
@@ -555,14 +551,14 @@ function makeValidator(
           return {
             ok: true,
             publicState: advancedState,
-            privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+            privateStates: session.privateStates,
           }
         }
 
         return {
           ok: true,
           publicState: newPublicState,
-          privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+          privateStates: session.privateStates,
         }
       }
 
@@ -594,7 +590,7 @@ function makeValidator(
           let advancedState = advanceStreet(newPublicState)
 
           if (advancedState.turn.phase === 'showdown') {
-            return conductShowdown(advancedState, deck, onDeckChange, onPrivateStatesChange)
+            return conductShowdown(advancedState, session.privateStates, deck, onDeckChange, onPrivateStatesChange)
           }
 
           // Deal the board cards for the new street
@@ -609,13 +605,13 @@ function makeValidator(
             onDeckChange(runoutDeck)
 
             if (runoutState.turn.phase === 'showdown') {
-              return conductShowdown(runoutState, runoutDeck, onDeckChange, onPrivateStatesChange)
+              return conductShowdown(runoutState, session.privateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
             }
 
             return {
               ok: true,
               publicState: runoutState,
-              privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+              privateStates: session.privateStates,
             }
           }
 
@@ -624,14 +620,14 @@ function makeValidator(
           return {
             ok: true,
             publicState: advancedState,
-            privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+            privateStates: session.privateStates,
           }
         }
 
         return {
           ok: true,
           publicState: newPublicState,
-          privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+          privateStates: session.privateStates,
         }
       }
 
@@ -676,7 +672,7 @@ function makeValidator(
           let advancedState = advanceStreet(newPublicState)
 
           if (advancedState.turn.phase === 'showdown') {
-            return conductShowdown(advancedState, deck, onDeckChange, onPrivateStatesChange)
+            return conductShowdown(advancedState, session.privateStates, deck, onDeckChange, onPrivateStatesChange)
           }
 
           // Deal the board cards for the new street
@@ -691,13 +687,13 @@ function makeValidator(
             onDeckChange(runoutDeck)
 
             if (runoutState.turn.phase === 'showdown') {
-              return conductShowdown(runoutState, runoutDeck, onDeckChange, onPrivateStatesChange)
+              return conductShowdown(runoutState, session.privateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
             }
 
             return {
               ok: true,
               publicState: runoutState,
-              privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+              privateStates: session.privateStates,
             }
           }
 
@@ -706,14 +702,14 @@ function makeValidator(
           return {
             ok: true,
             publicState: advancedState,
-            privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+            privateStates: session.privateStates,
           }
         }
 
         return {
           ok: true,
           publicState: newPublicState,
-          privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+          privateStates: session.privateStates,
         }
       }
 
@@ -791,7 +787,7 @@ function makeValidator(
           let advancedState = advanceStreet(newPublicState)
 
           if (advancedState.turn.phase === 'showdown') {
-            return conductShowdown(advancedState, deck, onDeckChange, onPrivateStatesChange)
+            return conductShowdown(advancedState, session.privateStates, deck, onDeckChange, onPrivateStatesChange)
           }
 
           // Deal the board cards for the new street
@@ -806,13 +802,13 @@ function makeValidator(
             onDeckChange(runoutDeck)
 
             if (runoutState.turn.phase === 'showdown') {
-              return conductShowdown(runoutState, runoutDeck, onDeckChange, onPrivateStatesChange)
+              return conductShowdown(runoutState, session.privateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
             }
 
             return {
               ok: true,
               publicState: runoutState,
-              privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+              privateStates: session.privateStates,
             }
           }
 
@@ -821,14 +817,14 @@ function makeValidator(
           return {
             ok: true,
             publicState: advancedState,
-            privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+            privateStates: session.privateStates,
           }
         }
 
         return {
           ok: true,
           publicState: newPublicState,
-          privateStates: Object.fromEntries(publicState.seatOrder.map((seatId) => [seatId, { hand: publicState.hands[seatId].cards }])),
+          privateStates: session.privateStates,
         }
       }
     }
@@ -840,6 +836,7 @@ function makeValidator(
 // Conduct showdown and determine winners
 function conductShowdown(
   publicState: HoldemPublicState,
+  privateStates: Record<string, HoldemPrivateState>,
   _deck: Card[],
   _onDeckChange: (newDeck: Card[]) => void,
   _onPrivateStatesChange: (newStates: Record<string, HoldemPrivateState>) => void,
@@ -858,11 +855,13 @@ function conductShowdown(
 
   const sidePots = computeSidePots(contributions, foldedIds)
 
-  // Evaluate hands for all active (non-folded) players
+  // Evaluate hands for all active (non-folded) players using their PRIVATE
+  // cards -- publicState.hands[seatId].cards is empty until the reveal below,
+  // by design (see the dealing comments in state.ts / startNewHand).
   const handEvals: Record<string, any> = {}
   for (const seatId of activePlayers) {
     try {
-      const hand = evaluateBestHand(publicState.hands[seatId].cards, publicState.board)
+      const hand = evaluateBestHand(privateStates[seatId].hand, publicState.board)
       handEvals[seatId] = hand
     } catch (e) {
       // Should not happen if board is complete
@@ -914,10 +913,18 @@ function conductShowdown(
     })
   }
 
+  // Reveal: a genuine showdown means every contesting (non-folded) player's
+  // cards become public. Folded players' cards are never revealed.
+  const revealedHands: Record<string, HoldemPlayerHandState> = { ...publicState.hands }
+  for (const seatId of activePlayers) {
+    revealedHands[seatId] = { ...revealedHands[seatId], cards: privateStates[seatId].hand }
+  }
+
   return {
     ok: true,
     publicState: {
       ...publicState,
+      hands: revealedHands,
       chips: newChips,
       handOver: true,
       handResults: {

@@ -143,12 +143,16 @@ export function createHoldemGame(playerIds: string[], seed: number, cardBack = '
 
   const pot = sbAmount + bbAmount
 
-  // Deal hole cards to all non-eliminated players
+  // Deal hole cards to all non-eliminated players. Cards go ONLY into the
+  // private per-seat channel -- publicState.hands[seatId].cards stays empty
+  // (its initial value) until a genuine showdown reveal. The public state is
+  // broadcast to every connected peer verbatim; writing real hole cards into
+  // it here would leak every seat's cards to every other seat regardless of
+  // what the UI chooses to render.
   const activeSeats = seatOrder.filter((seatId) => !eliminated[seatId])
   for (const seatId of activeSeats) {
     const { dealt: twoCards, remaining } = dealCards(deck, 2)
     deck = remaining
-    hands[seatId].cards = twoCards
     privateStates[seatId].hand = twoCards
   }
 
