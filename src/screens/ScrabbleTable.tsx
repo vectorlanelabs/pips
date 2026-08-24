@@ -120,6 +120,14 @@ export function ScrabbleTable({
   const canAct = isMyTurn && publicState.stage === 'play'
   const opponentIds = publicState.turn.playerOrder.filter((id) => id !== localPlayerId)
 
+  // Sorted for display only (dealt/refill order is otherwise meaningless to
+  // the player, and every other card game in this app sorts the hand).
+  // Selection/staging key off tile.id, not array position, so this is safe.
+  const sortedRack = useMemo(
+    () => [...myRack].sort((a, b) => a.letter.localeCompare(b.letter)),
+    [myRack],
+  )
+
   // Deal intro on mount only (when board is empty)
   useEffect(() => {
     const isBoardEmpty = publicState.board.every((row) => row.every((cell) => cell === null))
@@ -299,6 +307,9 @@ export function ScrabbleTable({
 
   // Render the board
   const boardCells = useMemo(() => {
+    const lastMoveCells = new Set(
+      publicState.lastPlacement?.tiles.map((t) => `${t.row}-${t.col}`) ?? [],
+    )
     const cells = []
     for (let row = 0; row < 15; row++) {
       for (let col = 0; col < 15; col++) {
@@ -307,12 +318,13 @@ export function ScrabbleTable({
         const blank = blankAssignments.find((a) => a.tileId === staged?.tileId)
         const premium = premiumAt(row, col)
         const isCenter = row === 7 && col === 7
+        const isLastMove = lastMoveCells.has(`${row}-${col}`)
 
-        cells.push({ row, col, cell, staged, blank, premium, isCenter })
+        cells.push({ row, col, cell, staged, blank, premium, isCenter, isLastMove })
       }
     }
     return cells
-  }, [publicState.board, stagedPlacements, blankAssignments])
+  }, [publicState.board, publicState.lastPlacement, stagedPlacements, blankAssignments])
 
   return (
     <div className="scr-table">
@@ -348,7 +360,7 @@ export function ScrabbleTable({
             {/* Board (left column on wide viewports) */}
             <div className="scr-board-col">
               <div className="scr-board">
-                {boardCells.map(({ row, col, cell, staged, premium, isCenter }) => (
+                {boardCells.map(({ row, col, cell, staged, premium, isCenter, isLastMove }) => (
                   <div
                     key={`${row}-${col}`}
                     className={`scr-board-cell${
@@ -364,7 +376,7 @@ export function ScrabbleTable({
                           (cell?.isBlank || (staged && myRack.find((t) => t.id === staged.tileId)?.letter === ''))
                             ? ' scr-tile-face--blank'
                             : ''
-                        }`}
+                        }${isLastMove && !staged ? ' scr-tile-face--last-move' : ''}`}
                       >
                         {(cell?.letter || staged?.letter || '').toUpperCase()}
                         <span className="scr-tile-points">
@@ -441,7 +453,7 @@ export function ScrabbleTable({
                   </span>
                 </div>
                 <div className="scr-hand-row">
-                  {myRack.map((tile) => {
+                  {sortedRack.map((tile) => {
                     const isSelected = selectedTileId === tile.id
                     const isStaged = stagedPlacements.some((p) => p.tileId === tile.id)
                     const isExchangeSelected = selectedExchangeTileIds.has(tile.id)
