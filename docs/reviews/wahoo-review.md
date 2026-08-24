@@ -5,6 +5,15 @@
 **Scope:** `src/board-games/wahoo/` (state, rules, board, bot, all three tests) + `src/screens/Wahoo*.tsx`/CSS + Wahoo host/guest wiring in `src/App.tsx`, reviewed against `CLAUDE.md`.  
 **Baseline:** `main` @ `d160de5`.
 
+### Resolution (2026-08-24)
+
+All Blocking, Major, and Minor findings below are fixed on `fix/review-tier1-rummy-wahoo-ttt` (commit `7b1c24b`) and independently verified (`tsc -b --noEmit` clean, `npm run build` clean, full suite green). Two items are **open, pending product judgment, not bugs**:
+
+- **Bot "rush home" threshold:** the review's completeness-matrix note about `bot.ts`'s `>=52` threshold turned out to be two separate things. The part that was a straight correctness bug (the bot's own win-check using `>=52` instead of the engine's real win threshold `LANE_START=63`) is fixed. The part that remains is a genuine strategy question: `bot.ts` also uses `>=52` as a "how eagerly should the bot prioritize rushing a marble home vs. improving board position" cutoff. Changing that to 63 would materially change bot play at track positions 52–62. Left as-is pending a decision on intended bot behavior.
+- **`wahooActorKey` fragility (Minor):** `${stage}:${turn.turnNumber}` doesn't retrigger the bot loop for a same-turn state change that doesn't bump `turnNumber` (e.g. a plain ROLL). Not a live bug today — only a risk for future same-turn actions. A real fix needs a shared actor-generation concept in `src/engine/turn-engine.ts`, which is cross-game architecture, not a Wahoo-scoped fix. Documented in code; deferred.
+
+Do not remove this file until both items are resolved one way or the other.
+
 ### Executive verdict
 
 **needs changes** — the ordinary race rules are unusually well covered and mostly coherent, but there is one confirmed rule-state corruption bug, one unvalidated network payload that can throw out of the host action path, and a bot cadence that demonstrably cuts off this game's own sounds. The table is thoughtfully designed: die-before-move broadcasting, destination collision handling, active-turn highlighting, and host-side validation are all real positives. They do not rescue the release from a stale `lastMoved` invariant, malformed-action robustness, silent rejection feedback, and a results screen that reports track marbles as “home.”

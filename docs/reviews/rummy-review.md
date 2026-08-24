@@ -8,6 +8,16 @@
 
 ---
 
+### Resolution (2026-08-24)
+
+All Blocking, Major, and Minor findings below are fixed on `fix/review-tier1-rummy-wahoo-ttt` (commit `f08deec`) and independently verified (`tsc -b --noEmit` clean, `npm run build` clean, full suite green). One item is **open, pending product judgment, not a bug**:
+
+- **Major #4 (test suite doesn't cover the App/screen playability contract):** engine-level regression coverage was added for the round-transition and rejection-notice bugs specifically, but true React component rendering tests for `RummyTable`/`RummyResults`/`RummyRoom` require adding `jsdom` + a React testing library — new dev dependencies `CLAUDE.md` reserves for an explicit spec. Deferred to the project owner: is that tooling worth adding project-wide (it would benefit every game, not just Rummy)?
+
+Do not remove this file until that item is resolved one way or the other.
+
+---
+
 ### Executive verdict
 
 **needs changes** — the engine is unusually well-tested and the core meld, reach-in, layoff, conservation, scoring, and N-player paths are mostly coherent. That good engine work is undermined by two release-level table failures: a round-over state has no user-visible path to start the next round, and bots begin acting after only `BASE_MS` while Rummy's deal animation is still running. The results screen also plays a victory cue for the loser, rejected actions are silently discarded at the App boundary, and the host action boundary is not runtime-safe for malformed network payloads. The targeted tests are green, but they do not exercise the actual React/PeerJS playability contract.
