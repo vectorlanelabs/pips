@@ -125,9 +125,13 @@
 }
 
 .holdem-opp-tile {
+  /* min-width is what actually keeps this readable at narrow widths --
+     the previous max-width, a straight quarter of the container, shrank
+     to unreadable (even 0-width name) tiles on a narrow phone screen
+     instead of just wrapping to fewer per row. */
   flex: 1 1 200px;
-  max-width: calc((100% - 3 * var(--holdem-opp-gap)) / 4);
-  min-width: 0;
+  min-width: 160px;
+  max-width: 260px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -272,10 +276,13 @@
 /* Fixed-width, left-justified 5-slot board: 74px x 5 + 10px gap x 4 = 410px.
    Reserving all 5 slots up front (rather than sizing to however many cards
    are dealt) is the fix for the board visibly re-centering/shifting left
-   every time a new street was revealed. */
+   every time a new street was revealed. Below 480px, the 5-slot row and its
+   cards shrink together (own scoped override, not the shared PlayingCard
+   size) so the 5th slot can't render outside the table's own frame. */
 .holdem-board-group {
   flex: none;
   width: 410px;
+  max-width: 100%;
 }
 
 .holdem-board {
@@ -287,6 +294,22 @@
 .holdem-board-slot--empty {
   width: 74px;
   height: 104px;
+}
+
+@media (max-width: 480px) {
+  .holdem-board-group {
+    width: 100%;
+  }
+
+  .holdem-board {
+    gap: 6px;
+  }
+
+  .holdem-board .playing-card--hand,
+  .holdem-board-slot--empty {
+    width: calc((100% - 24px) / 5);
+    height: calc((100% - 24px) / 5 * 104 / 74);
+  }
 }
 
 .holdem-pot {
@@ -386,6 +409,16 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.holdem-hand-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holdem-hand-over-actions .btn {
+  width: 100%;
 }
 
 .holdem-fold-btn {

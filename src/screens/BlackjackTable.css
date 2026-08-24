@@ -101,9 +101,13 @@
 }
 
 .blackjack-opp-tile {
+  /* min-width is what actually keeps this readable at narrow widths --
+     the previous max-width, a straight quarter of the container, shrank
+     to unreadable (even 0-width name) tiles on a narrow phone screen
+     instead of just wrapping to fewer per row. */
   flex: 1 1 200px;
-  max-width: calc((100% - 3 * var(--blackjack-opp-gap)) / 4);
-  min-width: 0;
+  min-width: 160px;
+  max-width: 260px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -395,21 +399,6 @@
   gap: clamp(12px, 2vw, 20px);
 }
 
-/* Each control row pairs the current action's content with the chip bank,
-   so the bank always sits beside the controls instead of stacked above
-   them -- one row per turn phase. */
-.blackjack-controls-row {
-  display: flex;
-  align-items: center;
-  gap: clamp(16px, 2.4vw, 24px);
-  flex-wrap: wrap;
-}
-
-.blackjack-controls-row > .blackjack-action-section {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .blackjack-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(110px, 1fr));
@@ -463,6 +452,37 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+
+/* Which hand Hit/Stand/Double/Split currently applies to, while splitting --
+   without this, two identically-styled "You" stacks give no feedback about
+   which one just changed when you act. */
+.blackjack-your-hand--active {
+  border-color: var(--coral);
+  background: #fff5f6;
+}
+
+.blackjack-your-hand-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--body-text);
+}
+
+.blackjack-your-hand-active-tag {
+  color: #fff;
+  background: var(--coral);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .blackjack-your-hand-separator {
@@ -558,6 +578,16 @@
   border: 2px solid var(--grey-border);
   border-radius: 12px;
   margin-bottom: 12px;
+}
+
+.blackjack-round-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blackjack-round-over-actions .btn {
+  width: 100%;
 }
 
 /* ---- Footnote ---- */

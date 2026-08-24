@@ -68,6 +68,8 @@ export function HoldemTable({
     handResults: publicState.handResults,
     myBetThisStreet: publicState.hands[localPlayerId]?.betThisStreet ?? 0,
     myFolded: publicState.hands[localPlayerId]?.folded ?? false,
+    revealedOpponentCount: 0,
+    handResultsVisible: false,
   })
 
   // 900ms per blind matches BASE_MS, the app's standard single-action bot
@@ -87,6 +89,56 @@ export function HoldemTable({
       window.clearTimeout(t2)
     }
   }, [publicState.handNumber])
+
+  // The hand's whole resolution -- every contesting opponent's hole cards,
+  // the winner, and the payout -- is already fully computed the instant the
+  // hand ends (conductShowdown settles everything in one state transition,
+  // same as the deal). Left alone, a real showdown would flip every
+  // opponent's cards and print the result in a single frame. This stages
+  // the same final data as a sequence of beats: each contesting opponent's
+  // cards flip one at a time, then the result appears -- same pattern as
+  // the dealer-resolution reveal in Blackjack and the blind-posting reveal
+  // above. A fold-out win (nobody left to show down) still gets one beat
+  // before the result, instead of popping instantly.
+  const HOLDEM_REVEAL_BEAT_MS = 800
+  const showdownStagedForHandRef = useRef<number | null>(null)
+  const [revealedOpponentCount, setRevealedOpponentCount] = useState(0)
+  const [handResultsVisible, setHandResultsVisible] = useState(false)
+
+  const contestingOpponents = publicState.seatOrder.filter(
+    (id) => id !== localPlayerId && !publicState.hands[id]?.folded && (publicState.hands[id]?.cards.length ?? 0) > 0,
+  )
+
+  useEffect(() => {
+    if (!publicState.handOver) return
+    if (showdownStagedForHandRef.current === publicState.handNumber) return
+    showdownStagedForHandRef.current = publicState.handNumber
+
+    setRevealedOpponentCount(0)
+    setHandResultsVisible(false)
+
+    const timers: number[] = []
+    let delay = 0
+    for (let i = 1; i <= contestingOpponents.length; i++) {
+      delay += HOLDEM_REVEAL_BEAT_MS
+      const revealedCount = i
+      timers.push(window.setTimeout(() => setRevealedOpponentCount(revealedCount), delay))
+    }
+    delay += 700
+    timers.push(window.setTimeout(() => setHandResultsVisible(true), delay))
+
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicState.handOver, publicState.handNumber])
+
+  // Guards the same one-frame stale-flash the Blackjack reveal guards
+  // against: a fresh handOver can render before this effect has reset the
+  // local staging state back to zero.
+  const isFreshShowdown = publicState.handOver && showdownStagedForHandRef.current !== publicState.handNumber
+  const revealedOpponentCountEffective = publicState.handOver ? (isFreshShowdown ? 0 : revealedOpponentCount) : 0
+  const handResultsVisibleEffective = publicState.handOver ? (isFreshShowdown ? false : handResultsVisible) : false
 
   // Sound effects
   useEffect(() => {
@@ -122,20 +174,17 @@ export function HoldemTable({
       play('fold')
     }
 
-    // Showdown reveal: a genuine showdown (not a fold-out win) reveals real
-    // cards for every contesting seat -- detect via any non-local, non-folded
-    // seat's public cards becoming populated at the same moment the hand ends.
-    if (!p.handOver && publicState.handOver) {
-      const hadRealShowdown = publicState.seatOrder.some((id) =>
-        id !== localPlayerId && !publicState.hands[id]?.folded && (publicState.hands[id]?.cards.length ?? 0) > 0,
-      )
-      if (hadRealShowdown) {
-        play('card-flip')
-      }
+    // Showdown reveal -- one flip per contesting opponent's cards actually
+    // turning face-up (the staged reveal above), not the instant every
+    // seat's cards exist in public state.
+    if (revealedOpponentCountEffective > p.revealedOpponentCount) {
+      play('card-flip')
     }
 
-    // Hand-over win/loss sounds
-    if (!p.handOver && publicState.handOver && publicState.handResults) {
+    // Hand-over win/loss sounds -- keyed off the staged results reveal
+    // finishing, not raw handOver (which, like the showdown cards, is
+    // already final the instant the hand ends).
+    if (!p.handResultsVisible && handResultsVisibleEffective && publicState.handResults) {
       const myResults = publicState.handResults.winners.find((w) => w.playerId === localPlayerId)
       if (myResults) {
         play('chip-win')
@@ -158,16 +207,23 @@ export function HoldemTable({
       handResults: publicState.handResults,
       myBetThisStreet,
       myFolded,
+      revealedOpponentCount: revealedOpponentCountEffective,
+      handResultsVisible: handResultsVisibleEffective,
     }
-  }, [publicState.turn.phase, publicState.handOver, publicState.handResults, publicState.hands, publicState.seatOrder, localPlayerId, notice, play])
+  }, [publicState.turn.phase, publicState.handOver, publicState.handResults, publicState.hands, publicState.seatOrder, localPlayerId, notice, play, revealedOpponentCountEffective, handResultsVisibleEffective])
 
   // Derived state
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const myChips = publicState.chips[localPlayerId] ?? 0
   const myBetThisStreet = publicState.hands[localPlayerId]?.betThisStreet ?? 0
   const currentPhase = publicState.turn.phase
-  const isActionPhase = ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
-  const canAct = isMyTurn && isActionPhase && !publicState.handOver
+  // A fold-out sole-winner and a genuine showdown both set handOver without
+  // ever advancing turn.phase off whatever street it happened to be on (see
+  // the FOLD sole-winner path and conductShowdown in rules.ts) -- excluding
+  // handOver here is what actually retires the last actor's "Turn" tag and
+  // action controls once the hand is over, not just re-checking phase.
+  const isActionPhase = !publicState.handOver && ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
+  const canAct = isMyTurn && isActionPhase
 
   // Button gating conditions based on rules.ts validators
   const callAmount = Math.min(publicState.currentBetThisStreet - myBetThisStreet, myChips)
@@ -188,8 +244,10 @@ export function HoldemTable({
   let maxBetAmount = myChips
 
   if (canBet) {
-    // Betting: min = 1, max = myChips
-    minBetAmount = 1
+    // Betting: min = one big blind (the stepper below moves in 10s, so
+    // starting it anywhere off that grid -- e.g. the engine's true floor of
+    // 1 chip -- means every step lands on an off-grid number: 1, 11, 21...).
+    minBetAmount = Math.min(HOLDEM_BIG_BLIND, myChips)
     maxBetAmount = myChips
   } else if (canRaise) {
     // Raising: min = currentBet + minRaise, max = myChips + myBetThisStreet (max possible bet-to)
@@ -204,6 +262,18 @@ export function HoldemTable({
 
   // Clamp betAmount to valid range
   const clampedBetAmount = Math.min(Math.max(betAmount, minBetAmount), maxBetAmount)
+
+  // Your own hole cards live in privateState while the hand is live, but
+  // conductShowdown (and the FOLD sole-winner path) both wipe every seat's
+  // privateState to {hand:[]} once the hand ends -- the canonical copy from
+  // that point on is publicState.hands[you].cards, which conductShowdown
+  // populates for every contesting seat as part of the reveal. Falling back
+  // to privateState only while it's actually populated keeps your own hand
+  // visible through hand-over instead of vanishing at the exact moment a
+  // player wants to compare it against the board.
+  const myHoleCards = publicState.hands[localPlayerId]?.cards.length
+    ? publicState.hands[localPlayerId].cards
+    : privateState.hand
 
   // Quick preset buttons
   const halfPotPreset = Math.floor(publicState.pot / 2)
@@ -341,8 +411,10 @@ export function HoldemTable({
 
                     {/* Opacity state for folded/eliminated */}
                     <div className="holdem-opp-cards" style={{ opacity: isFolded || isEliminated ? 0.6 : 1 }}>
-                      {seatHand.cards.length > 0 ? (
-                        // Showdown reveal - show real cards at meld size
+                      {seatHand.cards.length > 0 && contestingOpponents.indexOf(seatId) < revealedOpponentCountEffective ? (
+                        // Showdown reveal - show real cards at meld size,
+                        // paced one contesting opponent at a time (see the
+                        // staged-reveal effect above).
                         seatHand.cards.map((card, i) => (
                           <PlayingCard
                             key={i}
@@ -392,9 +464,9 @@ export function HoldemTable({
             <div className="holdem-your-side">
               {/* Your hole cards */}
               <div className="holdem-your-hand-col">
-                {privateState.hand.length > 0 && (
+                {myHoleCards.length > 0 && (
                   <div className="holdem-your-cards">
-                    {privateState.hand.map((card, i) => (
+                    {myHoleCards.map((card, i) => (
                       <PlayingCard
                         key={i}
                         rank={card.rank as any}
@@ -528,19 +600,27 @@ export function HoldemTable({
                 </div>
               )}
 
-              {!isMyTurn && isActionPhase && !publicState.handOver && (
+              {!isMyTurn && isActionPhase && (
                 <div className="holdem-action-section">
                   Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
                 </div>
               )}
 
+              {/* Showdown reveal in progress: cards are flipping (or, on a
+                  fold-out win, a short beat) before the result appears. */}
+              {publicState.handOver && !handResultsVisibleEffective && (
+                <div className="holdem-action-section">
+                  {contestingOpponents.length > 0 ? 'Revealing hands…' : 'Hand over…'}
+                </div>
+              )}
+
               {/* Hand-over banner */}
-              {publicState.handOver && publicState.handResults && (
+              {publicState.handOver && handResultsVisibleEffective && publicState.handResults && (
                 <div className="holdem-action-section">
                   <div className="holdem-hand-results">
                     {publicState.gameOverWinnerId ? (
                       <div className="holdem-game-over">
-                        {publicState.gameOverWinnerId === localPlayerId ? 'You' : names[publicState.gameOverWinnerId] ?? 'Someone'} wins the table!
+                        {publicState.gameOverWinnerId === localPlayerId ? 'You win' : `${names[publicState.gameOverWinnerId] ?? 'Someone'} wins`} the table!
                       </div>
                     ) : (
                       <div>
@@ -551,10 +631,11 @@ export function HoldemTable({
 
                           if (winners.length === 1) {
                             const winnerId = winners[0]
-                            const winnerName = winnerId === localPlayerId ? 'You' : names[winnerId] ?? winnerId
+                            const isLocalWinner = winnerId === localPlayerId
+                            const winnerName = isLocalWinner ? 'You' : names[winnerId] ?? winnerId
                             return (
                               <div key={i}>
-                                {winnerName} wins {breakdown.amount}
+                                {winnerName} {isLocalWinner ? 'win' : 'wins'} {breakdown.amount}
                               </div>
                             )
                           } else {
@@ -568,7 +649,13 @@ export function HoldemTable({
                       </div>
                     )}
                   </div>
-                  <div className="holdem-action-buttons">
+                  {/* Full-width stacked, not the same wrapping row the
+                      Fold/Check/Call buttons use -- "Deal next hand" and
+                      "Leave table" are too wide to reliably sit side by
+                      side in this column, and letting them wrap onto their
+                      own lines looked like a layout glitch rather than a
+                      deliberate design. */}
+                  <div className="holdem-hand-over-actions">
                     {!publicState.gameOverWinnerId && (
                       <button
                         type="button"
