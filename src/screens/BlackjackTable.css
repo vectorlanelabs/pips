@@ -229,13 +229,29 @@
 
 .blackjack-centre {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: clamp(12px, 2vw, 16px);
+  gap: clamp(20px, 3vw, 32px);
   border-top: 3px solid var(--grey-fill);
   border-bottom: 3px solid var(--grey-fill);
   padding: clamp(14px, 2vw, 22px) 0;
   margin-bottom: clamp(12px, 2vw, 20px);
+}
+
+/* Decorative shoe -- shows the real remaining count but isn't clickable;
+   nothing in Blackjack's rules draws from it as a direct player action. */
+.blackjack-shoe-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.blackjack-shoe-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
 }
 
 .blackjack-dealer-group {

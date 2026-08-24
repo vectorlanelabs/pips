@@ -101,8 +101,10 @@ export function HoldemTable({
     // Local player commits chips (bet/call/raise) -- only the local player's
     // own action, never a bot's, matching this codebase's "don't spam sound
     // for opponent turns" convention (see Rummy's own sound-effect comment).
+    // Going all-in gets the bigger, more dramatic cue instead of the plain
+    // chip sound.
     if (myBetThisStreet > p.myBetThisStreet) {
-      play('chip-bet')
+      play(myHand?.allIn ? 'all-in' : 'chip-bet')
     }
 
     // Local player folds
@@ -322,10 +324,18 @@ export function HoldemTable({
               })}
             </div>
 
-            {/* Centre band: board + pot */}
+            {/* Centre band: deck + board + pot */}
             <div className="holdem-centre">
-              <div className="holdem-board-group">
-                <HoldemBoard cards={publicState.board} />
+              <div className="holdem-deck-board-row">
+                {/* Decorative deck -- not clickable, no gameplay action draws from it directly */}
+                <div className="holdem-deck-group">
+                  <div className="holdem-deck-caption">deck</div>
+                  <CardBack size="stock" design={publicState.cardBack} />
+                </div>
+
+                <div className="holdem-board-group">
+                  <HoldemBoard cards={publicState.board} />
+                </div>
               </div>
               <div className="holdem-pot">
                 Pot: {publicState.pot}

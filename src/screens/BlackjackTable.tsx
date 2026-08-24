@@ -312,6 +312,12 @@ export function BlackjackTable({
 
             {/* Centre band: dealer */}
             <div className="blackjack-centre">
+              {/* Shoe: decorative only -- not clickable, no gameplay action draws from it directly */}
+              <div className="blackjack-shoe-group">
+                <div className="blackjack-shoe-caption">shoe {publicState.shoeCount}</div>
+                <CardBack size="stock" design={publicState.cardBack} />
+              </div>
+
               <div className="blackjack-dealer-group">
                 <div className="blackjack-dealer-label">Dealer</div>
                 <div className="blackjack-dealer-cards">
