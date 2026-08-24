@@ -543,6 +543,7 @@ describe('Scrabble bot word search', () => {
         tiles: [{ tileId: 'opp-tile', row: 7, col: 8, letter: 'X', isBlank: false }],
         words: [invalidWord],
         totalScore: 18,
+        drawnTileIds: [],
         challengeable: true,
       },
       winnerId: null,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createScrabbleGame, RACK_SIZE } from './state.ts'
+import { createScrabbleGame, RACK_SIZE, type ScrabbleTile } from './state.ts'
 import { applyScrabbleAction } from './rules.ts'
 import { cardCount } from '../../card-engine/zones.ts'
 import { currentPlayer } from '../../engine/turn-engine.ts'
@@ -543,6 +543,74 @@ describe('Scrabble regression tests', () => {
       // Rack should be back to initial size (7), not 9 (7 + 2 returned tiles)
       expect(rackSizeAfterChallenge).toBeLessThanOrEqual(RACK_SIZE)
     }
+  })
+
+  it('[Bug 5] should return only the actually-drawn refill tiles to the bag after a successful CHALLENGE', () => {
+    // Regression test: when the bag runs low mid-refill, a successful challenge must
+    // return exactly the tiles that were drawn as refill to the bag — not a positional
+    // slice of the rack (which would ship some of the placer's original tiles into the
+    // bag and permanently shrink their rack below 7).
+    let game = createScrabbleGame(['p1', 'p2'], 42)
+
+    // Override p1's rack with 7 known tiles: 5 will be placed (forming the invalid
+    // word QZXVB), 2 stay in the rack untouched.
+    const placedTiles: ScrabbleTile[] = [
+      { id: 'placed-1', letter: 'Q', points: 10 },
+      { id: 'placed-2', letter: 'Z', points: 10 },
+      { id: 'placed-3', letter: 'X', points: 8 },
+      { id: 'placed-4', letter: 'V', points: 4 },
+      { id: 'placed-5', letter: 'B', points: 3 },
+    ]
+    const keptTiles: ScrabbleTile[] = [
+      { id: 'kept-1', letter: 'M', points: 3 },
+      { id: 'kept-2', letter: 'N', points: 1 },
+    ]
+    game.session.privateStates.p1.rack.cards = [...placedTiles, ...keptTiles]
+
+    // Override the bag with exactly 3 known tiles — fewer than the 5 needed to
+    // fully refill p1's rack, so the refill is partial.
+    const bagTiles: ScrabbleTile[] = [
+      { id: 'bag-1', letter: 'C', points: 3 },
+      { id: 'bag-2', letter: 'D', points: 2 },
+      { id: 'bag-3', letter: 'E', points: 1 },
+    ]
+    game.bag.cards = [...bagTiles]
+    game.session.publicState.bagCount = bagTiles.length
+
+    // p1 places all 5 tiles across the center; QZXVB is not in the mock dictionary,
+    // so p2's challenge will succeed.
+    const placeResult = applyScrabbleAction(
+      game,
+      'p1',
+      {
+        type: 'PLACE_WORD',
+        tiles: placedTiles.map((t, i) => ({ tileId: t.id, row: 7, col: 5 + i, letter: t.letter })),
+      },
+      mockDictionary,
+    )
+    expect(placeResult.outcome.ok).toBe(true)
+    game = placeResult.session
+
+    // Refill drew all 3 bag tiles: rack = 2 kept + 3 drawn = 5, bag = 0.
+    expect(cardCount(game.session.privateStates.p1.rack)).toBe(5)
+    expect(game.session.publicState.bagCount).toBe(0)
+
+    // Opponent challenges; the invalid word means the challenge succeeds.
+    const challengeResult = applyScrabbleAction(game, 'p2', { type: 'CHALLENGE' }, mockDictionary)
+    expect(challengeResult.outcome.ok).toBe(true)
+    game = challengeResult.session
+
+    // p1's rack is back to exactly the original 7 tiles (the 2 kept + the 5 placed),
+    // checked by exact tile ID — not just size.
+    const expectedRackIds = [...placedTiles, ...keptTiles].map((t) => t.id).sort()
+    const rackIds = game.session.privateStates.p1.rack.cards.map((t) => t.id).sort()
+    expect(rackIds).toEqual(expectedRackIds)
+    expect(cardCount(game.session.privateStates.p1.rack)).toBe(RACK_SIZE)
+
+    // The bag holds exactly the 3 tiles that were drawn as refill — none of p1's
+    // original rack tiles.
+    const bagIds = game.bag.cards.map((t) => t.id).sort()
+    expect(bagIds).toEqual(bagTiles.map((t) => t.id).sort())
   })
 
   it('[Bug 3] should compute individual word scores, not just total', () => {

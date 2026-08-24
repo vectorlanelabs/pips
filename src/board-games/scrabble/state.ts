@@ -30,6 +30,7 @@ export interface LastPlacement {
   tiles: { tileId: string; row: number; col: number; letter: string; isBlank: boolean }[]
   words: { word: string; score: number }[]   // every word formed this turn (main + cross-words)
   totalScore: number
+  drawnTileIds: string[]   // IDs of the tiles drawn from the bag as refill for this placement (empty if the bag was empty)
   challengeable: boolean   // false once the next player has taken any non-CHALLENGE action
 }
 

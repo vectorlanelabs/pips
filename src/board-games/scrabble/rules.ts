@@ -304,7 +304,6 @@ function makeValidator(
 
         // Return tiles to original placer's rack
         const originalRack = privateStates[originalPlacerId].rack
-        const numTilesPlaced = lastPlacement.tiles.length
 
         // Create the returned tile objects
         const returnedTiles = lastPlacement.tiles.map((t): ScrabbleTile => {
@@ -316,10 +315,11 @@ function makeValidator(
           }
         })
 
-        // Remove the most-recently-drawn tiles from the rack (the ones that replaced the placed tiles)
-        // These go back into the bag
-        const tilesToRemoveFromRack = originalRack.cards.slice(-numTilesPlaced)
-        const { zone: shrunkRack, removed: removedTiles } = removeCardsById(originalRack, tilesToRemoveFromRack.map((t) => t.id))
+        // Remove the tiles that were drawn from the bag as refill for this placement
+        // (recorded at placement time) — these go back into the bag. Driven by the
+        // recorded ID list rather than a positional slice of the rack, which would be
+        // wrong whenever the bag ran low and the placer got a partial refill.
+        const { zone: shrunkRack, removed: removedTiles } = removeCardsById(originalRack, lastPlacement.drawnTileIds)
 
         // Add the removed tiles back to the bag
         let newBag = addCards(bag, removedTiles)
@@ -414,8 +414,10 @@ function makeValidator(
       const toRefill = RACK_SIZE - cardCount(newRack)
       let refilled = newRack
       let newBag = bag
+      const drawnTileIds: string[] = []
       for (let i = 0; i < toRefill && cardCount(newBag) > 0; i++) {
         const tile = newBag.cards[newBag.cards.length - 1]
+        drawnTileIds.push(tile.id)
         const { from, to } = moveCards(newBag, refilled, [tile.id])
         newBag = from
         refilled = to
@@ -442,6 +444,7 @@ function makeValidator(
           score: wordScores[idx] ?? 0,
         })),
         totalScore: placedScore,
+        drawnTileIds,
         challengeable: true,
       }
 
