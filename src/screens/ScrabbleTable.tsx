@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ScrabblePublicState, ScrabbleTile } from '../board-games/scrabble/state'
+import { LETTER_POINTS, type ScrabblePublicState, type ScrabbleTile } from '../board-games/scrabble/state'
 import { premiumAt } from '../board-games/scrabble/board'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
@@ -380,11 +380,7 @@ export function ScrabbleTable({
                               return tile?.points ?? 0
                             }
                             return cell?.letter
-                              ? {
-                                  A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
-                                  K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
-                                  U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
-                                }[cell.letter] ?? 0
+                              ? LETTER_POINTS[cell.letter] ?? 0
                               : 0
                           })()}
                         </span>

@@ -62,14 +62,21 @@ export interface ScrabbleSession {
   rng: () => number
 }
 
-// Standard English 100-tile distribution
-const TILE_DISTRIBUTION: Array<[string, number, number]> = [
-  ['A', 9, 1], ['B', 2, 3], ['C', 2, 3], ['D', 4, 2], ['E', 12, 1],
-  ['F', 2, 4], ['G', 3, 2], ['H', 2, 4], ['I', 9, 1], ['J', 1, 8],
-  ['K', 1, 5], ['L', 4, 1], ['M', 2, 3], ['N', 6, 1], ['O', 8, 1],
-  ['P', 2, 3], ['Q', 1, 10], ['R', 6, 1], ['S', 4, 1], ['T', 6, 1],
-  ['U', 4, 1], ['V', 2, 4], ['W', 2, 4], ['X', 1, 8], ['Y', 2, 4],
-  ['Z', 1, 10],
+// Standard English Scrabble letter point values (blanks are 0 and handled separately)
+export const LETTER_POINTS: Record<string, number> = {
+  A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8,
+  K: 5, L: 1, M: 3, N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1,
+  U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10,
+}
+
+// Standard English 100-tile distribution (letter, count)
+const TILE_DISTRIBUTION: Array<[string, number]> = [
+  ['A', 9], ['B', 2], ['C', 2], ['D', 4], ['E', 12],
+  ['F', 2], ['G', 3], ['H', 2], ['I', 9], ['J', 1],
+  ['K', 1], ['L', 4], ['M', 2], ['N', 6], ['O', 8],
+  ['P', 2], ['Q', 1], ['R', 6], ['S', 4], ['T', 6],
+  ['U', 4], ['V', 2], ['W', 2], ['X', 1], ['Y', 2],
+  ['Z', 1],
 ]
 
 export function createTileBag(): ScrabbleTile[] {
@@ -77,9 +84,9 @@ export function createTileBag(): ScrabbleTile[] {
   let counter = 0
 
   // Regular tiles
-  for (const [letter, count, points] of TILE_DISTRIBUTION) {
+  for (const [letter, count] of TILE_DISTRIBUTION) {
     for (let i = 0; i < count; i++) {
-      tiles.push({ id: `tile-${counter}`, letter, points })
+      tiles.push({ id: `tile-${counter}`, letter, points: LETTER_POINTS[letter] })
       counter++
     }
   }
