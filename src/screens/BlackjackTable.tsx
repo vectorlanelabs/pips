@@ -421,37 +421,48 @@ export function BlackjackTable({
             <div className="blackjack-your-side">
               {/* Your hands */}
               <div className="blackjack-your-hands">
-                {myHands.map((hand, handIdx) => (
-                  <div key={hand.id} className="blackjack-your-hand">
-                    {handIdx > 0 && <div className="blackjack-your-hand-separator" />}
-                    <span className="blackjack-your-hand-label">You</span>
+                {myHands.map((hand, handIdx) => {
+                  const isSplit = myHands.length > 1
+                  const isActiveHand = isSplit && isMyTurn && publicState.turn.phase === 'acting' && handIdx === activeHandIndex
 
-                    <div className="blackjack-your-cards">
-                      {hand.cards.map((card, i) => (
-                        <BlackjackCard
-                          key={i}
-                          rank={card.rank as any}
-                          suit={card.suit as any}
-                          faceUp={true}
-                          design={publicState.cardBack}
-                        />
-                      ))}
-                    </div>
+                  return (
+                    <div
+                      key={hand.id}
+                      className={`blackjack-your-hand${isActiveHand ? ' blackjack-your-hand--active' : ''}`}
+                    >
+                      {handIdx > 0 && <div className="blackjack-your-hand-separator" />}
+                      <span className="blackjack-your-hand-label">
+                        {isSplit ? `Hand ${handIdx + 1}` : 'You'}
+                        {isActiveHand && <span className="blackjack-your-hand-active-tag">Playing</span>}
+                      </span>
 
-                    <div className="blackjack-your-total">
-                      Total: {handValue(hand.cards).total}
-                    </div>
-
-                    {publicState.roundResults && publicState.roundResults[localPlayerId] && (
-                      <div className={`blackjack-your-result blackjack-your-result--${hand.result}`}>
-                        {hand.result === 'blackjack' && 'Blackjack!'}
-                        {hand.result === 'win' && 'Win'}
-                        {hand.result === 'lose' && 'Lose'}
-                        {hand.result === 'push' && 'Push'}
+                      <div className="blackjack-your-cards">
+                        {hand.cards.map((card, i) => (
+                          <BlackjackCard
+                            key={i}
+                            rank={card.rank as any}
+                            suit={card.suit as any}
+                            faceUp={true}
+                            design={publicState.cardBack}
+                          />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div className="blackjack-your-total">
+                        Total: {handValue(hand.cards).total}
+                      </div>
+
+                      {publicState.roundResults && publicState.roundResults[localPlayerId] && (
+                        <div className={`blackjack-your-result blackjack-your-result--${hand.result}`}>
+                          {hand.result === 'blackjack' && 'Blackjack!'}
+                          {hand.result === 'win' && 'Win'}
+                          {hand.result === 'lose' && 'Lose'}
+                          {hand.result === 'push' && 'Push'}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Controls column: the chip bank is always the first, fixed

@@ -166,8 +166,13 @@ export function HoldemTable({
   const myChips = publicState.chips[localPlayerId] ?? 0
   const myBetThisStreet = publicState.hands[localPlayerId]?.betThisStreet ?? 0
   const currentPhase = publicState.turn.phase
-  const isActionPhase = ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
-  const canAct = isMyTurn && isActionPhase && !publicState.handOver
+  // A fold-out sole-winner and a genuine showdown both set handOver without
+  // ever advancing turn.phase off whatever street it happened to be on (see
+  // the FOLD sole-winner path and conductShowdown in rules.ts) -- excluding
+  // handOver here is what actually retires the last actor's "Turn" tag and
+  // action controls once the hand is over, not just re-checking phase.
+  const isActionPhase = !publicState.handOver && ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
+  const canAct = isMyTurn && isActionPhase
 
   // Button gating conditions based on rules.ts validators
   const callAmount = Math.min(publicState.currentBetThisStreet - myBetThisStreet, myChips)
@@ -206,6 +211,18 @@ export function HoldemTable({
 
   // Clamp betAmount to valid range
   const clampedBetAmount = Math.min(Math.max(betAmount, minBetAmount), maxBetAmount)
+
+  // Your own hole cards live in privateState while the hand is live, but
+  // conductShowdown (and the FOLD sole-winner path) both wipe every seat's
+  // privateState to {hand:[]} once the hand ends -- the canonical copy from
+  // that point on is publicState.hands[you].cards, which conductShowdown
+  // populates for every contesting seat as part of the reveal. Falling back
+  // to privateState only while it's actually populated keeps your own hand
+  // visible through hand-over instead of vanishing at the exact moment a
+  // player wants to compare it against the board.
+  const myHoleCards = publicState.hands[localPlayerId]?.cards.length
+    ? publicState.hands[localPlayerId].cards
+    : privateState.hand
 
   // Quick preset buttons
   const halfPotPreset = Math.floor(publicState.pot / 2)
@@ -394,9 +411,9 @@ export function HoldemTable({
             <div className="holdem-your-side">
               {/* Your hole cards */}
               <div className="holdem-your-hand-col">
-                {privateState.hand.length > 0 && (
+                {myHoleCards.length > 0 && (
                   <div className="holdem-your-cards">
-                    {privateState.hand.map((card, i) => (
+                    {myHoleCards.map((card, i) => (
                       <PlayingCard
                         key={i}
                         rank={card.rank as any}
@@ -530,7 +547,7 @@ export function HoldemTable({
                 </div>
               )}
 
-              {!isMyTurn && isActionPhase && !publicState.handOver && (
+              {!isMyTurn && isActionPhase && (
                 <div className="holdem-action-section">
                   Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
                 </div>
@@ -542,7 +559,7 @@ export function HoldemTable({
                   <div className="holdem-hand-results">
                     {publicState.gameOverWinnerId ? (
                       <div className="holdem-game-over">
-                        {publicState.gameOverWinnerId === localPlayerId ? 'You' : names[publicState.gameOverWinnerId] ?? 'Someone'} wins the table!
+                        {publicState.gameOverWinnerId === localPlayerId ? 'You win' : `${names[publicState.gameOverWinnerId] ?? 'Someone'} wins`} the table!
                       </div>
                     ) : (
                       <div>
@@ -553,10 +570,11 @@ export function HoldemTable({
 
                           if (winners.length === 1) {
                             const winnerId = winners[0]
-                            const winnerName = winnerId === localPlayerId ? 'You' : names[winnerId] ?? winnerId
+                            const isLocalWinner = winnerId === localPlayerId
+                            const winnerName = isLocalWinner ? 'You' : names[winnerId] ?? winnerId
                             return (
                               <div key={i}>
-                                {winnerName} wins {breakdown.amount}
+                                {winnerName} {isLocalWinner ? 'win' : 'wins'} {breakdown.amount}
                               </div>
                             )
                           } else {
