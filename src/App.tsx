@@ -1071,6 +1071,7 @@ export default function App() {
     setScrabbleView(null)
     setScrabbleConnection('connected')
     setScrabbleNotice(null)
+    scrabbleRejectionNoticeRef.current = null
     setScrabbleStarted(false)
     scrabbleStartedRef.current = false
     setScrabbleSeats([])
@@ -4200,6 +4201,7 @@ export default function App() {
         setScrabbleSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
         scrabbleSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
         setScrabbleNotice(null)
+        scrabbleRejectionNoticeRef.current = null
         scrabbleBroadcast()
       },
       onJoin(guestId, guestName) {
