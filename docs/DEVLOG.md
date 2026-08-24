@@ -4160,3 +4160,45 @@ shipping each verified charter promptly.
   idiom uncritically.
 - **Continue?** Yes — M1 complete. Proceeding to M2 (Blackjack wiring,
   spec 54).
+
+## Cycle 4 — 2026-08-23 — spec 54 (Blackjack wiring) lands; M0-M2 complete
+- **Shipped:** `src/App.tsx` (host/guest session, novel multi-phase bot
+  loop, lobby/table render blocks), `src/state/route.ts`,
+  `src/screens/Landing.tsx`, `README.md`. Two locked departures from
+  Rummy's wiring pattern, both as designed: single `broadcast()` (no
+  per-guest `sendTo`, since Blackjack has no private per-seat data) and
+  a human-clicked "Deal next round" instead of an automatic host timer.
+- **Verification:** re-ran `tsc -b --noEmit`, full `vitest run`
+  (1321 tests, unchanged), `npm run build` myself after every round —
+  clean each time.
+- **Review (lead, personally):** read the full ~420-line App.tsx diff.
+  Found 1 real bug: the implementer created a redundant
+  `blackjackCardBackRef` instead of reusing the single shared
+  `rummyCardBackRef` every other card game's card-back picker actually
+  writes through (`setCardBackPreference` only ever updates
+  `rummyCardBackRef.current`) — confirmed by reading `skipBoBroadcast`'s
+  identical use of `rummyCardBackRef.current` as precedent. Result: a
+  host's card-back pick in the Blackjack lobby never reached the actual
+  dealt game (`blackjackStart()` used the stale ref) or a connected
+  guest's lobby view — a picker that visually works but silently does
+  nothing, same bug class as prior charters' "control exists but isn't
+  wired" findings. Sent back a scoped fix; independently re-verified
+  (tsc/tests/build clean, `grep blackjackCardBackRef` returns nothing).
+  Also inspected (not fixed, disposition: accept) a self-healing nit:
+  the betting/insurance bot-loop's inner `while` loop can only ever
+  process one bot bet/insurance-resolution per call, because its actor
+  key includes `betCount`/`insuranceCount`, which changes the instant
+  the bot itself acts — the loop then reports itself "stale" and exits
+  after one action. This does NOT break correctness or pacing: the
+  outer `runBlackjackBotsIfNeeded` retry (a 50ms poll) picks up the next
+  pending bot on its next tick with a freshly-computed key, so every bot
+  still bets/resolves insurance, still paced >= BASE_MS apart — just via
+  more, smaller loop invocations than the spec pictured, not fewer.
+  Accepted with no fix needed; noted for awareness if Hold'em's betting-
+  round bot loop (spec 55/57) reuses this exact actor-key shape, since
+  a genuinely different case (not just cosmetic) could exist there
+  given side pots add more per-round mutable counters.
+- **Landed:** commit (see git log) on `worktree-poker-blackjack-loop`.
+- **Continue?** Yes — M0-M2 (all of Blackjack) now landed. Live browser
+  verification (host+bots playthrough, mandatory 6-seat bot-pacing
+  check) is next, before moving to Hold'em (M3).

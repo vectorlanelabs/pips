@@ -8,12 +8,17 @@ Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
 (branch `worktree-poker-blackjack-loop`) per user instruction.
 
 ## Next up
-1. M2 — Blackjack wiring (spec 54)
-2. M3 — Hold'em engine (spec 55)
-3. M4 — Hold'em screens (spec 56)
-4. M5 — Hold'em wiring (spec 57)
+1. M3 — Hold'em engine (spec 55)
+2. M4 — Hold'em screens (spec 56)
+3. M5 — Hold'em wiring (spec 57)
+4. Live browser verification of the full Blackjack build (pending —
+   next action before starting Hold'em)
 
 ## Done
+- [cycle 4] M2 — Blackjack wiring (spec 54): App.tsx host/guest session,
+  novel multi-phase bot loop (betting/insurance/acting), route/Landing/
+  README. One bug found in review (card-back picker wired to a dead
+  ref) and fixed. 1321 tests / tsc / build clean.
 - [cycle 3] M1 — Blackjack screens (spec 53): Room/Table/RulesOverlay,
   no Results screen (deliberate — no match winner concept). One bug
   found in review (deal-intro animation desynced from the real deal
