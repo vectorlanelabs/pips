@@ -4202,3 +4202,114 @@ shipping each verified charter promptly.
 - **Continue?** Yes — M0-M2 (all of Blackjack) now landed. Live browser
   verification (host+bots playthrough, mandatory 6-seat bot-pacing
   check) is next, before moving to Hold'em (M3).
+
+## Cycle 5 — 2026-08-23/24 — live browser verification finds a severe payout bug
+- **Live verification setup note**: the MCP browser preview tool's
+  `preview_start({name: 'pips-dev'})` served a STALE/wrong App.tsx (616KB
+  transformed vs. the worktree's real ~226KB source, missing "Blackjack"
+  entirely) — traced to the launch-config-based dev server not actually
+  running from this worktree's directory. Worked around by starting
+  `npm run dev -- --port 5199` manually from the worktree and opening
+  the browser via `preview_start({url: ...})` instead of `{name: ...}`;
+  confirmed fixed (shelf tile appeared correctly). A second, separate
+  tooling limitation: the MCP browser tab's `document.visibilityState`
+  was stuck `'hidden'` regardless of tab-foreground selection, which
+  stalls `DealIntro`'s deliberately rAF-gated animation forever (by
+  design — CLAUDE.md's own "never race ahead of an unrendered
+  animation" rule, working exactly as intended, just inconvenient for
+  this headless tool). Worked around per this project's own Scrabble-
+  charter precedent: wrote a small ad-hoc Playwright script (not a
+  project dependency — `playwright-core` installed only in the session
+  scratchpad) driving a REAL non-headless Chromium, where visibility
+  behaves normally and animations complete.
+- **Full live playthrough** (6-seat table, host + 5 bots, Casino Red
+  card back selected in the lobby): confirmed the deal-intro timing fix
+  (cycle 3) and the card-back ref fix (cycle 4) both work correctly end
+  to end — the intro played using the actually-selected card back, only
+  once betting completed, exactly once. Bot betting, insurance-skip (no
+  Ace up-card this run), turn-gated hit/stand, bust handling ("Waiting
+  for X…" status line advancing correctly one bot at a time), and the
+  round-over -> "Deal next round" -> fresh betting cycle all worked
+  with zero console/page errors across two full rounds.
+- **Found a severe, confirmed financial bug via this live run**: a
+  winning hand (player 20 vs. dealer 17, $50 bet) left the player's
+  chips COMPLETELY UNCHANGED across the round (1000 -> 950 at bet time
+  -> 1000 at settlement) instead of up $50. Root cause, traced in
+  `settleRound()` (`rules.ts`): `PLACE_BET`/`TAKE_INSURANCE` escrow the
+  bet/insurance stake by subtracting it from `chips` immediately, but
+  `settleRound` was written as if `chips` still held the PRE-bet
+  balance — so every win/blackjack/dealer-bust credited only the
+  PROFIT, never the STAKE back (net $0 on a plain win instead of +bet;
+  net +0.5x bet on a blackjack instead of +1.5x; a push lost the ENTIRE
+  bet instead of breaking even), and every bust/lose credited an
+  EXTRA `-bet` on top of the already-escrowed loss (a bust cost the
+  player 2x their bet, confirmed live: a $10 bust round left a seat
+  down $20). The identical bug shape hit insurance (a winning 2:1
+  insurance bet paid only 1x profit instead of 2x). All 75 unit tests
+  passed regardless, because none of them asserted a seat's actual
+  final chip total after a full settlement relative to its PRE-bet
+  starting balance — only bet-deduction-at-placement was ever checked.
+  This is the single most severe defect found in this charter: a core
+  money-handling bug invisible to tsc, the full test suite, and even
+  the lead's own earlier code read of `settleRound` (which checked the
+  win/lose/push CLASSIFICATION logic and precedence order carefully but
+  never hand-traced the actual chip ARITHMETIC against the escrow
+  semantics — a real lapse, caught only by literally watching a chip
+  count in a live browser). Dispatched a precision fix spec with the
+  exact corrected chipDelta for every branch, required hand-computed
+  test assertions (not just re-deriving the same formula), and a
+  requirement that the implementer show its own arithmetic trace before
+  and after the fix. In flight.
+- **Lesson**: a fully green test suite proves the code matches the
+  TESTS, not the SPEC — when a numeric/financial invariant has no test
+  asserting the real-world quantity (here: "does a player's chip count
+  make sense after a full round"), a systemic arithmetic bug can hide
+  behind 100% pass rate indefinitely. This is exactly the loop's own
+  "credited a vacuous test as proof" warning, just in a form (missing
+  coverage of a derived quantity) that's easier to miss than a single
+  literally-vacuous test. Worth a standing check for Hold'em's own
+  betting/pot-payout engine (spec 55): require at least one test that
+  hand-traces a full chip trajectory from a known starting stack through
+  a complete betting round to a known final stack, not just per-action
+  deltas.
+- **Continue?** Yes — this fix blocks M0-M2 from being considered truly
+  done; will re-verify (tests + a fresh live Playwright run) before
+  calling Blackjack complete and moving to Hold'em.
+
+## Cycle 5 (landed) — payout arithmetic fixed, Blackjack (M0-M2) genuinely complete
+- **Independently re-verified the payout fix**: re-ran tsc/full suite
+  (1329 tests, +8 new settlement-correctness tests hand-computing exact
+  final chip totals from a 1000-chip starting balance for every
+  outcome branch) — clean. Read the corrected `chipDelta` values
+  directly in `rules.ts` against my own derivation (bust=0, blackjack-
+  push=+bet, blackjack-win=+2.5×bet, dealer-bust=+2×bet, win=+2×bet,
+  lose=0, push=+bet, insurance-win=+3×insuranceBet) — all correct.
+  Re-ran the ad-hoc Playwright live-play script: a loss now correctly
+  nets exactly -$50 (the bet, not -$100), a win nets exactly +$10 (the
+  bet, not $0) — confirmed against real dealt hands, not just unit
+  tests.
+- **Found and fixed two more small UI bugs during this same live re-
+  check**, both self-fixed by the lead (small, one-file JSX changes,
+  not worth another delegation round): "You win ++50" had a redundant
+  double plus-sign (the display code added its own '+' on top of an
+  already-'+'-prefixed string), and "You lose 0" was technically
+  accurate but confusing — it displayed the raw post-fix `chipDelta`
+  (which is now "credit on top of the already-escrowed bet," an
+  internal accounting detail) rather than the hand's true net change
+  for the round. Fixed the round-over banner to display `chipDelta -
+  hand.bet` (the real net: 0 for a loss, +bet for a win, +1.5×bet for
+  blackjack, 0 for a push) instead of raw chipDelta. Re-verified live:
+  a win now displays "You win +50" cleanly.
+- **Landed**: the payout fix + both display fixes as one commit (see
+  git log). tsc/tests(1329)/build all clean.
+- **Blackjack charter milestones M0-M2 are now genuinely complete** —
+  engine, screens, and wiring all landed AND live-verified end to end
+  in a real (non-headless) browser: lobby, card-back selection, 6-seat
+  bot table, betting, insurance offer/decline, hit/stand/bust, dealer
+  play (including a real hard-17 stand), round settlement with
+  CORRECT chip arithmetic, and the next-round cycle — zero console
+  errors throughout two full live rounds.
+- **Continue?** Yes — moving to Hold'em (M3, engine spec 55). The
+  "hand-trace a full chip trajectory" test requirement from this
+  cycle's lesson will be built into spec 55 from the start, not
+  retrofitted after a similar live-verification surprise.

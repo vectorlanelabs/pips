@@ -67,38 +67,39 @@ function settleRound(
       let chipDelta = 0
 
       // Payout precedence:
-      // 1. Player busts: lose the bet
+      // NOTE: chips already reflect the bet escrowed at PLACE_BET time; chipDelta is additional credit on top of that
+      // 1. Player busts: lose the bet (already escrowed)
       if (isBust(hand.cards)) {
         result = 'lose'
-        chipDelta = -hand.bet
+        chipDelta = 0
       }
       // 2. Player has natural blackjack (2 cards, value 21, not a split hand)
       else if (!hand.isSplitHand && isNaturalBlackjack(hand.cards)) {
         if (dealerHasNatural) {
           result = 'push'
-          chipDelta = 0
+          chipDelta = hand.bet
         } else {
           result = 'blackjack'
-          chipDelta = Math.floor(hand.bet * 1.5)
+          chipDelta = Math.floor(hand.bet * 2.5)
         }
       }
       // 3. Dealer busts and player hand didn't
       else if (dealerBusted) {
         result = 'win'
-        chipDelta = hand.bet
+        chipDelta = hand.bet * 2
       }
       // 4. Compare totals
       else {
         const playerValue = handValue(hand.cards).total
         if (playerValue > dealerValue.total) {
           result = 'win'
-          chipDelta = hand.bet
+          chipDelta = hand.bet * 2
         } else if (playerValue < dealerValue.total) {
           result = 'lose'
-          chipDelta = -hand.bet
+          chipDelta = 0
         } else {
           result = 'push'
-          chipDelta = 0
+          chipDelta = hand.bet
         }
       }
 
@@ -112,9 +113,11 @@ function settleRound(
     }
 
     // Handle insurance payout: 2:1 if dealer has natural, otherwise lost
+    // NOTE: insurance stake already escrowed at TAKE_INSURANCE time; credit is additional on top of that
     if (insuranceBet > 0) {
       if (dealerHasNatural) {
-        newChips[seatId] = (newChips[seatId] ?? 0) + insuranceBet * 2
+        // Insurance pays 2:1: return stake + 2x profit = 3x total credited
+        newChips[seatId] = (newChips[seatId] ?? 0) + insuranceBet * 3
       }
       // Insurance lost — no additional chip change; it was already deducted from chips
     }

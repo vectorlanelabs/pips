@@ -11,10 +11,21 @@ Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
 1. M3 — Hold'em engine (spec 55)
 2. M4 — Hold'em screens (spec 56)
 3. M5 — Hold'em wiring (spec 57)
-4. Live browser verification of the full Blackjack build (pending —
-   next action before starting Hold'em)
 
 ## Done
+- [cycle 5] Blackjack live-verified in a real browser (Playwright
+  ad-hoc driver, MCP browser tab's visibilityState was permanently
+  'hidden' so DealIntro's rAF-gated animation couldn't be checked
+  there). Found and fixed the charter's most severe bug: settleRound's
+  chipDelta math treated chips as pre-bet when they were already
+  post-bet-escrow, so every win netted $0 profit, every bust cost 2x
+  the bet, and pushes lost the entire bet — invisible to 75 passing
+  unit tests since none asserted a real post-settlement chip total.
+  Fixed with hand-verified arithmetic + 8 new tests; also fixed two
+  small round-over-banner display bugs (double plus-sign, confusing
+  "lose 0" display) found in the same live re-check. Blackjack (M0-M2)
+  now genuinely complete and live-verified. 1329 tests / tsc / build
+  clean.
 - [cycle 4] M2 — Blackjack wiring (spec 54): App.tsx host/guest session,
   novel multi-phase bot loop (betting/insurance/acting), route/Landing/
   README. One bug found in review (card-back picker wired to a dead

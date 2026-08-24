@@ -505,15 +505,19 @@ export function BlackjackTable({
                   marginBottom: 12,
                 }}>
                   {publicState.roundResults[localPlayerId].map((result, i) => {
-                    const chips = result.chipDelta
-                    const chipStr = chips > 0 ? `+${chips}` : chips < 0 ? `${chips}` : '0'
+                    // chipDelta is credit applied ON TOP OF the already-escrowed bet
+                    // (see rules.ts settleRound) — subtract the bet back out to get
+                    // this hand's true net change for the round (e.g. a push shows 0,
+                    // a plain win shows +bet, not the raw post-escrow credit).
+                    const hand = publicState.hands[localPlayerId]?.[result.handIndex]
+                    const net = result.chipDelta - (hand?.bet ?? 0)
+                    const netStr = net > 0 ? `+${net}` : `${net}`
                     const resultStr = result.result === 'blackjack' ? 'Blackjack!' : result.result === 'win' ? 'Win' : result.result === 'lose' ? 'Lose' : 'Push'
                     const youStr = publicState.hands[localPlayerId]!.length > 1 ? ` (hand ${i + 1})` : ''
 
                     return (
                       <div key={i} style={{ fontSize: 14, color: 'var(--body-text)' }}>
-                        You {resultStr === 'Push' ? resultStr : resultStr.toLowerCase()}{youStr} {chips > 0 && '+'}
-                        {chipStr}
+                        You {resultStr === 'Push' ? resultStr : resultStr.toLowerCase()}{youStr} {netStr}
                       </div>
                     )
                   })}
