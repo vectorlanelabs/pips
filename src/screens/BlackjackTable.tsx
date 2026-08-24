@@ -58,12 +58,27 @@ export function BlackjackTable({
   const prevPhaseRef = useRef<string>(publicState.turn.phase)
   const [showIntro, setShowIntro] = useState(false)
 
+  // The dealer's whole turn -- hole-card flip, every hit the dealer draws,
+  // and the win/lose/push result -- is already fully computed the instant
+  // the round ends (host settles everything in one state transition, same
+  // as the deal itself). Left alone, all of that would render in a single
+  // frame: hole flip, however many dealer hits, and the result banner all
+  // at once. This stages the same final data as a sequence of beats, same
+  // pattern as the deal intro and the Hold'em blind-posting reveal.
+  const DEALER_REVEAL_BEAT_MS = 900
+  const dealerStagedForRoundRef = useRef<number | null>(null)
+  const [dealerRevealCount, setDealerRevealCount] = useState(2)
+  const [dealerHoleRevealedLocal, setDealerHoleRevealedLocal] = useState(false)
+  const [resultsVisible, setResultsVisible] = useState(false)
+
   const noticeSeenRef = useRef(!!notice)
   const soundSigRef = useRef({
     phase: publicState.turn.phase,
     roundResults: publicState.roundResults,
     myBet: publicState.bets[localPlayerId] ?? 0,
     dealerHoleRevealed: publicState.dealerHoleRevealed,
+    dealerHoleRevealedLocal: false,
+    resultsVisible: false,
   })
 
   // Show deal intro when phase transitions out of 'betting' (when dealing completes)
@@ -82,6 +97,48 @@ export function BlackjackTable({
     prevPhaseRef.current = publicState.turn.phase
   }, [publicState.turn.phase, publicState.roundNumber])
 
+  // Stage the dealer's hole-flip, each hit, and the results as separate
+  // beats once a round resolves.
+  useEffect(() => {
+    if (publicState.turn.phase !== 'roundOver') return
+    if (dealerStagedForRoundRef.current === publicState.roundNumber) return
+    dealerStagedForRoundRef.current = publicState.roundNumber
+
+    setDealerRevealCount(2)
+    setDealerHoleRevealedLocal(false)
+    setResultsVisible(false)
+
+    const timers: number[] = []
+    let delay = DEALER_REVEAL_BEAT_MS
+    timers.push(window.setTimeout(() => setDealerHoleRevealedLocal(true), delay))
+
+    const totalDealerCards = publicState.dealerHand.length
+    for (let count = 3; count <= totalDealerCards; count++) {
+      delay += DEALER_REVEAL_BEAT_MS
+      const revealedCount = count
+      timers.push(window.setTimeout(() => setDealerRevealCount(revealedCount), delay))
+    }
+
+    delay += 700
+    timers.push(window.setTimeout(() => setResultsVisible(true), delay))
+
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t))
+    }
+  }, [publicState.turn.phase, publicState.roundNumber, publicState.dealerHand.length])
+
+  // The very first render of a fresh roundOver can land before the effect
+  // above has reset the local reveal state, which would otherwise show a
+  // one-frame flash of the previous round's fully-revealed hand.
+  const isFreshRoundOver = publicState.turn.phase === 'roundOver' && dealerStagedForRoundRef.current !== publicState.roundNumber
+  const dealerCardsToShow = publicState.turn.phase === 'roundOver'
+    ? (isFreshRoundOver ? 2 : dealerRevealCount)
+    : publicState.dealerHand.length
+  const dealerHoleRevealedEffective = publicState.turn.phase === 'roundOver'
+    ? (isFreshRoundOver ? false : dealerHoleRevealedLocal)
+    : publicState.dealerHoleRevealed
+  const resultsVisibleEffective = publicState.turn.phase === 'roundOver' ? (isFreshRoundOver ? false : resultsVisible) : false
+
   // Sound effects
   useEffect(() => {
     const p = soundSigRef.current
@@ -97,13 +154,18 @@ export function BlackjackTable({
       play('chip-bet')
     }
 
-    // Dealer hole card reveal
-    if (!p.dealerHoleRevealed && publicState.dealerHoleRevealed) {
+    // Dealer hole card reveal -- keyed off the LOCAL staged flip, not the
+    // raw public state (which is already true the instant the round ends),
+    // so the sound lands on the same beat as the visual flip.
+    if (!p.dealerHoleRevealedLocal && dealerHoleRevealedEffective) {
       play('card-flip')
     }
 
-    // Round win/loss sounds, most notable outcome first
-    if (p.roundResults === null && publicState.roundResults !== null) {
+    // Round win/loss sounds, most notable outcome first -- keyed off the
+    // staged results reveal finishing, not the raw roundResults appearing
+    // (which, like the hole card, is already final the instant the round
+    // ends).
+    if (!p.resultsVisible && resultsVisibleEffective && publicState.roundResults) {
       const myResults = publicState.roundResults[localPlayerId] ?? []
       const myHands = publicState.hands[localPlayerId] ?? []
       const hasBlackjack = myResults.some((r) => r.result === 'blackjack')
@@ -139,8 +201,10 @@ export function BlackjackTable({
       roundResults: publicState.roundResults,
       myBet,
       dealerHoleRevealed: publicState.dealerHoleRevealed,
+      dealerHoleRevealedLocal: dealerHoleRevealedEffective,
+      resultsVisible: resultsVisibleEffective,
     }
-  }, [publicState.turn.phase, publicState.roundResults, publicState.bets, publicState.dealerHoleRevealed, publicState.hands, notice, play, localPlayerId])
+  }, [publicState.turn.phase, publicState.roundResults, publicState.bets, publicState.dealerHoleRevealed, publicState.hands, notice, play, localPlayerId, dealerHoleRevealedEffective, resultsVisibleEffective])
 
   // Derived state
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
@@ -360,7 +424,7 @@ export function BlackjackTable({
                           </div>
 
                           {/* Result badge */}
-                          {publicState.roundResults && publicState.roundResults[seatId] && (
+                          {resultsVisibleEffective && publicState.roundResults && publicState.roundResults[seatId] && (
                             <div className={`blackjack-opp-result blackjack-opp-result--${hand.result}`}>
                               {hand.result === 'blackjack' && 'Blackjack!'}
                               {hand.result === 'win' && 'Win'}
@@ -388,12 +452,12 @@ export function BlackjackTable({
               <div className="blackjack-dealer-group">
                 <div className="blackjack-dealer-label">Dealer</div>
                 <div className="blackjack-dealer-cards">
-                  {publicState.dealerHand.map((card, i) => (
+                  {publicState.dealerHand.slice(0, dealerCardsToShow).map((card, i) => (
                     <div key={i} className="blackjack-dealer-card-wrapper">
                       <BlackjackCard
                         rank={card.rank as any}
                         suit={card.suit as any}
-                        faceUp={i === 0 || publicState.dealerHoleRevealed}
+                        faceUp={i === 0 || i >= 2 || dealerHoleRevealedEffective}
                         design={publicState.cardBack}
                         style={{ width: 84, height: 118 }}
                       />
@@ -403,9 +467,11 @@ export function BlackjackTable({
               </div>
 
               <div className="blackjack-dealer-status">
-                {publicState.dealerHoleRevealed ? (
+                {dealerHoleRevealedEffective ? (
                   <div className="blackjack-dealer-total">
-                    Total: {handValue(publicState.dealerHand).total}
+                    {resultsVisibleEffective || publicState.turn.phase !== 'roundOver'
+                      ? `Total: ${handValue(publicState.dealerHand.slice(0, dealerCardsToShow)).total}`
+                      : 'Dealer is playing…'}
                   </div>
                 ) : (
                   <>
@@ -452,7 +518,7 @@ export function BlackjackTable({
                         Total: {handValue(hand.cards).total}
                       </div>
 
-                      {publicState.roundResults && publicState.roundResults[localPlayerId] && (
+                      {resultsVisibleEffective && publicState.roundResults && publicState.roundResults[localPlayerId] && (
                         <div className={`blackjack-your-result blackjack-your-result--${hand.result}`}>
                           {hand.result === 'blackjack' && 'Blackjack!'}
                           {hand.result === 'win' && 'Win'}
@@ -487,7 +553,7 @@ export function BlackjackTable({
                       </button>
                       <button
                         type="button"
-                        className="btn btn-lg btn-ghost"
+                        className="btn btn-lg"
                         onClick={onDeclineInsurance}
                         disabled={!canDeclineInsurance}
                       >
@@ -552,14 +618,24 @@ export function BlackjackTable({
                   </div>
                 )}
 
-                {/* Round-over banner */}
-                {roundOverPhase && publicState.roundResults && publicState.roundResults[localPlayerId] && (
+                {/* Round-over: a "dealer is playing" placeholder while the
+                    staged reveal above is still running, then the actual
+                    results once it completes -- so the results banner and
+                    "Deal next round" never appear before the player has
+                    actually seen the dealer's hand resolve. */}
+                {roundOverPhase && !resultsVisibleEffective && (
+                  <div className="blackjack-action-section">
+                    Dealer is playing…
+                  </div>
+                )}
+
+                {roundOverPhase && resultsVisibleEffective && publicState.roundResults && publicState.roundResults[localPlayerId] && (
                   <div className="blackjack-action-section">
                     <div className="blackjack-round-results">
                       {publicState.roundResults[localPlayerId].map((result, i) => {
                         const hand = publicState.hands[localPlayerId]?.[result.handIndex]
                         const net = result.chipDelta - (hand?.bet ?? 0)
-                        const netStr = net > 0 ? `+${net}` : `${net}`
+                        const netStr = net > 0 ? `+${net}` : net < 0 ? `${Math.abs(net)}` : '0'
                         const resultStr = result.result === 'blackjack' ? 'Blackjack!' : result.result === 'win' ? 'Win' : result.result === 'lose' ? 'Lose' : 'Push'
                         const youStr = publicState.hands[localPlayerId]!.length > 1 ? ` (hand ${i + 1})` : ''
 
@@ -569,6 +645,15 @@ export function BlackjackTable({
                           </div>
                         )
                       })}
+                      {publicState.insuranceBets[localPlayerId] > 0 && (() => {
+                        const dealerHasBlackjack = handValue(publicState.dealerHand.slice(0, 2)).total === 21
+                        const insuranceBet = publicState.insuranceBets[localPlayerId]
+                        return (
+                          <div>
+                            Insurance {dealerHasBlackjack ? `won +${insuranceBet * 2}` : `lost ${insuranceBet}`}
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div className="blackjack-round-over-actions">
                       <button
