@@ -236,6 +236,61 @@ export function BlackjackTable({
             onComplete={() => setShowIntro(false)}
             maxFlights={publicState.seatOrder.length * 2}
           />
+        ) : bettingPhase ? (
+          /* Nothing has been dealt yet -- show only the shoe and your own
+             bet control instead of the full opponent/dealer table, so the
+             deal intro that follows genuinely reveals the table rather than
+             replacing an already-fully-rendered one for a moment. */
+          <div className="blackjack-pre-deal">
+            <div className="blackjack-shoe-group">
+              <div className="blackjack-shoe-caption">shoe · {publicState.shoeCount}</div>
+              <CardBack size="stock" design={publicState.cardBack} />
+            </div>
+            <div className="blackjack-pre-deal-status">Waiting for bets…</div>
+
+            {sittingOut ? (
+              <div className="blackjack-pre-deal-panel">
+                Sitting out this round — not enough chips to bet.
+              </div>
+            ) : hasBet ? (
+              <div className="blackjack-pre-deal-panel">
+                Bet placed: ${publicState.bets[localPlayerId]} — waiting on others
+              </div>
+            ) : (
+              <div className="blackjack-pre-deal-panel">
+                <div className="blackjack-action-label">Place your bet</div>
+                <div className="blackjack-bet-controls">
+                  <button
+                    type="button"
+                    className="blackjack-bet-button"
+                    onClick={() => setBetAmount(Math.max(BLACKJACK_MIN_BET, betAmount - 10))}
+                  >
+                    −
+                  </button>
+                  <div className="blackjack-bet-amount">
+                    ${betAmount}
+                  </div>
+                  <button
+                    type="button"
+                    className="blackjack-bet-button"
+                    onClick={() => setBetAmount(Math.min(BLACKJACK_MAX_BET, myChips, betAmount + 10))}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-coral"
+                    onClick={() => onPlaceBet(betAmount)}
+                    disabled={!canPlaceBet}
+                  >
+                    Place bet
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {chipBank}
+          </div>
         ) : (
           <>
             {/* Opponent tiles: a wrapping grid, one tile per opponent seat */}
@@ -342,9 +397,6 @@ export function BlackjackTable({
                         design={publicState.cardBack}
                         style={{ width: 84, height: 118 }}
                       />
-                      {i === 1 && !publicState.dealerHoleRevealed && (
-                        <div className="blackjack-dealer-hole-indicator">?</div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -404,51 +456,6 @@ export function BlackjackTable({
 
               {/* Controls column */}
               <div className="blackjack-your-controls">
-                {bettingPhase && !sittingOut && !hasBet && (
-                  <div className="blackjack-controls-row">
-                    <div className="blackjack-action-section">
-                      <div className="blackjack-action-label">Place your bet</div>
-                      <div className="blackjack-bet-controls">
-                        <button
-                          type="button"
-                          className="blackjack-bet-button"
-                          onClick={() => setBetAmount(Math.max(BLACKJACK_MIN_BET, betAmount - 10))}
-                        >
-                          −
-                        </button>
-                        <div className="blackjack-bet-amount">
-                          ${betAmount}
-                        </div>
-                        <button
-                          type="button"
-                          className="blackjack-bet-button"
-                          onClick={() => setBetAmount(Math.min(BLACKJACK_MAX_BET, myChips, betAmount + 10))}
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-coral"
-                          onClick={() => onPlaceBet(betAmount)}
-                          disabled={!canPlaceBet}
-                        >
-                          Place bet
-                        </button>
-                      </div>
-                    </div>
-                    {chipBank}
-                  </div>
-                )}
-
-                {bettingPhase && hasBet && (
-                  <div className="blackjack-controls-row">
-                    <div className="blackjack-action-section">
-                      Bet placed: ${publicState.bets[localPlayerId]} — waiting on others
-                    </div>
-                    {chipBank}
-                  </div>
-                )}
-
                 {insurancePhase && publicState.dealerHand[0]?.rank === 'A' && !publicState.hasResolvedInsurance[localPlayerId] && (
                   <div className="blackjack-controls-row">
                     <div className="blackjack-action-section">

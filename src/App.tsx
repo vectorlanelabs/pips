@@ -223,6 +223,17 @@ const SHOT_SOUND_BUFFER_MS: Record<'hit' | 'miss' | 'sunk', number> = {
   hit: 2800,
   sunk: 4800,
 }
+// Blackjack: bets are already placed and the round is already dealt in
+// public state the instant betting closes, so nothing gates the bots'
+// first hit/stand decision except this hold -- without it a bot could act
+// mid-way through a human's local DealIntro reveal.
+const BLACKJACK_DEAL_HOLD_BUFFER_MS = 700
+// Hold'em: same DealIntro race as Blackjack, plus this table also stages a
+// paced "small blind posts / big blind posts" reveal (see HoldemTable's
+// HOLDEM_BLIND_STAGE_MS) before the deal intro even starts, so the hold
+// must cover both stages, not just the deal.
+const HOLDEM_BLIND_STAGE_MS = 900 * 2
+const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -506,6 +517,8 @@ export default function App() {
   const blackjackNamesRef = useRef<Record<string, string>>({})
   const blackjackBotSeatsRef = useRef<Set<string>>(new Set())
   const blackjackBotCounterRef = useRef(0)
+  const blackjackLastPhaseRef = useRef<string | null>(null)
+  const blackjackBotsHeldUntilRef = useRef(0)
   const holdemSessionRef = useRef<HoldemSession | null>(null)
   const holdemHostRef = useRef<HostHandle<HoldemView> | null>(null)
   const holdemGuestRef = useRef<GuestHandle<HoldemAction> | null>(null)
@@ -517,6 +530,8 @@ export default function App() {
   const holdemBotSeatsRef = useRef<Set<string>>(new Set())
   const holdemBotCounterRef = useRef(0)
   const holdemCardBackRef = useRef(savedCardBack())
+  const holdemLastHandRef = useRef<number | null>(null)
+  const holdemBotsHeldUntilRef = useRef(0)
   const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
   const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
   const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
@@ -1386,6 +1401,12 @@ export default function App() {
       return
     }
     const session = blackjackSessionRef.current!
+    const phase = session.session.publicState.turn.phase
+    if (blackjackLastPhaseRef.current === 'betting' && phase !== 'betting') {
+      const totalFlights = session.session.publicState.seatOrder.length * 2
+      blackjackBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(totalFlights) + BLACKJACK_DEAL_HOLD_BUFFER_MS
+    }
+    blackjackLastPhaseRef.current = phase
     // No private state needed — all cards are public except dealer's hole card, which is controlled by dealerHoleRevealed flag
     const view: BlackjackView = {
       kind: 'game',
@@ -1518,8 +1539,10 @@ export default function App() {
         )
         if (!botNeedingInsurance) return
 
-        await wait(BASE_MS)
+        const holdRemaining = blackjackBotsHeldUntilRef.current - Date.now()
+        await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
         if (blackjackStale(key)) return
+        if (Date.now() < blackjackBotsHeldUntilRef.current) continue
 
         const updatedSession = blackjackSessionRef.current!
         const updatedPs = updatedSession.session.publicState
@@ -1534,8 +1557,10 @@ export default function App() {
     } else if (phase === 'acting') {
       // Single current player pattern
       while (!blackjackStale(key)) {
-        await wait(BASE_MS)
+        const holdRemaining = blackjackBotsHeldUntilRef.current - Date.now()
+        await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
         if (blackjackStale(key)) return
+        if (Date.now() < blackjackBotsHeldUntilRef.current) continue
         const updatedSession = blackjackSessionRef.current!
         const updatedPs = updatedSession.session.publicState
         if (updatedPs.turn.phase === 'roundOver' || currentPlayer(updatedPs.turn) !== botId) return
@@ -1675,6 +1700,12 @@ export default function App() {
       return
     }
     const session = holdemSessionRef.current!
+    const handNumber = session.session.publicState.handNumber
+    if (holdemLastHandRef.current !== handNumber) {
+      holdemLastHandRef.current = handNumber
+      const totalFlights = session.session.publicState.seatOrder.length * 2
+      holdemBotsHeldUntilRef.current = Date.now() + HOLDEM_BLIND_STAGE_MS + estimateDealIntroMs(totalFlights) + HOLDEM_DEAL_HOLD_BUFFER_MS
+    }
     const hostSnap = deriveSnapshot(session.session, holdemLocalPlayerIdRef.current!)
     setHoldemView({
       kind: 'game',
@@ -1783,8 +1814,10 @@ export default function App() {
 
   async function runHoldemBot(botId: string, key: string) {
     while (!holdemStale(key)) {
-      await wait(BASE_MS)
+      const holdRemaining = holdemBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
       if (holdemStale(key)) return
+      if (Date.now() < holdemBotsHeldUntilRef.current) continue
       const session = holdemSessionRef.current!
       const ps = session.session.publicState
       if (ps.handOver || ps.gameOverWinnerId) return
