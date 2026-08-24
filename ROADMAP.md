@@ -8,11 +8,19 @@ Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
 (branch `worktree-poker-blackjack-loop`) per user instruction.
 
 ## Next up
-1. M3 — Hold'em engine (spec 55)
-2. M4 — Hold'em screens (spec 56)
-3. M5 — Hold'em wiring (spec 57)
+1. M4 — Hold'em screens (spec 56)
+2. M5 — Hold'em wiring (spec 57)
 
 ## Done
+- [cycle 6] M3 — Hold'em engine (spec 55 + 55b): shoe/blinds/betting/
+  side-pots/hand-eval/elimination. 4 severe bugs found and fixed
+  beyond the delegated fix round (2 by the lead personally, past the
+  "fails twice, fix it yourself" threshold): a regression the fix
+  round itself introduced (hand freezes forever once exactly 1 live
+  player remains), FOLD never checking for street closure, and the
+  "short all-in doesn't reopen re-raising" rule being completely
+  unenforced (with its own test vacuous). 1395 tests / tsc / build
+  clean.
 - [cycle 5] Blackjack live-verified in a real browser (Playwright
   ad-hoc driver, MCP browser tab's visibilityState was permanently
   'hidden' so DealIntro's rAF-gated animation couldn't be checked

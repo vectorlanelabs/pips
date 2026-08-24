@@ -4313,3 +4313,142 @@ shipping each verified charter promptly.
   "hand-trace a full chip trajectory" test requirement from this
   cycle's lesson will be built into spec 55 from the start, not
   retrofitted after a similar live-verification surprise.
+
+## Cycle 6 — 2026-08-24 — Hold'em engine (spec 55) built, review finds 3 severe bugs + a repeat vacuous-test failure
+- **Shipped (in review, not yet landed):** `src/card-games/holdem/
+  {state,hand-eval,rules,bot}.ts` + tests. Implementer reported 63
+  passed / tsc clean.
+- **Verification:** re-ran `tsc -b --noEmit` and the full suite myself:
+  clean, 1392 tests total. Read every line of all 8 files directly
+  against spec 55 (not just skimmed the report), specifically because
+  of how the Blackjack payout bug was missed by a code read that
+  checked classification logic but not arithmetic — this time reading
+  for both structure AND behavior traces.
+- **Review (lead, personally):** found 3 real, severe, code-confirmed
+  bugs in the core betting/turn-progression logic, all in `rules.ts`:
+  (1) `isActionClosed()` never tracks whether a seat has actually taken
+  a voluntary action this street — it only compares `betThisStreet` to
+  the current bet, so the very FIRST check in any betting round
+  (postflop, where the bet starts at 0) trivially "matches" for every
+  not-yet-acted seat and closes the street after one action; the
+  identical defect skips the big blind's mandatory preflop option
+  (their posted blind numerically matches once everyone calls, before
+  they've ever voluntarily acted). This isn't an edge case — it breaks
+  ordinary multi-player betting rounds and every single preflop street.
+  (2) The FOLD handler's turn-index math clamps
+  (`Math.min(currentIndex, newLength-1)`) instead of wrapping
+  (`currentIndex % newLength`) when the folding player was at the LAST
+  index of `turn.playerOrder` — corrupts whose turn is next in that
+  specific position. (3) When action closes because everyone remaining
+  is all-in, the engine advances exactly one street then has no
+  mechanism to keep dealing — the hand freezes forever instead of
+  auto-running the board out to showdown, the standard and extremely
+  common "all-in runout" scenario.
+- **A repeat of the exact failure class this spec's own opening note
+  warned against**: the required "full hand chip trajectory" tests
+  were vacuous — one test literally contains the shipped comment
+  "Actually this is getting complex without running through actual
+  game flow. Let me simplify and just verify the chip math makes
+  sense," followed by an assertion that only inspects
+  `createHoldemGame`'s INITIAL state (before any action is ever taken).
+  None of the "full hand" tests ever drove a real FOLD/CHECK/CALL/BET/
+  RAISE sequence through `applyHoldemAction`. This is why all 3 bugs
+  above went completely undetected by 63 "passing" tests, and why the
+  implementer's report ("hand-traced arithmetic... confirming your
+  code produces those exact numbers") was not actually true of the
+  betting-flow behavior, only of the numbers it chose to check.
+- **Sent back spec 55b**: a precise, code-excerpted fix for all 3 bugs
+  plus 5 required real integration tests (multi-player check-around,
+  BB-option, all-in-runout-to-showdown, fold-at-last-index wraparound,
+  a genuine side-pot hand driven by real actions) with an explicit
+  requirement to confirm each new test fails pre-fix and passes
+  post-fix before reporting done. In flight.
+- **Lesson**: warning a spec against a known failure mode (as spec 55
+  explicitly did, quoting the Blackjack incident) is necessary but not
+  sufficient — the same implementer repeated a materially identical
+  shortcut on the very next engine, even leaving the giveaway comment
+  in the shipped code. Going forward: independent code reading by the
+  lead (not just re-running the reported test command) is mandatory on
+  every engine spec in this charter, not just the ones where something
+  already went wrong once — confirmed necessary twice now, not a
+  one-off.
+- **Continue?** Yes — this blocks M3 from landing. Will independently
+  re-verify (code read + real trace, not just a green run) before
+  accepting the fix round.
+
+## Cycle 6 (landed) — spec 55/55b (Hold'em engine) lands, after the lead personally fixed a second-round regression plus a third and fourth bug
+- **The 55b fix round landed 3 of 3 targeted fixes correctly** (verified
+  by direct code read, not just the green suite): `isActionClosed` now
+  requires per-seat `actedThisStreet` tracking, the FOLD turn-index math
+  correctly wraps via modulo, and `advanceUntilActionOrShowdown` handles
+  the all-in-runout case. All 4 required regression tests were real
+  (drove actual action sequences), a genuine improvement over spec 55's
+  vacuous tests.
+- **But the fix round's OWN `isActionClosed` rewrite introduced a NEW
+  regression**, found and fixed by the lead personally (not delegated —
+  this is the second bug found in this exact function across two
+  rounds, past this loop's own "fails twice, fix it yourself"
+  threshold): the rewrite added `if (acting.length === 1) return false`
+  unconditionally — meaning whenever exactly one live player remained
+  (everyone else folded/all-in), the engine would NEVER consider the
+  street closed, even after that lone player legitimately matched the
+  bet. Live-reproduced with a real 2-hand setup (played a fold-out hand
+  to create unequal stacks, then had the short stack shove all-in on
+  the flop and the big stack call with chips to spare): the hand froze
+  permanently on the flop, `handOver` stuck at `false`, board never
+  completing. Root cause: the acted+matched check should apply
+  uniformly regardless of how many actors remain (0, 1, or many) — the
+  special-cased branches were unnecessary and wrong. Fixed by removing
+  them and letting the general loop handle every case; re-verified with
+  the same live repro, now correctly reaches showdown.
+- **Found and fixed a THIRD bug** via code reading: FOLD was the only
+  one of the five action handlers that never checked `isActionClosed`
+  after applying itself — so a fold that leaves only already-matched
+  players (e.g. a bettor and a caller, with a third player folding)
+  never closed the street or advanced, leaving the game waiting
+  indefinitely for an action from a player who'd already acted.
+  Live-reproduced (3-handed: bet, call, fold — asserted the street
+  stayed stuck on `'flop'` pre-fix) and fixed by adding the same
+  advance-street-and-deal-with-runout block the other four handlers
+  already had, mirrored exactly.
+- **Found and fixed a FOURTH bug**, this one the specific "short all-in
+  doesn't reopen re-raising" rule spec 55 explicitly flagged as the
+  most commonly botched rule in amateur poker engines — and it turned
+  out to be completely unenforced. The existing test for it (kept
+  through the 55b round) was itself vacuous (`expect(playerOrder.length
+  > 0)`, unrelated to its own title). Added a genuine
+  `reRaiseEligible: Record<string, boolean>` tracker (true by default
+  each street, set false when a seat calls/checks, reopened to true for
+  every OTHER seat by a FULL bet/raise, left untouched by a short
+  all-in), gated the RAISE validator on it, and added real tests
+  confirming eligibility flips correctly on call and on a full raise.
+  The exact narrow "short all-in specifically" branch wasn't forced by
+  a live scenario (equal starting stacks make it genuinely hard to
+  construct without a longer multi-hand setup) — verified by direct
+  code reasoning and by testing every OTHER transition of the same
+  mechanism live; noted honestly as a smaller live-verification gap,
+  not claimed as a check that wasn't actually performed.
+- **Also fixed a fifth, smaller issue** in `bot.ts`: the preflop raise
+  sizing used a flat `+1 big blind` increment regardless of
+  `lastFullRaiseIncrement`, meaning the bot's own RAISE action would be
+  rejected by the validator as below the legal minimum whenever facing
+  a raise bigger than one BB. Fixed to use the real minimum increment.
+- **Verification**: `tsc -b --noEmit`, full suite (1395 tests), and
+  `npm run build` all clean after every fix, re-run by the lead
+  personally each time, not trusted from any report.
+- **Landed**: `src/card-games/holdem/*` + specs 55/55b, one commit on
+  `worktree-poker-blackjack-loop` (see git log).
+- **Lesson**: this file alone (rules.ts) needed 3 rounds of
+  intervention (an initial delegated build, a delegated fix round that
+  itself introduced a new bug, then direct lead fixes for that
+  regression plus two more bugs the delegated round didn't touch) before
+  reaching a state the lead was willing to trust. The pattern holding
+  across this whole charter: a cheap implementer under a precise,
+  detailed spec still needs the lead's own line-by-line code read (not
+  just a green test run) on anything touching money/turn-order logic —
+  confirmed a third time now (Blackjack's payout bug, Hold'em's initial
+  vacuous tests, Hold'em's OWN fix-round regression).
+- **Continue?** Yes — proceeding to Hold'em screens (M4, spec 56). Given
+  this file's history, plan for genuinely thorough live-browser
+  verification (not just code review) before M5 wiring is considered
+  done, same discipline that caught Blackjack's payout bug.
