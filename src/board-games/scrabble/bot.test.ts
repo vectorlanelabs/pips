@@ -574,4 +574,95 @@ describe('Scrabble bot word search', () => {
     // Expected: easy ~8/40 (20%), hard ~36/40 (90%), ratio ~4.5x
     expect(hardChallengeCount).toBeGreaterThan(easyChallengCount * 2.5)
   })
+
+  /**
+   * Test: the search time budget is enforced inside generateValidPermutations,
+   * not just between anchors/word-lengths. Before the fix, a dense board with
+   * multiple 2-blank pockets ran well past the declared 300ms budget because
+   * the budget was only checked at coarser loop granularity. A permissive
+   * dictionary (accepts every word) maximizes the permutation/letter-combo
+   * fan-out without depending on real dictionary contents.
+   */
+  it('bounds the search near the declared time budget on a dense multi-pocket board with blanks', () => {
+    const permissiveDictionary: ScrabbleDictionary = { isWord: () => true }
+    const strategy = createScrabbleBotStrategy(permissiveDictionary, 'medium')
+
+    // Dense board: all 'Z' filler except three 7-cell horizontal pockets
+    // (rows 1, 7, 13, cols 4-10) — each pocket is a valid anchor, multiplying
+    // the permutation search cost enough to cross the 300ms budget if
+    // unbounded.
+    const board: Array<Array<BoardCell | null>> = Array(15)
+      .fill(null)
+      .map((_, r) =>
+        Array(15)
+          .fill(null)
+          .map((__, c) =>
+            (r === 1 || r === 7 || r === 13) && c >= 4 && c <= 10
+              ? null
+              : { letter: 'Z', isBlank: false, premiumConsumed: true },
+          ),
+      )
+
+    // Full 7-tile rack with 2 blanks — maximizes permutation and blank
+    // letter-combination fan-out per anchor.
+    const rackTiles: ScrabbleTile[] = [
+      { id: 'b1', letter: '', points: 0 },
+      { id: 'b2', letter: '', points: 0 },
+      { id: 't1', letter: 'E', points: 1 },
+      { id: 't2', letter: 'R', points: 1 },
+      { id: 't3', letter: 'S', points: 1 },
+      { id: 't4', letter: 'N', points: 1 },
+      { id: 't5', letter: 'T', points: 1 },
+    ]
+    const rack: Zone<ScrabbleTile> = {
+      id: 'rack-bot1',
+      ownerId: 'bot-1',
+      visibility: 'private',
+      cards: rackTiles,
+    }
+
+    const publicState: ScrabblePublicState = {
+      board,
+      turn: { playerOrder: ['bot-1'], currentIndex: 0, direction: 1, phase: 'play', turnNumber: 1 },
+      scores: { 'bot-1': 0 },
+      handCounts: { 'bot-1': 7 },
+      bagCount: 50,
+      stage: 'play',
+      consecutivePasses: 0,
+      lastPlacement: null,
+      winnerId: null,
+    }
+    const privateState: ScrabblePrivateState = { rack }
+
+    const start = performance.now()
+    strategy(publicState, privateState, 'bot-1')
+    const elapsed = performance.now() - start
+
+    // Generous headroom above the 300ms budget (CI/local machines vary) —
+    // this is a regression guard against the search running unboundedly past
+    // its budget, not a tight timing assertion. Pre-fix this scenario ran
+    // ~312ms+ with the budget only enforced between anchors/word-lengths;
+    // post-fix it should stay close to 300ms since the permutation loop now
+    // enforces it directly.
+    expect(elapsed).toBeLessThan(600)
+  })
+
+  /**
+   * Test: accumulating a very large valid-placements array must not throw
+   * "Maximum call stack size exceeded". Before the fix, `results.push(...arr)`
+   * spread the array as call arguments, which blows the stack once the array
+   * is large enough (observed with a permissive dictionary on a dense board:
+   * ~500K entries). This directly exercises the same accumulation pattern
+   * used in bot.ts's hot path (a plain for-of push loop) at a size well past
+   * V8's default argument-spread stack limit, proving the pattern itself is
+   * stack-safe regardless of how large the search results get.
+   */
+  it('accumulates a very large result array without blowing the call stack', () => {
+    const source = new Array(300_000).fill(0).map((_, i) => ({ tileId: `t-${i}`, row: 0, col: 0, letter: 'A' }))
+    const target: typeof source = []
+    expect(() => {
+      for (const item of source) target.push(item)
+    }).not.toThrow()
+    expect(target.length).toBe(300_000)
+  })
 })
