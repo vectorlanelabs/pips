@@ -155,6 +155,7 @@
 }
 
 .blackjack-turn-tag {
+  align-self: flex-start;
   flex: none;
   color: #fff;
   font-size: 11px;
@@ -251,17 +252,19 @@
   color: #666;
 }
 
-/* ---- Centre band: dealer ---- */
+/* ---- Centre band: dealer, restyled as the table's focal point ---- */
 
 .blackjack-centre {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: clamp(20px, 3vw, 32px);
-  border-top: 3px solid var(--grey-fill);
-  border-bottom: 3px solid var(--grey-fill);
-  padding: clamp(14px, 2vw, 22px) 0;
+  align-items: center;
+  gap: clamp(20px, 3vw, 28px);
+  background: #fff8e6;
+  border: 3px solid var(--yellow);
+  border-radius: 20px;
+  box-shadow: 0 4px 0 #f0c020;
+  padding: clamp(16px, 2.4vw, 22px) clamp(18px, 2.8vw, 28px);
   margin-bottom: clamp(12px, 2vw, 20px);
 }
 
@@ -272,49 +275,86 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+  flex: none;
 }
 
 .blackjack-shoe-caption {
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted-text);
+  color: #8a6b1f;
 }
 
 .blackjack-dealer-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: none;
 }
 
 .blackjack-dealer-label {
   font-weight: 700;
-  font-size: 14px;
-  color: var(--body-text);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a6b1f;
 }
 
 .blackjack-dealer-cards {
   display: flex;
   gap: 12px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .blackjack-dealer-card-wrapper {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
 }
 
 .blackjack-dealer-hole-indicator {
-  font-size: 12px;
-  color: var(--body-text);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff8e6;
+  border: 2px solid #8a6b1f;
+  font-size: 20px;
+  font-weight: 700;
+  color: #8a6b1f;
+  pointer-events: none;
+}
+
+.blackjack-dealer-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.blackjack-dealer-status-line {
+  font-size: 15px;
+  font-weight: 700;
+  color: #8a6b1f;
+}
+
+.blackjack-dealer-status-line--muted {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
 }
 
 .blackjack-dealer-total {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--body-text);
-  margin-top: 8px;
+  color: #8a6b1f;
 }
 
 /* ---- Your side: local player area ----
@@ -342,11 +382,49 @@
 }
 
 .blackjack-your-controls {
-  flex: 0 1 300px;
-  min-width: 240px;
+  flex: 0 1 380px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   gap: clamp(12px, 2vw, 20px);
+}
+
+/* Each control row pairs the current action's content with the chip bank,
+   so the bank always sits beside the controls instead of stacked above
+   them -- one row per turn phase. */
+.blackjack-controls-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 2.4vw, 24px);
+  flex-wrap: wrap;
+}
+
+.blackjack-controls-row > .blackjack-action-section {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.blackjack-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.blackjack-grid-btn {
+  width: 100%;
+}
+
+.blackjack-grid-btn-with-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.blackjack-grid-btn-caption {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-text);
+  text-align: center;
 }
 
 /* Chip bank: prominent display with chunky emphasis treatment */

@@ -50,6 +50,7 @@ export function HoldemTable({
   const [rulesOpen, setRulesOpen] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
   const [betAmount, setBetAmount] = useState(HOLDEM_BIG_BLIND * 2)
+  const [raiseSizingOpen, setRaiseSizingOpen] = useState(false)
 
   const introShownForHandRef = useRef<number | null>(null)
   const prevPhaseRef = useRef<string>(publicState.turn.phase)
@@ -167,6 +168,12 @@ export function HoldemTable({
   const canBet = canAct && publicState.currentBetThisStreet === 0 && myChips > 0
   const canRaise = canAct && publicState.currentBetThisStreet > 0 && publicState.reRaiseEligible[localPlayerId] && myChips > 0
 
+  // Close the raise sizing panel whenever it's no longer available, so it
+  // can't get stuck open into a future turn or street.
+  useEffect(() => {
+    if (!canRaise) setRaiseSizingOpen(false)
+  }, [canRaise, currentPhase])
+
   // Compute min/max for bet/raise slider
   let minBetAmount = 1
   let maxBetAmount = myChips
@@ -281,7 +288,6 @@ export function HoldemTable({
                       <div className="holdem-opp-identity">
                         <span className="holdem-seat-dot" style={{ background: seatColor }} />
                         <span className="holdem-opp-name" style={{ color: seatColor }}>{seatName}</span>
-                        {isTurn && <span className="holdem-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
                       </div>
                       <div className="holdem-opp-chip-badge">
                         <span className="holdem-opp-chip-value">{seatChips}</span>
@@ -290,6 +296,12 @@ export function HoldemTable({
                         )}
                       </div>
                     </div>
+
+                    {/* Turn tag: its own full-width row, so a long name never
+                        has to share cramped space with it on the identity row. */}
+                    {isTurn && (
+                      <span className="holdem-turn-tag" style={{ background: seatColor, color: '#fff' }}>Turn</span>
+                    )}
 
                     {/* Status badges */}
                     <div className="holdem-opp-badges">
@@ -324,21 +336,23 @@ export function HoldemTable({
               })}
             </div>
 
-            {/* Centre band: deck + board + pot */}
+            {/* Centre band: deck, then board (fixed left-justified slots),
+                pot pushed to the far right -- restyled as the table's
+                focal point, matching Blackjack's dealer band treatment. */}
             <div className="holdem-centre">
-              <div className="holdem-deck-board-row">
-                {/* Decorative deck -- not clickable, no gameplay action draws from it directly */}
-                <div className="holdem-deck-group">
-                  <div className="holdem-deck-caption">deck</div>
-                  <CardBack size="stock" design={publicState.cardBack} />
-                </div>
-
-                <div className="holdem-board-group">
-                  <HoldemBoard cards={publicState.board} />
-                </div>
+              {/* Decorative deck -- not clickable, no gameplay action draws from it directly */}
+              <div className="holdem-deck-group">
+                <div className="holdem-deck-caption">deck</div>
+                <CardBack size="stock" design={publicState.cardBack} />
               </div>
+
+              <div className="holdem-board-group">
+                <HoldemBoard cards={publicState.board} />
+              </div>
+
               <div className="holdem-pot">
-                Pot: {publicState.pot}
+                <span className="holdem-pot-label">Pot</span>
+                <span className="holdem-pot-value">{publicState.pot}</span>
               </div>
             </div>
 
@@ -373,62 +387,90 @@ export function HoldemTable({
               {/* Action area - fold/check/call/bet-raise */}
               {canAct && (
                 <div className="holdem-action-section">
-                  {/* Fold/Check/Call row */}
-                  <div className="holdem-action-buttons">
-                    <button
-                      type="button"
-                      className="btn btn-lg"
-                      onClick={onFold}
-                      disabled={!canFold}
-                    >
-                      Fold
-                    </button>
-                    {canCheck && (
+                  {!((canBet || canRaise) && raiseSizingOpen) ? (
+                    /* Default row: exactly 3 controls -- Fold, Check-or-Call,
+                       and Bet/Raise (which only opens the sizing panel
+                       below, it doesn't submit anything itself). */
+                    <div className="holdem-action-buttons">
                       <button
                         type="button"
-                        className="btn btn-lg"
-                        onClick={onCheck}
+                        className="btn btn-lg holdem-fold-btn"
+                        onClick={onFold}
+                        disabled={!canFold}
                       >
-                        Check
+                        Fold
                       </button>
-                    )}
-                    {canCall && (
-                      <button
-                        type="button"
-                        className="btn btn-lg"
-                        onClick={onCall}
-                      >
-                        Call {callAmount}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Bet/Raise section */}
-                  {(canBet || canRaise) && (
+                      {canCheck && (
+                        <button
+                          type="button"
+                          className="btn btn-lg"
+                          onClick={onCheck}
+                        >
+                          Check
+                        </button>
+                      )}
+                      {canCall && (
+                        <button
+                          type="button"
+                          className="btn btn-lg"
+                          onClick={onCall}
+                        >
+                          Call {callAmount}
+                        </button>
+                      )}
+                      {(canBet || canRaise) && (
+                        <button
+                          type="button"
+                          className="btn btn-lg btn-coral"
+                          onClick={() => {
+                            setBetAmount(minBetAmount)
+                            setRaiseSizingOpen(true)
+                          }}
+                        >
+                          {canBet ? 'Bet' : 'Raise'}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    /* Expanded sizing panel, replacing the default row while open. */
                     <div className="holdem-bet-section">
-                      <div className="holdem-bet-label">
-                        {canBet ? 'Place your bet' : 'Raise to'}
+                      <div className="holdem-bet-section-header">
+                        <div className="holdem-bet-label">
+                          {canBet ? 'Bet' : 'Raise to'}
+                        </div>
+                        <button
+                          type="button"
+                          className="holdem-cancel-link"
+                          onClick={() => setRaiseSizingOpen(false)}
+                        >
+                          Cancel
+                        </button>
                       </div>
-                      <div className="holdem-bet-slider-group">
-                        <input
-                          type="range"
-                          min={minBetAmount}
-                          max={maxBetAmount}
-                          step={1}
-                          value={clampedBetAmount}
-                          onChange={(e) => setBetAmount(Number(e.target.value))}
-                          className="holdem-bet-slider"
-                        />
+                      <div className="holdem-bet-stepper-group">
+                        <button
+                          type="button"
+                          className="holdem-stepper-btn"
+                          onClick={() => setBetAmount(Math.max(minBetAmount, clampedBetAmount - 10))}
+                        >
+                          −
+                        </button>
                         <div className="holdem-bet-display">
                           {clampedBetAmount}
                         </div>
+                        <button
+                          type="button"
+                          className="holdem-stepper-btn"
+                          onClick={() => setBetAmount(Math.min(maxBetAmount, clampedBetAmount + 10))}
+                        >
+                          +
+                        </button>
                       </div>
                       <div className="holdem-preset-buttons">
                         {quickPresets.map((preset) => (
                           <button
                             key={preset.label}
                             type="button"
-                            className="btn btn-lg"
+                            className="btn"
                             onClick={() => setBetAmount(preset.value)}
                           >
                             {preset.label}
@@ -438,9 +480,12 @@ export function HoldemTable({
                       <button
                         type="button"
                         className="btn btn-coral btn-lg"
-                        onClick={() => canBet ? onBet(clampedBetAmount) : onRaise(clampedBetAmount)}
+                        onClick={() => {
+                          canBet ? onBet(clampedBetAmount) : onRaise(clampedBetAmount)
+                          setRaiseSizingOpen(false)
+                        }}
                       >
-                        {canBet ? `Bet ${clampedBetAmount}` : `Raise to ${clampedBetAmount}`}
+                        {canBet ? `Confirm bet ${clampedBetAmount}` : `Confirm raise to ${clampedBetAmount}`}
                       </button>
                     </div>
                   )}
