@@ -5,11 +5,12 @@ import { currentPlayer } from '../engine/turn-engine'
 import { handValue } from '../card-games/blackjack/hand-value'
 import { DealIntro } from '../components/DealIntro'
 import { BlackjackCard } from '../components/BlackjackCard'
-import { CardBack } from '../components/PlayingCard'
+import { CardBack, PlayingCard } from '../components/PlayingCard'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { BlackjackRulesOverlay } from './BlackjackRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import './BlackjackTable.css'
 
 export interface BlackjackTableProps {
   code: string
@@ -61,6 +62,8 @@ export function BlackjackTable({
   const soundSigRef = useRef({
     phase: publicState.turn.phase,
     roundResults: publicState.roundResults,
+    myBet: publicState.bets[localPlayerId] ?? 0,
+    dealerHoleRevealed: publicState.dealerHoleRevealed,
   })
 
   // Show deal intro when phase transitions out of 'betting' (when dealing completes)
@@ -82,20 +85,42 @@ export function BlackjackTable({
   // Sound effects
   useEffect(() => {
     const p = soundSigRef.current
+    const myBet = publicState.bets[localPlayerId] ?? 0
 
     // Deal shuffle sound at start of round
     if (p.phase !== 'betting' && publicState.turn.phase === 'betting') {
       play('shuffle')
     }
 
-    // Round win/loss sounds
+    // Local bet placed
+    if (p.myBet === 0 && myBet > 0) {
+      play('chip-bet')
+    }
+
+    // Dealer hole card reveal
+    if (!p.dealerHoleRevealed && publicState.dealerHoleRevealed) {
+      play('card-flip')
+    }
+
+    // Round win/loss sounds, most notable outcome first
     if (p.roundResults === null && publicState.roundResults !== null) {
       const myResults = publicState.roundResults[localPlayerId] ?? []
-      const hasWin = myResults.some((r) => r.result === 'win' || r.result === 'blackjack')
+      const myHands = publicState.hands[localPlayerId] ?? []
+      const hasBlackjack = myResults.some((r) => r.result === 'blackjack')
+      const hasBust = myResults.some((r) => {
+        if (r.result !== 'lose') return false
+        const hand = myHands[r.handIndex]
+        return hand ? handValue(hand.cards).total > 21 : false
+      })
+      const hasWin = myResults.some((r) => r.result === 'win')
       const hasLoss = myResults.some((r) => r.result === 'lose')
 
-      if (hasWin) {
-        play('round-win')
+      if (hasBlackjack) {
+        play('blackjack')
+      } else if (hasWin) {
+        play('chip-win')
+      } else if (hasBust) {
+        play('bust')
       } else if (hasLoss) {
         play('error')
       }
@@ -112,8 +137,10 @@ export function BlackjackTable({
     soundSigRef.current = {
       phase: publicState.turn.phase,
       roundResults: publicState.roundResults,
+      myBet,
+      dealerHoleRevealed: publicState.dealerHoleRevealed,
     }
-  }, [publicState.turn.phase, publicState.roundResults, notice, play, localPlayerId])
+  }, [publicState.turn.phase, publicState.roundResults, publicState.bets, publicState.dealerHoleRevealed, publicState.hands, notice, play, localPlayerId])
 
   // Derived state
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
@@ -159,28 +186,23 @@ export function BlackjackTable({
     }))
 
   return (
-    <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px' }}>
+    <div className="blackjack-table">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+      <div className="blackjack-header">
+        <div className="blackjack-header-left">
           <Wordmark small onClick={onLeaveTable} />
-          <span style={{ fontWeight: 700, fontSize: 22, color: 'var(--coral)' }}>Blackjack</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="blackjack-game-label">Blackjack</span>
+          <span className="blackjack-peer-strip">
             <span
-              style={{
-                width: 9,
-                height: 9,
-                borderRadius: '50%',
-                display: 'block',
-                background: connection === 'connected' ? 'var(--green)' : 'var(--coral)',
-              }}
+              className="blackjack-peer-dot"
+              style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
             />
-            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted-text)' }}>
+            <span className="blackjack-peer-label">
               {connection === 'connected' ? `peer to peer · ${publicState.seatOrder.length} players` : 'connection lost'}
             </span>
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="blackjack-header-actions">
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeaveTable}>Leave</button>
@@ -194,30 +216,11 @@ export function BlackjackTable({
 
       {/* Error banner */}
       {notice && (
-        <div style={{
-          background: '#fff',
-          border: '4px solid var(--coral)',
-          borderRadius: 16,
-          padding: '12px 16px',
-          marginBottom: 'clamp(12px, 2vw, 20px)',
-          color: 'var(--coral)',
-          fontWeight: 700,
-          fontSize: 14,
-        }}>
-          {notice}
-        </div>
+        <div className="blackjack-error-banner">{notice}</div>
       )}
 
-      {/* Main table */}
-      <div style={{
-        background: 'var(--surface)',
-        border: '4px solid var(--ink)',
-        borderRadius: 28,
-        boxShadow: '0 10px 0 var(--ink)',
-        padding: 'clamp(16px, 2.4vw, 26px)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
+      {/* Main table card */}
+      <div className="blackjack-table-card">
         {showIntro ? (
           <DealIntro
             others={others}
@@ -228,125 +231,71 @@ export function BlackjackTable({
           />
         ) : (
           <>
-            {/* Dealer area */}
-            <div style={{ marginBottom: 'clamp(20px, 3vw, 32px)' }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--body-text)', marginBottom: 8 }}>Dealer</div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-                {publicState.dealerHand.map((card, i) => (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                    <BlackjackCard
-                      rank={card.rank as any}
-                      suit={card.suit as any}
-                      faceUp={i === 0 || publicState.dealerHoleRevealed}
-                      design={publicState.cardBack}
-                    />
-                    {i === 0 && !publicState.dealerHoleRevealed && (
-                      <div style={{ fontSize: 12, color: 'var(--body-text)' }}>?</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {publicState.dealerHoleRevealed && (
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--body-text)', marginTop: 8 }}>
-                  Total: {handValue(publicState.dealerHand).total}
-                </div>
-              )}
-            </div>
-
-            {/* Seat rail */}
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 'clamp(10px, 1.6vw, 14px)',
-              paddingBottom: 'clamp(12px, 2vw, 20px)',
-              marginBottom: 'clamp(20px, 3vw, 32px)',
-              borderBottom: '2px solid var(--grey-border)',
-            }}>
-              {publicState.seatOrder.map((seatId) => {
+            {/* Opponent tiles: a wrapping grid, one tile per opponent seat */}
+            <div className="blackjack-opp-rail">
+              {publicState.seatOrder.filter((id) => id !== localPlayerId).map((seatId) => {
                 const seatColor = colors[seatId] ?? 'var(--slate-pip)'
                 const seatName = names[seatId] ?? seatId
-                const isYou = seatId === localPlayerId
                 const seatHands = publicState.hands[seatId] ?? []
                 const isTurn = seatId === currentPlayer(publicState.turn) && publicState.turn.phase === 'acting'
                 const seatBet = publicState.bets[seatId] ?? 0
                 const isSittingOut = publicState.sittingOut[seatId]
+                const seatChips = publicState.chips[seatId] ?? 0
 
                 return (
                   <div
                     key={seatId}
-                    style={{
-                      flex: '1 1 200px',
-                      maxWidth: 'calc((100% - 3 * clamp(10px, 1.6vw, 14px)) / 4)',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                      border: `3px solid ${isTurn ? seatColor : 'var(--grey-border)'}`,
-                      borderRadius: 16,
-                      padding: '12px 14px',
-                      background: '#fff',
-                    }}
+                    className={`blackjack-opp-tile${isTurn ? ' blackjack-opp-tile--turn' : ''}`}
+                    style={isTurn ? { borderColor: seatColor } : undefined}
                   >
-                    {/* Seat header */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        display: 'block',
-                        background: seatColor,
-                      }} />
-                      <span style={{ fontWeight: 700, fontSize: 15, color: seatColor }}>
-                        {seatName}
-                      </span>
-                      {isYou && <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--muted-text)' }}>(you)</span>}
-                      {isTurn && <span style={{ fontWeight: 600, fontSize: 11, background: seatColor, color: '#fff', padding: '2px 8px', borderRadius: 999 }}>turn</span>}
+                    {/* Tile header */}
+                    <div className="blackjack-opp-tile-top">
+                      <span className="blackjack-seat-dot" style={{ background: seatColor }} />
+                      <span className="blackjack-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                      {isTurn && <span className="blackjack-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
                     </div>
 
-                    {/* Chips and bet info */}
-                    <div style={{ fontSize: 13, color: 'var(--body-text)' }}>
-                      <div>{publicState.chips[seatId] ?? 0} chips</div>
-                      <div>
-                        {isSittingOut ? (
-                          <span style={{ color: 'var(--muted-text)' }}>Sitting out</span>
-                        ) : (
-                          <span>Bet: ${seatBet}</span>
-                        )}
-                      </div>
+                    {/* Chips - prominent */}
+                    <div className="blackjack-opp-chips">
+                      {seatChips}
                     </div>
+
+                    {/* Bet info */}
+                    {!isSittingOut && seatBet > 0 && (
+                      <div className="blackjack-opp-bet">Bet: ${seatBet}</div>
+                    )}
+                    {isSittingOut && (
+                      <div className="blackjack-opp-status">Sitting out</div>
+                    )}
 
                     {/* Hands */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div className="blackjack-opp-hands">
                       {seatHands.map((hand, handIdx) => (
-                        <div key={hand.id} style={{
-                          paddingTop: handIdx > 0 ? 8 : 0,
-                          borderTop: handIdx > 0 ? '1px solid var(--grey-border)' : 'none',
-                        }}>
-                          <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                        <div key={hand.id} className="blackjack-opp-hand">
+                          {/* Split hand separator */}
+                          {handIdx > 0 && <div className="blackjack-opp-hand-separator" />}
+
+                          {/* Cards at meld size */}
+                          <div className="blackjack-opp-cards">
                             {hand.cards.map((card, i) => (
-                              <BlackjackCard
+                              <PlayingCard
                                 key={i}
                                 rank={card.rank as any}
                                 suit={card.suit as any}
-                                faceUp={true}
-                                design={publicState.cardBack}
-                                style={{ fontSize: 11 }}
+                                size="meld"
+                                style={{ marginLeft: i === 0 ? 0 : -8 }}
                               />
                             ))}
                           </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--body-text)' }}>
+
+                          {/* Total */}
+                          <div className="blackjack-opp-total">
                             Total: {handValue(hand.cards).total}
                           </div>
+
+                          {/* Result badge */}
                           {publicState.roundResults && publicState.roundResults[seatId] && (
-                            <div style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                              marginTop: 4,
-                              padding: '2px 6px',
-                              borderRadius: 6,
-                              backgroundColor: hand.result === 'win' || hand.result === 'blackjack' ? '#d4f0e8' : hand.result === 'lose' ? '#ffe8e8' : '#f5f5f5',
-                              color: hand.result === 'win' || hand.result === 'blackjack' ? '#0a6b42' : hand.result === 'lose' ? '#a00' : '#666',
-                            }}>
+                            <div className={`blackjack-opp-result blackjack-opp-result--${hand.result}`}>
                               {hand.result === 'blackjack' && 'Blackjack!'}
                               {hand.result === 'win' && 'Win'}
                               {hand.result === 'lose' && 'Lose'}
@@ -361,185 +310,229 @@ export function BlackjackTable({
               })}
             </div>
 
-            {/* Action area */}
-            {bettingPhase && !sittingOut && !hasBet && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--body-text)' }}>Place your bet</div>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => setBetAmount(Math.max(BLACKJACK_MIN_BET, betAmount - 10))}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      border: '3px solid var(--ink)',
-                      borderRadius: 8,
-                      background: '#fff',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    −
-                  </button>
-                  <div style={{ fontWeight: 700, fontSize: 18, minWidth: 60, textAlign: 'center' }}>
-                    ${betAmount}
+            {/* Centre band: dealer */}
+            <div className="blackjack-centre">
+              <div className="blackjack-dealer-group">
+                <div className="blackjack-dealer-label">Dealer</div>
+                <div className="blackjack-dealer-cards">
+                  {publicState.dealerHand.map((card, i) => (
+                    <div key={i} className="blackjack-dealer-card-wrapper">
+                      <BlackjackCard
+                        rank={card.rank as any}
+                        suit={card.suit as any}
+                        faceUp={i === 0 || publicState.dealerHoleRevealed}
+                        design={publicState.cardBack}
+                      />
+                      {i === 0 && !publicState.dealerHoleRevealed && (
+                        <div className="blackjack-dealer-hole-indicator">?</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {publicState.dealerHoleRevealed && (
+                  <div className="blackjack-dealer-total">
+                    Total: {handValue(publicState.dealerHand).total}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setBetAmount(Math.min(BLACKJACK_MAX_BET, myChips, betAmount + 10))}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      border: '3px solid var(--ink)',
-                      borderRadius: 8,
-                      background: '#fff',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-coral"
-                    onClick={() => onPlaceBet(betAmount)}
-                    disabled={!canPlaceBet}
-                  >
-                    Place bet
-                  </button>
-                </div>
+                )}
               </div>
-            )}
+            </div>
 
-            {bettingPhase && hasBet && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', fontSize: 14, color: 'var(--body-text)' }}>
-                Bet placed: ${publicState.bets[localPlayerId]} — waiting on others
+            {/* Your side: local player's area */}
+            <div className="blackjack-your-side">
+              {/* Chip bank - prominent display */}
+              <div className="blackjack-chip-bank">
+                <div className="blackjack-chip-bank-label">Chips</div>
+                <div className="blackjack-chip-bank-value">{myChips}</div>
               </div>
-            )}
 
-            {insurancePhase && publicState.dealerHand[0]?.rank === 'A' && !publicState.hasResolvedInsurance[localPlayerId] && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--body-text)' }}>
-                  Dealer shows an Ace
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button
-                    type="button"
-                    className="btn btn-lg"
-                    onClick={onTakeInsurance}
-                    disabled={!canTakeInsurance}
-                  >
-                    Insurance (${Math.floor(publicState.bets[localPlayerId] / 2)})
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-lg btn-ghost"
-                    onClick={onDeclineInsurance}
-                    disabled={!canDeclineInsurance}
-                  >
-                    No insurance
-                  </button>
-                </div>
-              </div>
-            )}
+              {/* Your hands */}
+              <div className="blackjack-your-hands">
+                {myHands.map((hand, handIdx) => (
+                  <div key={hand.id} className="blackjack-your-hand">
+                    {handIdx > 0 && <div className="blackjack-your-hand-separator" />}
 
-            {publicState.turn.phase === 'acting' && !isMyTurn && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', fontSize: 14, color: 'var(--body-text)' }}>
-                Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
-              </div>
-            )}
+                    <div className="blackjack-your-cards">
+                      {hand.cards.map((card, i) => (
+                        <BlackjackCard
+                          key={i}
+                          rank={card.rank as any}
+                          suit={card.suit as any}
+                          faceUp={true}
+                          design={publicState.cardBack}
+                        />
+                      ))}
+                    </div>
 
-            {publicState.turn.phase === 'dealerPlay' && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', fontSize: 14, color: 'var(--body-text)' }}>
-                Dealer is playing…
-              </div>
-            )}
+                    <div className="blackjack-your-total">
+                      Total: {handValue(hand.cards).total}
+                    </div>
 
-            {isMyTurn && publicState.turn.phase === 'acting' && currentHand && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn btn-lg"
-                  onClick={onHit}
-                  disabled={!canHit}
-                >
-                  Hit
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-lg"
-                  onClick={onStand}
-                  disabled={!canStand}
-                >
-                  Stand
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-lg"
-                  onClick={onDouble}
-                  disabled={!canDouble}
-                  title={!canDouble ? 'Can only double on 2 cards with enough chips' : ''}
-                >
-                  Double
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-lg"
-                  onClick={onSplit}
-                  disabled={!canSplit}
-                  title={!canSplit ? 'Can only split matching ranks with enough chips' : ''}
-                >
-                  Split
-                </button>
-              </div>
-            )}
-
-            {/* Round-over banner */}
-            {roundOverPhase && publicState.roundResults && publicState.roundResults[localPlayerId] && (
-              <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-                <div style={{
-                  background: '#f5f5f5',
-                  border: '2px solid var(--grey-border)',
-                  borderRadius: 12,
-                  padding: '14px 16px',
-                  marginBottom: 12,
-                }}>
-                  {publicState.roundResults[localPlayerId].map((result, i) => {
-                    // chipDelta is credit applied ON TOP OF the already-escrowed bet
-                    // (see rules.ts settleRound) — subtract the bet back out to get
-                    // this hand's true net change for the round (e.g. a push shows 0,
-                    // a plain win shows +bet, not the raw post-escrow credit).
-                    const hand = publicState.hands[localPlayerId]?.[result.handIndex]
-                    const net = result.chipDelta - (hand?.bet ?? 0)
-                    const netStr = net > 0 ? `+${net}` : `${net}`
-                    const resultStr = result.result === 'blackjack' ? 'Blackjack!' : result.result === 'win' ? 'Win' : result.result === 'lose' ? 'Lose' : 'Push'
-                    const youStr = publicState.hands[localPlayerId]!.length > 1 ? ` (hand ${i + 1})` : ''
-
-                    return (
-                      <div key={i} style={{ fontSize: 14, color: 'var(--body-text)' }}>
-                        You {resultStr === 'Push' ? resultStr : resultStr.toLowerCase()}{youStr} {netStr}
+                    {publicState.roundResults && publicState.roundResults[localPlayerId] && (
+                      <div className={`blackjack-your-result blackjack-your-result--${hand.result}`}>
+                        {hand.result === 'blackjack' && 'Blackjack!'}
+                        {hand.result === 'win' && 'Win'}
+                        {hand.result === 'lose' && 'Lose'}
+                        {hand.result === 'push' && 'Push'}
                       </div>
-                    )
-                  })}
-                </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="btn btn-lg btn-coral"
-                    onClick={onStartNextRound}
-                  >
-                    Deal next round
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-lg"
-                    onClick={onLeaveTable}
-                  >
-                    Leave table
-                  </button>
-                </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+
+              {/* Action area */}
+              {bettingPhase && !sittingOut && !hasBet && (
+                <div className="blackjack-action-section">
+                  <div className="blackjack-action-label">Place your bet</div>
+                  <div className="blackjack-bet-controls">
+                    <button
+                      type="button"
+                      className="blackjack-bet-button"
+                      onClick={() => setBetAmount(Math.max(BLACKJACK_MIN_BET, betAmount - 10))}
+                    >
+                      −
+                    </button>
+                    <div className="blackjack-bet-amount">
+                      ${betAmount}
+                    </div>
+                    <button
+                      type="button"
+                      className="blackjack-bet-button"
+                      onClick={() => setBetAmount(Math.min(BLACKJACK_MAX_BET, myChips, betAmount + 10))}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-coral"
+                      onClick={() => onPlaceBet(betAmount)}
+                      disabled={!canPlaceBet}
+                    >
+                      Place bet
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bettingPhase && hasBet && (
+                <div className="blackjack-action-section">
+                  Bet placed: ${publicState.bets[localPlayerId]} — waiting on others
+                </div>
+              )}
+
+              {insurancePhase && publicState.dealerHand[0]?.rank === 'A' && !publicState.hasResolvedInsurance[localPlayerId] && (
+                <div className="blackjack-action-section">
+                  <div className="blackjack-action-label">Dealer shows an Ace</div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onTakeInsurance}
+                      disabled={!canTakeInsurance}
+                    >
+                      Insurance (${Math.floor(publicState.bets[localPlayerId] / 2)})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-lg btn-ghost"
+                      onClick={onDeclineInsurance}
+                      disabled={!canDeclineInsurance}
+                    >
+                      No insurance
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {publicState.turn.phase === 'acting' && !isMyTurn && (
+                <div className="blackjack-action-section">
+                  Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
+                </div>
+              )}
+
+              {publicState.turn.phase === 'dealerPlay' && (
+                <div className="blackjack-action-section">
+                  Dealer is playing…
+                </div>
+              )}
+
+              {isMyTurn && publicState.turn.phase === 'acting' && currentHand && (
+                <div className="blackjack-action-section">
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onHit}
+                      disabled={!canHit}
+                    >
+                      Hit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onStand}
+                      disabled={!canStand}
+                    >
+                      Stand
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onDouble}
+                      disabled={!canDouble}
+                      title={!canDouble ? 'Can only double on 2 cards with enough chips' : ''}
+                    >
+                      Double
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onSplit}
+                      disabled={!canSplit}
+                      title={!canSplit ? 'Can only split matching ranks with enough chips' : ''}
+                    >
+                      Split
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Round-over banner */}
+              {roundOverPhase && publicState.roundResults && publicState.roundResults[localPlayerId] && (
+                <div className="blackjack-action-section">
+                  <div className="blackjack-round-results">
+                    {publicState.roundResults[localPlayerId].map((result, i) => {
+                      const hand = publicState.hands[localPlayerId]?.[result.handIndex]
+                      const net = result.chipDelta - (hand?.bet ?? 0)
+                      const netStr = net > 0 ? `+${net}` : `${net}`
+                      const resultStr = result.result === 'blackjack' ? 'Blackjack!' : result.result === 'win' ? 'Win' : result.result === 'lose' ? 'Lose' : 'Push'
+                      const youStr = publicState.hands[localPlayerId]!.length > 1 ? ` (hand ${i + 1})` : ''
+
+                      return (
+                        <div key={i}>
+                          You {resultStr === 'Push' ? resultStr : resultStr.toLowerCase()}{youStr} {netStr}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-lg btn-coral"
+                      onClick={onStartNextRound}
+                    >
+                      Deal next round
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-lg"
+                      onClick={onLeaveTable}
+                    >
+                      Leave table
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

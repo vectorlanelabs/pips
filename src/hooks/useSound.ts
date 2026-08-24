@@ -42,6 +42,7 @@ export type SoundName =
   | 'checker-move' | 'checker-jump' | 'king-me'
   | 'train-horn' | 'turn-start'
   | 'uno-call' | 'uno-called-on' | 'uno-skip' | 'uno-reverse' | 'uno-draw' | 'uno-wild'
+  | 'chip-bet' | 'chip-win' | 'card-flip' | 'bust' | 'blackjack' | 'fold' | 'all-in'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -78,6 +79,14 @@ const SOUND_FILES: Record<SoundName, string> = {
   'uno-reverse': unoReverse,
   'uno-draw': unoDraw,
   'uno-wild': unoWild,
+  // Chip/card-flip sounds: placeholders reusing existing assets; real chip/bet/card audio pending
+  'chip-bet': bankPoints,
+  'chip-win': gameWin,
+  'card-flip': cardDraw,
+  'bust': error,
+  'blackjack': roundWin,
+  'fold': error,
+  'all-in': bankPoints,
 }
 
 const COOKIE_NAME = 'pips-sound'
