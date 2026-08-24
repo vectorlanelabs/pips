@@ -248,25 +248,24 @@ export function BlackjackTable({
                     className={`blackjack-opp-tile${isTurn ? ' blackjack-opp-tile--turn' : ''}`}
                     style={isTurn ? { borderColor: seatColor } : undefined}
                   >
-                    {/* Tile header */}
+                    {/* Tile header: identity left, chip badge right -- uses the tile's
+                        full width instead of stacking chips/bet as separate lines */}
                     <div className="blackjack-opp-tile-top">
-                      <span className="blackjack-seat-dot" style={{ background: seatColor }} />
-                      <span className="blackjack-opp-name" style={{ color: seatColor }}>{seatName}</span>
-                      {isTurn && <span className="blackjack-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
+                      <div className="blackjack-opp-identity">
+                        <span className="blackjack-seat-dot" style={{ background: seatColor }} />
+                        <span className="blackjack-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                        {isTurn && <span className="blackjack-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
+                      </div>
+                      <div className="blackjack-opp-chip-badge">
+                        <span className="blackjack-opp-chip-value">{seatChips}</span>
+                        {!isSittingOut && seatBet > 0 && (
+                          <span className="blackjack-opp-bet-value">Bet {seatBet}</span>
+                        )}
+                        {isSittingOut && (
+                          <span className="blackjack-opp-bet-value">Sitting out</span>
+                        )}
+                      </div>
                     </div>
-
-                    {/* Chips - prominent */}
-                    <div className="blackjack-opp-chips">
-                      {seatChips}
-                    </div>
-
-                    {/* Bet info */}
-                    {!isSittingOut && seatBet > 0 && (
-                      <div className="blackjack-opp-bet">Bet: ${seatBet}</div>
-                    )}
-                    {isSittingOut && (
-                      <div className="blackjack-opp-status">Sitting out</div>
-                    )}
 
                     {/* Hands */}
                     <div className="blackjack-opp-hands">
@@ -343,14 +342,11 @@ export function BlackjackTable({
               </div>
             </div>
 
-            {/* Your side: local player's area */}
+            {/* Your side: local player's area. Two columns on wide viewports --
+                hand on the left, chip bank + controls on the right, so the
+                controls sit beside the cards instead of forcing a long
+                scroll below them. */}
             <div className="blackjack-your-side">
-              {/* Chip bank - prominent display */}
-              <div className="blackjack-chip-bank">
-                <div className="blackjack-chip-bank-label">Chips</div>
-                <div className="blackjack-chip-bank-value">{myChips}</div>
-              </div>
-
               {/* Your hands */}
               <div className="blackjack-your-hands">
                 {myHands.map((hand, handIdx) => (
@@ -383,6 +379,13 @@ export function BlackjackTable({
                     )}
                   </div>
                 ))}
+              </div>
+
+              {/* Chip bank + action controls column */}
+              <div className="blackjack-your-controls">
+              <div className="blackjack-chip-bank">
+                <div className="blackjack-chip-bank-label">Chips</div>
+                <div className="blackjack-chip-bank-value">{myChips}</div>
               </div>
 
               {/* Action area */}
@@ -538,6 +541,7 @@ export function BlackjackTable({
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </>
         )}
