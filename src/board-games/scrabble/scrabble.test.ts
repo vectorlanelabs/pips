@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { createScrabbleGame, RACK_SIZE, type ScrabbleTile } from './state.ts'
-import { applyScrabbleAction } from './rules.ts'
+import { createScrabbleGame, RACK_SIZE, type ScrabbleTile, type BoardCell } from './state.ts'
+import { applyScrabbleAction, scoreWords } from './rules.ts'
 import { cardCount } from '../../card-engine/zones.ts'
 import { currentPlayer } from '../../engine/turn-engine.ts'
 import type { ScrabbleDictionary } from './dictionary.ts'
@@ -766,5 +766,289 @@ describe('Scrabble regression tests', () => {
       const bagCountAfterChallenge = challengeResult.session.session.publicState.bagCount
       expect(bagCountAfterChallenge).toBe(initialBagCount)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Direct unit tests of scoreWords (exported from rules.ts). The board is built
+// by hand so every scenario is exact: no placement validation, no dictionary,
+// no rack/bag state — just the scoring math over synthetic words/placements.
+// Premium layout is the fixed PREMIUM_BOARD in board.ts (0-indexed).
+// ---------------------------------------------------------------------------
+
+// A fresh 15x15 board with no tiles: every premium square is available.
+function makeEmptyBoard(): (BoardCell | null)[][] {
+  return Array.from({ length: 15 }, () => Array.from({ length: 15 }, () => null))
+}
+
+describe('Scrabble scoring', () => {
+  it('applies double-letter (DL) only to the lettered tile, not the whole word', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-a', row: 0, col: 3, letter: 'A', isBlank: false },
+      { tileId: 't-t', row: 0, col: 4, letter: 'T', isBlank: false },
+    ]
+    // (0,3) is DL, (0,4) is plain. A(1×2=2) + T(1) = 3.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'AT',
+          positions: [
+            { row: 0, col: 3 },
+            { row: 0, col: 4 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(3)
+  })
+
+  it('applies triple-letter (TL) only to the lettered tile', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-m', row: 1, col: 5, letter: 'M', isBlank: false },
+      { tileId: 't-y', row: 1, col: 6, letter: 'Y', isBlank: false },
+    ]
+    // (1,5) is TL, (1,6) is plain. M(3×3=9) + Y(4) = 13.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'MY',
+          positions: [
+            { row: 1, col: 5 },
+            { row: 1, col: 6 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(13)
+  })
+
+  it('applies double-word (DW) to the whole word, not per letter', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-g', row: 1, col: 1, letter: 'G', isBlank: false },
+      { tileId: 't-o', row: 1, col: 2, letter: 'O', isBlank: false },
+    ]
+    // (1,1) is DW, (1,2) is plain. (G(2) + O(1)) × 2 = 6.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'GO',
+          positions: [
+            { row: 1, col: 1 },
+            { row: 1, col: 2 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(6)
+  })
+
+  it('applies triple-word (TW) to the whole word', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-s', row: 0, col: 0, letter: 'S', isBlank: false },
+      { tileId: 't-o', row: 0, col: 1, letter: 'O', isBlank: false },
+    ]
+    // (0,0) is TW, (0,1) is plain. (S(1) + O(1)) × 3 = 6.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'SO',
+          positions: [
+            { row: 0, col: 0 },
+            { row: 0, col: 1 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(6)
+  })
+
+  it('counts the center square (7,7) as DW even though premiumAt(7,7) is none', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-c', row: 7, col: 6, letter: 'C', isBlank: false },
+      { tileId: 't-a', row: 7, col: 7, letter: 'A', isBlank: false },
+      { tileId: 't-t', row: 7, col: 8, letter: 'T', isBlank: false },
+    ]
+    // premiumAt(7,6)/(7,7)/(7,8) are all 'none', but scoreWordsWithBreakdown
+    // special-cases (7,7) as a double-word multiplier. (C(3) + A(1) + T(1)) × 2 = 10.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'CAT',
+          positions: [
+            { row: 7, col: 6 },
+            { row: 7, col: 7 },
+            { row: 7, col: 8 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(10)
+  })
+
+  it('adds a flat +50 bingo bonus when exactly 7 tiles are placed', () => {
+    const board = makeEmptyBoard()
+    // Word RETAINS at row 5, cols 2-8. Note: there is NO 7-cell straight run on
+    // the board that is premium-free for scoring (the only premiumAt-clean run,
+    // row 7 cols 4-10, passes through the center (7,7) which is special-cased as
+    // DW), so we use the task's suggested stretch and include the one premium it
+    // has: (5,5) is TL. RETAINS is all 1-point letters, keeping the math trivial.
+    //   R(1) + E(1) + T(1) + A on TL (1×3=3) + I(1) + N(1) + S(1) = 9
+    //   wordScore 9 + bingo 50 = 59
+    const placement = [
+      { tileId: 't1', row: 5, col: 2, letter: 'R', isBlank: false },
+      { tileId: 't2', row: 5, col: 3, letter: 'E', isBlank: false },
+      { tileId: 't3', row: 5, col: 4, letter: 'T', isBlank: false },
+      { tileId: 't4', row: 5, col: 5, letter: 'A', isBlank: false },
+      { tileId: 't5', row: 5, col: 6, letter: 'I', isBlank: false },
+      { tileId: 't6', row: 5, col: 7, letter: 'N', isBlank: false },
+      { tileId: 't7', row: 5, col: 8, letter: 'S', isBlank: false },
+    ]
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'RETAINS',
+          positions: [
+            { row: 5, col: 2 },
+            { row: 5, col: 3 },
+            { row: 5, col: 4 },
+            { row: 5, col: 5 },
+            { row: 5, col: 6 },
+            { row: 5, col: 7 },
+            { row: 5, col: 8 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(59)
+  })
+
+  it('does not add the +50 bingo bonus for a 6-tile placement', () => {
+    const board = makeEmptyBoard()
+    // Same shape as the bingo test, one tile shorter: RETAIN at row 5, cols 2-7,
+    // with the same TL at (5,5) on the 'A'.
+    //   R(1) + E(1) + T(1) + A on TL (1×3=3) + I(1) + N(1) = 8
+    //   6 tiles placed: no bingo bonus, so total stays 8 (not 58).
+    const placement = [
+      { tileId: 't1', row: 5, col: 2, letter: 'R', isBlank: false },
+      { tileId: 't2', row: 5, col: 3, letter: 'E', isBlank: false },
+      { tileId: 't3', row: 5, col: 4, letter: 'T', isBlank: false },
+      { tileId: 't4', row: 5, col: 5, letter: 'A', isBlank: false },
+      { tileId: 't5', row: 5, col: 6, letter: 'I', isBlank: false },
+      { tileId: 't6', row: 5, col: 7, letter: 'N', isBlank: false },
+    ]
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'RETAIN',
+          positions: [
+            { row: 5, col: 2 },
+            { row: 5, col: 3 },
+            { row: 5, col: 4 },
+            { row: 5, col: 5 },
+            { row: 5, col: 6 },
+            { row: 5, col: 7 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(8)
+  })
+
+  it('scores blank tiles as 0 regardless of the assigned letter', () => {
+    const board = makeEmptyBoard()
+    const placement = [
+      { tileId: 't-a', row: 0, col: 3, letter: 'A', isBlank: false },
+      { tileId: 't-blank', row: 0, col: 4, letter: 'Q', isBlank: true },
+    ]
+    // (0,3) is DL. A(1×2=2) + blank-Q(0) = 2. If the blank were scored as a
+    // real Q (10 points), this would be 2 + 10 = 12.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'AQ',
+          positions: [
+            { row: 0, col: 3 },
+            { row: 0, col: 4 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(2)
+  })
+
+  it('scores every word in a multi-word turn, with multipliers only on newly-placed tiles', () => {
+    const board = makeEmptyBoard()
+    // Pre-existing tile from an earlier turn: 'M' at (3,6). Not in placement.
+    board[3][6] = { letter: 'M', isBlank: false, premiumConsumed: true }
+
+    // Newly placed this turn: P(2,5), A(2,6), N(2,7). (2,6) is DL.
+    const placement = [
+      { tileId: 't-p', row: 2, col: 5, letter: 'P', isBlank: false },
+      { tileId: 't-a', row: 2, col: 6, letter: 'A', isBlank: false },
+      { tileId: 't-n', row: 2, col: 7, letter: 'N', isBlank: false },
+    ]
+
+    // Main word "PAN" (horizontal, all new tiles):
+    //   P(3) + A on DL (1×2=2) + N(1) = 6
+    // Cross-word "AM" (vertical through the shared new tile A at (2,6), down
+    // to the pre-existing M at (3,6)):
+    //   A on DL again (1×2=2) + M(3) = 5
+    //   The pre-existing M is NOT in placedSet, so it contributes its plain
+    //   3 points with no letter multiplier (it's on a 'none' square anyway,
+    //   but pre-existing tiles never receive multipliers in the code).
+    //   The shared new tile A IS in placedSet, so its DL applies in BOTH words.
+    // Total = 6 + 5 = 11.
+    const result = scoreWords(
+      board,
+      [
+        {
+          word: 'PAN',
+          positions: [
+            { row: 2, col: 5 },
+            { row: 2, col: 6 },
+            { row: 2, col: 7 },
+          ],
+        },
+        {
+          word: 'AM',
+          positions: [
+            { row: 2, col: 6 },
+            { row: 3, col: 6 },
+          ],
+        },
+      ],
+      placement,
+      placement.length,
+    )
+    expect(result).toBe(11)
   })
 })
