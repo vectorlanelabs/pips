@@ -8,12 +8,20 @@ Running in isolated worktree `.claude/worktrees/poker-blackjack-loop`
 (branch `worktree-poker-blackjack-loop`) per user instruction.
 
 ## Next up
-1. M0 — Blackjack engine (spec 52)
-2. M1 — Blackjack screens (spec 53)
-3. M2 — Blackjack wiring (spec 54)
-4. M3 — Hold'em engine (spec 55)
-5. M4 — Hold'em screens (spec 56)
-6. M5 — Hold'em wiring (spec 57)
+1. M2 — Blackjack wiring (spec 54)
+2. M3 — Hold'em engine (spec 55)
+3. M4 — Hold'em screens (spec 56)
+4. M5 — Hold'em wiring (spec 57)
+
+## Done
+- [cycle 3] M1 — Blackjack screens (spec 53): Room/Table/RulesOverlay,
+  no Results screen (deliberate — no match winner concept). One bug
+  found in review (deal-intro animation desynced from the real deal
+  event) and fixed. 1321 tests / tsc / build clean.
+- [cycle 2] M0 — Blackjack engine (spec 52): shoe/betting/insurance/
+  splits/doubles/dealer-play/payouts. One blocking bug found in review
+  (order-dependent insurance resolution) and fixed. 1321 tests / tsc
+  clean. Commit `6479144`.
 
 ## Charter: Scrabble (2026-08-22) — done
 

@@ -4111,3 +4111,52 @@ shipping each verified charter promptly.
   the same order-independent-among-eligible-seats shape for prompting
   multiple all-in players.
 - **Continue?** Yes — waiting on the fix round before landing spec 52.
+
+## Cycle 2 (landed) — spec 52 lands
+- **Landed:** `src/card-games/blackjack/*` + spec 52, commit `6479144`
+  on `worktree-poker-blackjack-loop`. Independently re-verified the fix
+  round's regression test AND wrote my own separate throwaway repro
+  (out-of-order 3-seat insurance resolution) against the fixed code
+  before landing — genuinely fixed, not just trusting the implementer's
+  claim. One minor nit accepted with no fix needed: `SPLIT` generates
+  hand ids via `Date.now()` rather than a sequential counter (Rummy's
+  convention) — harmless here since a seat can only split once per
+  round, so no collision is possible; not worth a follow-up.
+- **Continue?** Yes — proceeding to M1 (Blackjack screens, spec 53).
+
+## Cycle 3 — 2026-08-23 — spec 53 (Blackjack screens) lands
+- **Shipped:** `src/components/BlackjackCard.tsx`, `src/screens/
+  Blackjack{Room,Table,RulesOverlay}.tsx`. No dedicated Results screen —
+  a deliberate, spec-stated deviation from every sibling: Blackjack has
+  no match winner (open-ended per the charter), so round outcomes show
+  as an inline banner on the Table screen with a "Deal next round" /
+  "Leave table" pair instead.
+- **Verification:** re-ran `tsc -b --noEmit`, full `vitest run`, and
+  `npm run build` myself (not just the implementer's report): all
+  clean, 1321 tests unchanged (screens get no dedicated test file, this
+  repo's convention). Read every line of all 4 files against spec 53.
+- **Review (lead, personally):** found 1 real bug via code reading — the
+  deal-intro animation was keyed off `roundNumber` alone (copied
+  verbatim from Rummy/Phase10's pattern), but Blackjack's actual deal
+  happens LATER than round-start (after every seat bets), unlike those
+  siblings where dealing is synchronous with round creation. This meant
+  the shuffle animation fired at the wrong moment (round start, 0 cards
+  dealt yet) and the real deal — the moment cards actually appear —
+  got no animation at all. A CLAUDE.md top-priority-class defect (state-
+  changing animation desynced from the real event). Sent back a fix
+  re-keying the trigger to the `'betting' -> other phase` transition;
+  independently re-verified the diff and the implementer's hand-traced
+  sequence, confirmed correct. One transient unrelated test flake
+  (`src/board-games/scrabble/bot.test.ts`) seen in the implementer's own
+  verification run, self-disclosed rather than hidden, and confirmed
+  by the lead to NOT reproduce across two independent full-suite runs
+  after the fix — pre-existing/unrelated, not caused by this change.
+- **Lesson:** a sibling animation pattern copied verbatim is only safe
+  when the NEW game's event timing genuinely matches the sibling's —
+  Blackjack's bet-then-deal shape (vs. Rummy/Phase10's deal-at-round-
+  start shape) broke an assumption the pattern silently depended on.
+  Worth checking again for Hold'em (also bet-then-deal shaped) before
+  its own screens spec reuses the same DealIntro-keyed-off-roundNumber
+  idiom uncritically.
+- **Continue?** Yes — M1 complete. Proceeding to M2 (Blackjack wiring,
+  spec 54).
