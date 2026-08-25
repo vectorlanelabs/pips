@@ -3,7 +3,7 @@ import type {
 } from '../types'
 import { GAME_MAX_SEATS, SEAT_PALETTE } from '../types'
 import { hasAnyScore, rollDice as rollFarkleDice, scoreSelection } from '../games/farkle'
-import { grandTotal, isFiveKind, rollDice as rollYahtzeeDice, scoreCategory, upperTotal } from '../games/yahtzee'
+import { Y_CATEGORIES, grandTotal, isFiveKind, rollDice as rollYahtzeeDice, scoreCategory, upperTotal } from '../games/yahtzee'
 import { checkWin, isDraw } from '../games/ttt'
 import { checkWin as c4CheckWin, isBoardFull, lowestOpenRow } from '../games/connect4'
 import { isWordSolved, randomWord } from '../games/hangman'
@@ -91,7 +91,7 @@ function initYahtzee(seats: Seat[]): YahtzeeState {
     cards[s.id] = {}
     bonuses[s.id] = 0
   })
-  return { dice: [], rollsLeft: 3, cards, bonuses, round: 1, rolling: false, status: 'Your roll.', lastTurn: null }
+  return { dice: [], rollsLeft: 3, cards, bonuses, round: 1, rolling: false, status: 'Your roll.', lastTurn: null, rejection: null }
 }
 
 function initTtt(seats: Seat[]): TttState {
@@ -350,29 +350,50 @@ function isYahtzeeTurn(state: RoomState, by: string) {
   return state.seats[state.turnIdx]?.id === by
 }
 
+// Transient rejection notice for a Yahtzee action the host declined to apply — matches TTT's
+// tttReject precedent (docs/reviews/yahtzee-review.md major #3, see `git show 6211c0d`). Set on
+// the room-wide broadcast state, but only rendered by the seat named in `seatId`.
+function yahtzeeReject(state: RoomState, y: YahtzeeState, by: string, reason: string): RoomState {
+  return { ...state, yahtzee: { ...y, rejection: { seatId: by, reason, nonce: Date.now() } } }
+}
+
 function yahtzeeRoll(state: RoomState, by: string): RoomState {
-  if (state.screen !== 'yahtzee' || !isYahtzeeTurn(state, by)) return state
+  if (state.screen !== 'yahtzee') return state
   const y = state.yahtzee
-  if (y.rollsLeft <= 0) return state
+  if (!isYahtzeeTurn(state, by)) return yahtzeeReject(state, y, by, "It's not your turn.")
+  if (y.rollsLeft <= 0) return yahtzeeReject(state, y, by, 'No rolls left — pick a box.')
   const dice = y.dice.length === 0
     ? rollYahtzeeDice(5)
     : y.dice.map((d) => (d.sel ? d : { ...d, val: 1 + Math.floor(Math.random() * 6), rot: Math.random() * 10 - 5 }))
-  return { ...state, yahtzee: { ...y, dice, rollsLeft: y.rollsLeft - 1, status: 'Hold dice, or score a box.' } }
+  return { ...state, yahtzee: { ...y, dice, rollsLeft: y.rollsLeft - 1, status: 'Hold dice, or score a box.', rejection: null } }
 }
 
 function yahtzeeToggleHold(state: RoomState, by: string, dieId: number): RoomState {
-  if (state.screen !== 'yahtzee' || !isYahtzeeTurn(state, by)) return state
+  if (state.screen !== 'yahtzee') return state
   const y = state.yahtzee
+  if (!isYahtzeeTurn(state, by)) return yahtzeeReject(state, y, by, "It's not your turn.")
   if (y.dice.length === 0) return state
+  // An absent/duplicate/stale dieId simply matches no die and is a harmless no-op — the host is
+  // the sole source of the dice array, so a client can only ever reference ids it was actually
+  // sent. Returning the same state reference (rather than a re-mapped-but-unchanged array) avoids
+  // a needless broadcast/render (docs/reviews/yahtzee-review.md minor, matches Farkle precedent).
+  if (!y.dice.some((d) => d.id === dieId)) return state
   const dice = y.dice.map((d) => (d.id === dieId ? { ...d, sel: !d.sel } : d))
-  return { ...state, yahtzee: { ...y, dice } }
+  return { ...state, yahtzee: { ...y, dice, rejection: null } }
 }
 
 function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomState {
-  if (state.screen !== 'yahtzee' || !isYahtzeeTurn(state, by)) return state
+  if (state.screen !== 'yahtzee') return state
   const y = state.yahtzee
-  if (y.dice.length === 0) return state
-  if (y.cards[by]?.[category] !== undefined) return state
+  if (!isYahtzeeTurn(state, by)) return yahtzeeReject(state, y, by, "It's not your turn.")
+  // Runtime guard at the host authority boundary: `category` is only a compile-time YCategory on
+  // a well-behaved client. A stale/buggy/malicious PeerJS client can send any string, so validate
+  // it against the real category list before it ever touches the canonical card — otherwise a
+  // bogus key is accepted as a zero-valued card entry and can satisfy the 13-category completion
+  // check (docs/reviews/yahtzee-review.md major #1).
+  if (!Y_CATEGORIES.includes(category)) return yahtzeeReject(state, y, by, 'Not a real scoring category.')
+  if (y.dice.length === 0) return yahtzeeReject(state, y, by, 'Roll before scoring.')
+  if (y.cards[by]?.[category] !== undefined) return yahtzeeReject(state, y, by, 'That box is already filled.')
   const vals = y.dice.map((d) => d.val)
   const bonus = isFiveKind(vals) && y.cards[by]?.yahtzee === 50 ? 100 : 0
   const bonuses = bonus ? { ...y.bonuses, [by]: (y.bonuses[by] ?? 0) + bonus } : y.bonuses
@@ -382,13 +403,16 @@ function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomSt
   const allDone = seats.every((s) => Object.keys(cards[s.id] ?? {}).length >= 13)
   if (allDone) {
     const winnerId = [...seats].sort((a, b) => b.score - a.score)[0].id
-    return { ...state, seats, screen: 'results', winnerId, yahtzee: { ...y, cards, bonuses } }
+    return { ...state, seats, screen: 'results', winnerId, yahtzee: { ...y, cards, bonuses, rejection: null } }
   }
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, y.round)
   const lastTurnSeat = state.seats.find((s) => s.id === by)!
   return {
     ...state, seats, turnIdx,
-    yahtzee: { ...y, cards, bonuses, dice: [], rollsLeft: 3, round, status: 'Your roll.', lastTurn: { name: lastTurnSeat.name, color: lastTurnSeat.color, category, points } },
+    yahtzee: {
+      ...y, cards, bonuses, dice: [], rollsLeft: 3, round, status: 'Your roll.',
+      lastTurn: { name: lastTurnSeat.name, color: lastTurnSeat.color, category, points }, rejection: null,
+    },
   }
 }
 

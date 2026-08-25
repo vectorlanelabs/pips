@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  decideYahtzeeCategory, decideYahtzeeHold, grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal,
+  decideYahtzeeCategory, decideYahtzeeHold, grandTotal, isFiveKind, partitionDiceOrder, rollDice, scoreCategory, upperTotal,
 } from './yahtzee'
 import type { Die } from '../types'
 
@@ -319,5 +319,25 @@ describe('partitionDiceOrder', () => {
 
   it('empty → empty ids, heldCount 0', () => {
     expect(partitionDiceOrder([])).toEqual({ ids: [], heldCount: 0 })
+  })
+})
+
+describe('dice invariant assumed by scoreCategory', () => {
+  // scoreCategory accepts an arbitrary number[] with no runtime validation — it's only ever
+  // called (in room.ts and the bot search above) with exactly-five values in 1-6, produced by
+  // rollDice/rollDie. This isn't a normal-play bug (docs/reviews/yahtzee-review.md minor), and
+  // the host-side category-string boundary is now guarded (see room.test.ts's malformed-category
+  // coverage), so there's no reachable path that feeds scoreCategory malformed dice today. This
+  // pins the actual generator's output shape as an explicit regression rather than an assumption.
+  it('rollDice(5) always produces exactly five dice with values in 1-6', () => {
+    for (let trial = 0; trial < 200; trial++) {
+      const dice = rollDice(5)
+      expect(dice).toHaveLength(5)
+      for (const d of dice) {
+        expect(Number.isInteger(d.val)).toBe(true)
+        expect(d.val).toBeGreaterThanOrEqual(1)
+        expect(d.val).toBeLessThanOrEqual(6)
+      }
+    }
   })
 })

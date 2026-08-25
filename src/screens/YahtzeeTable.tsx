@@ -60,6 +60,21 @@ export function YahtzeeTable({
     soundSigRef.current = { selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn }
   }, [y.rollsLeft, selKey, lastTurnRef, y.dice.length, y.lastTurn, isMyTurn, play])
 
+  // Rejected actions (out-of-turn, no rolls left, an already-filled category, or scoring before
+  // the first roll) are otherwise silent no-ops — surface them briefly to the player who
+  // triggered them so a rejected attempt doesn't read as a dead button. `rejection` is broadcast
+  // on the shared room state but only shown to the seat it names (matches TttTable/FarkleTable).
+  const [rejectionText, setRejectionText] = useState<string | null>(null)
+  const lastRejectionNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!y.rejection || y.rejection.seatId !== localSeatId) return
+    if (y.rejection.nonce === lastRejectionNonceRef.current) return
+    lastRejectionNonceRef.current = y.rejection.nonce
+    setRejectionText(y.rejection.reason)
+    const timer = setTimeout(() => setRejectionText(null), 2200)
+    return () => clearTimeout(timer)
+  }, [y.rejection, localSeatId])
+
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
       <TableHeader
@@ -102,6 +117,12 @@ export function YahtzeeTable({
                 </div>
               </div>
             </div>
+
+            {rejectionText && (
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', marginTop: 12 }}>
+                {rejectionText}
+              </div>
+            )}
 
             {y.dice.length === 0 && y.lastTurn !== null && (
               <div style={{
@@ -159,9 +180,21 @@ export function YahtzeeTable({
           <div style={{ width: 'fit-content', maxWidth: '100%', background: '#fff', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 9px 0 var(--grey-border)', padding: '14px 16px', overflowX: 'auto' }}>
             <div style={{ display: 'grid', gridTemplateColumns: `minmax(160px, 260px) repeat(${room.seats.length}, 74px)`, gap: 6, alignItems: 'center' }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>Scorecard</div>
-              {room.seats.map((s) => (
-                <div key={s.id} style={{ textAlign: 'center', fontWeight: 700, fontSize: 13, color: s.color }}>{s.name}</div>
-              ))}
+              {room.seats.map((s) => {
+                const isActive = s.id === activeSeat?.id
+                return (
+                  <div
+                    key={s.id}
+                    style={{
+                      textAlign: 'center', fontWeight: 700, fontSize: 13, borderRadius: 8, padding: '4px 2px',
+                      color: isActive ? '#fff' : s.color,
+                      background: isActive ? s.color : 'transparent',
+                    }}
+                  >
+                    {s.name}
+                  </div>
+                )
+              })}
 
               {Y_CATEGORIES.map((cat, ci) => (
                 <YRow key={cat} cat={cat} room={room} activeSeat={activeSeat} isMyTurn={isMyTurn} vals={vals} onScore={onScore} injectBonus={ci === 6} />

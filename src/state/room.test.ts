@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addSeat, applyAction, CODE_WORD_COUNT, generateCode, makeRoom } from './room'
-import { grandTotal } from '../games/yahtzee'
+import { Y_CATEGORIES, grandTotal } from '../games/yahtzee'
 import type { RoomState, YCategory } from '../types'
 
 describe('generateCode', () => {
@@ -676,5 +676,157 @@ describe('ttt', () => {
       room = play(room, cell, by)
       expect(room.ttt.over).toBe(room.ttt.roundOver)
     }
+  })
+})
+
+describe('yahtzee — room transitions', () => {
+  it('starts with no dice and three rolls left', () => {
+    const room = yahtzeeRoom()
+    expect(room.yahtzee.dice).toEqual([])
+    expect(room.yahtzee.rollsLeft).toBe(3)
+  })
+
+  it('an initial roll produces five dice and consumes one roll', () => {
+    const room = yahtzeeRoom()
+    const result = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    expect(result.yahtzee.dice).toHaveLength(5)
+    expect(result.yahtzee.rollsLeft).toBe(2)
+  })
+
+  it('allows exactly three rolls, then rejects a fourth', () => {
+    let room = yahtzeeRoom()
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    expect(room.yahtzee.rollsLeft).toBe(0)
+    const diceBefore = room.yahtzee.dice
+    const result = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    expect(result.yahtzee.dice).toEqual(diceBefore)
+    expect(result.yahtzee.rollsLeft).toBe(0)
+    expect(result.yahtzee.rejection?.seatId).toBe('h1')
+    expect(result.yahtzee.rejection?.reason).toMatch(/no rolls left/i)
+  })
+
+  it('a held die keeps its value across a reroll', () => {
+    let room = yahtzeeRoom()
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    const heldDie = room.yahtzee.dice[0]
+    room = applyAction(room, { type: 'yahtzeeToggleHold', dieId: heldDie.id }, 'h1')
+    expect(room.yahtzee.dice.find((d) => d.id === heldDie.id)?.sel).toBe(true)
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    const stillHeld = room.yahtzee.dice.find((d) => d.id === heldDie.id)
+    expect(stillHeld?.sel).toBe(true)
+    expect(stillHeld?.val).toBe(heldDie.val)
+  })
+
+  it('toggling an unknown/stale dieId is a harmless no-op, not a rejection', () => {
+    let room = yahtzeeRoom()
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    const result = applyAction(room, { type: 'yahtzeeToggleHold', dieId: 9999 }, 'h1')
+    expect(result.yahtzee.dice).toEqual(room.yahtzee.dice)
+    expect(result.yahtzee.rejection).toBeNull()
+  })
+
+  it('rejects roll/hold/score from a seat that is not the active turn', () => {
+    let room = yahtzeeRoom()
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    const dieId = room.yahtzee.dice[0].id
+
+    const rollResult = applyAction(room, { type: 'yahtzeeRoll' }, 'g1')
+    expect(rollResult.yahtzee.dice).toEqual(room.yahtzee.dice)
+    expect(rollResult.yahtzee.rejection?.seatId).toBe('g1')
+    expect(rollResult.yahtzee.rejection?.reason).toBe("It's not your turn.")
+
+    const holdResult = applyAction(room, { type: 'yahtzeeToggleHold', dieId }, 'g1')
+    expect(holdResult.yahtzee.dice).toEqual(room.yahtzee.dice)
+    expect(holdResult.yahtzee.rejection?.seatId).toBe('g1')
+
+    const scoreResult = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'g1')
+    expect(scoreResult.yahtzee.cards.g1?.chance).toBeUndefined()
+    expect(scoreResult.yahtzee.rejection?.seatId).toBe('g1')
+  })
+
+  it('rejects scoring before the first roll of a turn', () => {
+    const room = yahtzeeRoom()
+    const result = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'h1')
+    expect(result.yahtzee.cards.h1?.chance).toBeUndefined()
+    expect(result.yahtzee.rejection?.reason).toMatch(/roll/i)
+  })
+
+  it('an exhausted-roll (zero rolls left) score is still legal', () => {
+    let room = yahtzeeRoom()
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    room = applyAction(room, { type: 'yahtzeeRoll' }, 'h1')
+    expect(room.yahtzee.rollsLeft).toBe(0)
+    const result = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'h1')
+    expect(result.yahtzee.cards.h1?.chance).toBeDefined()
+  })
+
+  it('rejects scoring an already-filled category', () => {
+    const room = setYahtzee(yahtzeeRoom(), [1, 2, 3, 4, 5], { chance: 15 })
+    const result = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'h1')
+    expect(result.yahtzee.cards.h1?.chance).toBe(15)
+    expect(result.yahtzee.rejection?.reason).toMatch(/already filled/i)
+  })
+
+  it('rejects an unknown/malformed category before it touches the card, and 13 of them cannot force match completion', () => {
+    let room = setYahtzee(yahtzeeRoom(), [1, 2, 3, 4, 5], {})
+    for (let i = 0; i < 13; i++) {
+      room = applyAction(room, { type: 'yahtzeeScore', category: `bogus${i}` as unknown as YCategory }, 'h1')
+    }
+    expect(room.yahtzee.cards.h1).toEqual({})
+    expect(room.screen).toBe('yahtzee')
+    expect(room.turnIdx).toBe(0)
+    expect(room.yahtzee.rejection?.seatId).toBe('h1')
+    expect(room.yahtzee.rejection?.reason).toBe('Not a real scoring category.')
+  })
+
+  it('clears a stale rejection notice on the next legal action', () => {
+    const room = setYahtzee(yahtzeeRoom(), [1, 2, 3, 4, 5], { chance: 15 })
+    const rejected = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'h1')
+    expect(rejected.yahtzee.rejection?.seatId).toBe('h1')
+    const result = applyAction(rejected, { type: 'yahtzeeScore', category: 'ones' }, 'h1')
+    expect(result.yahtzee.rejection).toBeNull()
+  })
+
+  it('fills all 13 categories for every seat, advancing the round each time, and ends the match', () => {
+    let room = yahtzeeRoom()
+    for (let round = 0; round < 13; round++) {
+      expect(room.yahtzee.round).toBe(round + 1)
+      for (let turn = 0; turn < 2; turn++) {
+        const seatId = room.seats[room.turnIdx].id
+        room = applyAction(room, { type: 'yahtzeeRoll' }, seatId)
+        room = applyAction(room, { type: 'yahtzeeScore', category: Y_CATEGORIES[round] }, seatId)
+      }
+    }
+    expect(room.screen).toBe('results')
+    expect(Object.keys(room.yahtzee.cards.h1 ?? {})).toHaveLength(13)
+    expect(Object.keys(room.yahtzee.cards.g1 ?? {})).toHaveLength(13)
+    expect(room.winnerId).toBeTruthy()
+  })
+
+  it('breaks a tie for the final grand total by stable seat order (earliest seat wins)', () => {
+    // Every category filled at 0 except chance, which both seats will land on 15 (1+2+3+4+5).
+    // g1 has already completed all 13 boxes; h1 is one box away (chance) — scoring it completes
+    // the match with both seats tied at 15. This documents CURRENT tie-break behavior (see the
+    // matching bullet in src/data/rules.ts), not a re-derived rule — matches the Farkle precedent.
+    const zeroCard = Object.fromEntries(Y_CATEGORIES.filter((c) => c !== 'chance').map((c) => [c, 0])) as Partial<Record<YCategory, number>>
+    let room = yahtzeeRoom()
+    room = {
+      ...room,
+      seats: room.seats.map((s) => (s.id === 'g1' ? { ...s, score: 15 } : s)),
+      yahtzee: {
+        ...room.yahtzee,
+        dice: [1, 2, 3, 4, 5].map((val, id) => ({ id, val, sel: false, rot: 0 })),
+        rollsLeft: 1,
+        cards: { h1: zeroCard, g1: { ...zeroCard, chance: 15 } },
+      },
+    }
+    const result = applyAction(room, { type: 'yahtzeeScore', category: 'chance' }, 'h1')
+    expect(result.screen).toBe('results')
+    expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(15)
+    expect(result.seats.find((s) => s.id === 'g1')!.score).toBe(15)
+    expect(result.winnerId).toBe('h1')
   })
 })
