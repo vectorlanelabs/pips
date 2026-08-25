@@ -35,14 +35,32 @@ export function Connect4Table({
 
   useEffect(() => {
     const p = soundSigRef.current
-    if (p.wasMyTurn && discCount > p.discCount) {
-      play('piece-drop')
-    }
-    if (!p.roundOver && c.roundOver) {
+    const roundJustEnded = !p.roundOver && c.roundOver
+    // A move that ends the round is a single event, not two — playing piece-drop and
+    // round-win together clips both. round-win alone stands in for the drop on a
+    // terminal move; an ordinary (non-terminal) drop still gets its own cue.
+    if (roundJustEnded) {
       play('round-win')
+    } else if (p.wasMyTurn && discCount > p.discCount) {
+      play('piece-drop')
     }
     soundSigRef.current = { roundOver: c.roundOver, discCount, wasMyTurn: isMyTurn }
   }, [c.roundOver, discCount, isMyTurn, play])
+
+  // Rejected actions (full column, out of turn, round already over, a stale/malformed click)
+  // are otherwise silent no-ops — surface them briefly to the player who triggered them so a
+  // rejected attempt doesn't read as a dead button. `rejection` is broadcast on the shared
+  // room state but only shown to the seat it names.
+  const [rejectionText, setRejectionText] = useState<string | null>(null)
+  const lastRejectionNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!c.rejection || c.rejection.seatId !== localSeatId) return
+    if (c.rejection.nonce === lastRejectionNonceRef.current) return
+    lastRejectionNonceRef.current = c.rejection.nonce
+    setRejectionText(c.rejection.reason)
+    const timer = setTimeout(() => setRejectionText(null), 2200)
+    return () => clearTimeout(timer)
+  }, [c.rejection, localSeatId])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -71,6 +89,11 @@ export function Connect4Table({
             >
               {roundStatus ?? (isMyTurn ? 'Pick a column.' : `${activeSeat?.name} is thinking…`)}
             </div>
+            {rejectionText && (
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', margin: '-12px 0 16px' }}>
+                {rejectionText}
+              </div>
+            )}
             <div style={{ background: 'var(--page-base)', border: '4px solid var(--ink)', borderRadius: 20, padding: 'clamp(10px,1.6vw,16px)', maxWidth: 560 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 'clamp(6px,1vw,10px)' }}>
                 {c.board.map((cell, i) => {

@@ -148,6 +148,11 @@ export interface Connect4State {
   pendingWinnerId: string | null
   status: string
   wins: Record<string, number>
+  // Transient feedback for a rejected connect4Play — set on the room-wide broadcast state,
+  // but only rendered by the seat named in `seatId` (see Connect4Table). `nonce` lets the
+  // same rejection reason fire visible feedback twice in a row (e.g. two stale clicks on the
+  // same full column).
+  rejection: { seatId: string; reason: string; nonce: number } | null
 }
 
 export type HangmanPhase = 'setting' | 'guessing' | 'roundOver'

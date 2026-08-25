@@ -211,15 +211,90 @@ describe('connect4', () => {
     expect(room.connect4.board[30]).toBe(1)
   })
 
-  it('rejects invalid plays', () => {
+  it('rejects an out-of-turn play, a full column, and a play after the round is over, without mutating state', () => {
     const room = connect4Room()
-    expect(play(room, 0, 'g1')).toBe(room)
+    const outOfTurn = play(room, 0, 'g1')
+    expect(outOfTurn.connect4.board).toEqual(room.connect4.board)
+    expect(outOfTurn.turnIdx).toBe(room.turnIdx)
+    expect(outOfTurn.connect4.rejection?.seatId).toBe('g1')
+    expect(outOfTurn.connect4.rejection?.reason).toBeTruthy()
+
     const full = { ...room, connect4: { ...room.connect4, board: Array(42).fill(null).map((cell, index) => index % 7 === 0 ? 0 : cell) } }
-    expect(play(full, 0)).toBe(full)
+    const afterFull = play(full, 0)
+    expect(afterFull.connect4.board).toEqual(full.connect4.board)
+    expect(afterFull.connect4.rejection?.seatId).toBe('h1')
+
     const over = { ...room, connect4: { ...room.connect4, roundOver: true } }
-    expect(play(over, 0)).toBe(over)
-    expect(play(room, -1)).toBe(room)
-    expect(play(room, 7)).toBe(room)
+    const afterOver = play(over, 0)
+    expect(afterOver.connect4.board).toEqual(over.connect4.board)
+    expect(afterOver.connect4.rejection?.seatId).toBe('h1')
+  })
+
+  it('rejects malformed column values (negative, out-of-range, fractional, NaN) without mutating the board', () => {
+    const room = connect4Room()
+    for (const col of [-1, 7, 1.5, NaN, 100, -100]) {
+      const result = play(room, col)
+      expect(result.connect4.board).toEqual(room.connect4.board)
+      expect(result.turnIdx).toBe(room.turnIdx)
+      expect(result.connect4.rejection?.seatId).toBe('h1')
+    }
+  })
+
+  it('names the rejected actor in the rejection notice, and clears it on the next legal play', () => {
+    let room = connect4Room()
+    room = play(room, 0, 'g1') // out of turn
+    expect(room.connect4.rejection?.seatId).toBe('g1')
+    expect(room.connect4.rejection?.reason).toBeTruthy()
+    room = play(room, 0, 'h1') // legal
+    expect(room.connect4.rejection).toBeNull()
+  })
+
+  it('detects a horizontal win through applyAction', () => {
+    const room = connect4Room()
+    const board = Array(42).fill(null)
+    board[35] = 0
+    board[36] = 0
+    board[37] = 0
+    const withRow = { ...room, connect4: { ...room.connect4, board }, turnIdx: 0 }
+    const won = play(withRow, 3)
+    expect(won.connect4.roundOver).toBe(true)
+    expect(won.connect4.winLine.slice().sort((a, b) => a - b)).toEqual([35, 36, 37, 38])
+    expect(won.connect4.wins).toEqual({ h1: 1, g1: 0 })
+  })
+
+  it('detects both diagonal slopes through applyAction', () => {
+    const room = connect4Room()
+    // Down-right diagonal: (row2,col0)=14, (row3,col1)=22, (row4,col2)=30 already placed for
+    // h1; the winning disc drops into col3 (row5, empty) to complete 14-22-30-38. connect4Play
+    // only checks lowestOpenRow for the played column (col3) — the other columns' physical
+    // support beneath the pre-set cells is irrelevant to the reducer under test.
+    const downRight = Array(42).fill(null)
+    downRight[14] = 0
+    downRight[22] = 0
+    downRight[30] = 0
+    let room1 = { ...room, connect4: { ...room.connect4, board: downRight }, turnIdx: 0 }
+    room1 = play(room1, 3)
+    expect(room1.connect4.roundOver).toBe(true)
+    expect(room1.connect4.winLine.slice().sort((a, b) => a - b)).toEqual([14, 22, 30, 38])
+
+    // Down-left diagonal: (row2,col3)=17, (row3,col2)=23, (row4,col1)=29 already placed for
+    // h1; the winning disc drops into col0 (row5, empty) to complete 17-23-29-35.
+    const downLeft = Array(42).fill(null)
+    downLeft[17] = 0
+    downLeft[23] = 0
+    downLeft[29] = 0
+    let room2 = { ...room, connect4: { ...room.connect4, board: downLeft }, turnIdx: 0 }
+    room2 = play(room2, 0)
+    expect(room2.connect4.roundOver).toBe(true)
+    expect(room2.connect4.winLine.slice().sort((a, b) => a - b)).toEqual([17, 23, 29, 35])
+  })
+
+  it('rejects connect4AdvanceRound while the round is still live', () => {
+    const room = connect4Room()
+    const result = applyAction(room, { type: 'connect4AdvanceRound' }, 'h1')
+    expect(result.connect4.board).toEqual(room.connect4.board)
+    expect(result.screen).toBe('connect4')
+    expect(result.connect4.roundOver).toBe(false)
   })
 
   it('awards rounds and sends the third win to results', () => {

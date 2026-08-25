@@ -103,7 +103,7 @@ function initTtt(seats: Seat[]): TttState {
 function initConnect4(seats: Seat[]): Connect4State {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
-  return { board: Array(42).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins }
+  return { board: Array(42).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins, rejection: null }
 }
 
 function initHangman(seats: Seat[]): HangmanState {
@@ -447,14 +447,21 @@ function tttAdvanceRound(state: RoomState, by: string): RoomState {
 
 // ---------- Connect 4 ----------
 
+function connect4Reject(state: RoomState, c: Connect4State, by: string, reason: string): RoomState {
+  return { ...state, connect4: { ...c, rejection: { seatId: by, reason, nonce: Date.now() } } }
+}
+
 function connect4Play(state: RoomState, by: string, col: number): RoomState {
   if (state.screen !== 'connect4') return state
   const c = state.connect4
-  if (c.roundOver || col < 0 || col > 6) return state
+  // Malformed/crafted payloads (from a stale or hostile PeerJS client) must never reach the
+  // board index below — checked before anything else touches `board[row * 7 + col]`.
+  if (!Number.isInteger(col) || col < 0 || col > 6) return connect4Reject(state, c, by, "That's not a real column.")
+  if (c.roundOver) return connect4Reject(state, c, by, 'This round is already over.')
   const seatIdx = state.seats.findIndex((s) => s.id === by)
-  if (seatIdx !== state.turnIdx) return state
+  if (seatIdx !== state.turnIdx) return connect4Reject(state, c, by, "It's not your turn.")
   const row = lowestOpenRow(c.board, col)
-  if (row < 0) return state
+  if (row < 0) return connect4Reject(state, c, by, 'That column is full.')
   const board = [...c.board]
   board[row * 7 + col] = seatIdx
   const winLine = c4CheckWin(board, row, col, seatIdx)
@@ -467,11 +474,11 @@ function connect4Play(state: RoomState, by: string, col: number): RoomState {
     const pendingWinnerId = matchOver ? Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0] : null
     return {
       ...state, seats,
-      connect4: { ...c, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins },
+      connect4: { ...c, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins, rejection: null },
     }
   }
   const turnIdx = (state.turnIdx + 1) % state.seats.length
-  return { ...state, connect4: { ...c, board }, turnIdx }
+  return { ...state, connect4: { ...c, board, rejection: null }, turnIdx }
 }
 
 function connect4AdvanceRound(state: RoomState): RoomState {
@@ -484,7 +491,7 @@ function connect4AdvanceRound(state: RoomState): RoomState {
   const nextStarter = (c.starter + 1) % state.seats.length
   return {
     ...state, turnIdx: nextStarter,
-    connect4: { ...c, board: Array(42).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '' },
+    connect4: { ...c, board: Array(42).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '', rejection: null },
   }
 }
 

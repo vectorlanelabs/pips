@@ -358,6 +358,15 @@ export const CHECKERS_CROWN_EXTRA_MS = 1000
 // while the human's own mark sound is still playing. TTT_ACTION_MS gives the longer of the two
 // mark sounds room to finish before the bot moves.
 const TTT_ACTION_MS = 1600
+// Connect 4 is strictly 2 seats (GAME_MAX_SEATS.connect4), so — like TTT — the multi-bot
+// "fast forward" risk doesn't apply here. But piece-drop (the human's own drop sound) runs
+// 1.032s (measured via afinfo), longer than bare BASE_MS (900ms), which would let the bot's
+// reply land — and clip the drop cue's tail — before it finished. CONNECT4_ACTION_MS gives
+// the drop sound room to finish before the bot moves. (A winning move plays round-win alone,
+// not piece-drop-then-round-win — see Connect4Table's sound-selection effect — so no
+// Checkers-style CROWN_EXTRA analog is needed here; the round-pause timer already gates the
+// next screen transition.)
+const CONNECT4_ACTION_MS = 1300
 // Farkle reused bare BASE_MS (900ms) before every roll and a bare 0.6 factor (540ms) before
 // selecting kept dice or deciding to bank/reroll, with no Farkle-specific measurement, despite
 // scaling to 8 seats (GAME_MAX_SEATS.farkle) — up to 7 bots' turns can land between a human's
@@ -4906,7 +4915,7 @@ export default function App() {
 
   async function runConnect4Bot(seatId: string, key: string) {
     const pace = roomRef.current!.botPace
-    await wait(BASE_MS * pace)
+    await wait(CONNECT4_ACTION_MS * pace)
     if (stale(key)) return
     const state = roomRef.current!
     const me = state.seats.findIndex((s) => s.id === seatId)
