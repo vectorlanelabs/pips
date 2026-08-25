@@ -38,12 +38,13 @@ export function DominoesResults({
   onBackToShelf,
 }: DominoesResultsProps) {
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.matchWinnerId === localPlayerId
+  // Only the winner hears the victory cue — the loser hearing the same 'game-win' fanfare
+  // contradicts what their own screen says happened.
+  useEffect(() => { if (isLocalWinner) play('game-win') }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (publicState.stage !== 'over' || !publicState.matchWinnerId) return null
-
-  const isLocalWinner = publicState.matchWinnerId === localPlayerId
   const headline = isLocalWinner ? 'You take the match!' : `${opponentName} takes the match.`
   const headlineColor = isLocalWinner ? LOCAL_COLOR : OPPONENT_COLOR
 

@@ -18,7 +18,6 @@ import './DominoesTable.css'
 export interface DominoesTableProps {
   code: string
   localPlayerId: string
-  localName: string
   opponentName: string
   opponentColor: string
   connection: 'connected' | 'disconnected'
@@ -28,7 +27,6 @@ export interface DominoesTableProps {
   onPlayTile: (tileId: string, arm: DominoArm | 'center') => void
   onDraw: () => void
   onPass: () => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -179,7 +177,6 @@ function computePromptLine(
 export function DominoesTable({
   code,
   localPlayerId,
-  localName,
   opponentName,
   opponentColor,
   connection,
@@ -189,12 +186,9 @@ export function DominoesTable({
   onPlayTile,
   onDraw,
   onPass,
-  onOpenRules,
   onLeave,
 }: DominoesTableProps) {
   // ---- Derived ----
-  void localName // preserved in props for M4 wiring; unused in this presentational milestone
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
   const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && publicState.stage === 'play'
@@ -390,6 +384,7 @@ export function DominoesTable({
             shuffleSound="domino-shuffle"
             renderCardBack={(p) => <DominoTileBack {...p} />}
             onComplete={() => setShowIntro(false)}
+            maxFlights={hand.length + opponentHandCount}
           />
         ) : (
         <>

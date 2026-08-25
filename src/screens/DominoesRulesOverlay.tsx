@@ -4,7 +4,7 @@ export function DominoesRulesOverlay({ onClose }: { onClose: () => void }) {
     'Each tile must match the open end it extends. Doubles sit crosswise.',
     'Score whenever your play makes the open ends total a multiple of five — a double counts both its halves, and an untouched spinner counts once.',
     'No play? Draw from the boneyard until you can play — a playable draw must be played. Knock (pass) only when the boneyard is empty.',
-    'Two knocks in a row block the round: the lighter hand banks both hands\u2019 pips, rounded down to fives. Going out banks your opponent\u2019s pips the same way.',
+    'Two knocks in a row block the round: the player with fewer remaining pips banks both hands\u2019 pips, rounded down to fives. Going out banks your opponent\u2019s pips the same way.',
     'First to 150 wins the match.',
   ]
 

@@ -154,7 +154,12 @@ type Phase10View =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
-type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
+type DominoesView =
+  | { kind: 'game'; revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type WahooView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: WahooPublicState; names: Record<string, string> }
@@ -267,6 +272,25 @@ const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
 // decide if it's real, and click a button" — this is closer to the other
 // games' read-and-react windows (YAHTZEE_ACTION_MS, MT_HORN_BUFFER_MS).
 const SCRABBLE_CHALLENGE_WINDOW_MS = 2500
+// Dominoes: bare BASE_MS (900ms) is shorter than the domino-play/domino-draw cues themselves
+// (measured ~1.032s), so back-to-back bot actions clip their own sound. Fixed two-player table,
+// so this doesn't compound across seats the way N-player games do, but the cue still needs to
+// finish before the next action lands.
+// Exported (unlike its sibling pacing constants) so a regression test can pin it against the
+// measured domino-play/domino-draw sound duration without mounting the app.
+export const DOMINOES_ACTION_MS = 1300
+// Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
+// render/paint time on top of estimateDealIntroMs's pure animation estimate.
+const DOMINOES_DEAL_HOLD_BUFFER_MS = 700
+
+// Pure so a regression test can pin the round-start bot hold against the actual 14-tile
+// double-six deal without mounting the app. `handCounts` is the fresh-round DominoesPublicState
+// field — both players' hand sizes sum to the total DealIntro flight count (see DominoesTable's
+// `maxFlights={hand.length + opponentHandCount}`).
+export function dominoesDealHoldMs(handCounts: Record<string, number>): number {
+  const totalFlights = Object.values(handCounts).reduce((a, b) => a + b, 0)
+  return estimateDealIntroMs(totalFlights) + DOMINOES_DEAL_HOLD_BUFFER_MS
+}
 // Tic Tac Toe is strictly 2 seats (GAME_MAX_SEATS.ttt), so there's never more than one bot
 // action landing between a human's own turns — the multi-bot "fast forward" risk other games
 // guard against doesn't apply here. But drawn-x/drawn-circle (the human's own mark sound) run
@@ -332,6 +356,7 @@ export default function App() {
   const [dominoesView, setDominoesView] = useState<DominoesView | null>(null)
   const [dominoesConnection, setDominoesConnection] = useState<'connected' | 'disconnected'>('connected')
   const [dominoesWaiting, setDominoesWaiting] = useState(false)
+  const [dominoesNotice, setDominoesNotice] = useState<string | null>(null)
 
   // ---- Wahoo ----
   const [wahooRole, setWahooRole] = useState<'host' | 'guest' | null>(null)
@@ -482,6 +507,9 @@ export default function App() {
   const dominoesLocalPlayerIdRef = useRef<string | null>(null)
   const dominoesOpponentIdRef = useRef<string | null>(null)
   const dominoesOpponentNameRef = useRef('')
+  const dominoesBotsHeldUntilRef = useRef(0)
+  const dominoesLastRoundRef = useRef<number | null>(null)
+  const dominoesRejectionNoticeRef = useRef<string | null>(null)
   const wahooSessionRef = useRef<WahooSession | null>(null)
   const wahooHostRef = useRef<HostHandle<WahooView> | null>(null)
   const wahooGuestRef = useRef<GuestHandle<WahooAction> | null>(null)
@@ -692,7 +720,7 @@ export default function App() {
     if (rummyRole && rummyStarted && rummyView?.kind === 'game' && !rummyView.publicState.matchWinnerId) return 'rummy'
     if (phase10Role && phase10Started && phase10View?.kind === 'game' && !phase10View.publicState.matchWinnerId) return 'phase10'
     if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
-    if (dominoesRole && dominoesView && dominoesView.publicState.stage !== 'over') return 'dominoes'
+    if (dominoesRole && dominoesView?.kind === 'game' && dominoesView.publicState.stage !== 'over') return 'dominoes'
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
     if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
     if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
@@ -917,6 +945,10 @@ export default function App() {
     setDominoesView(null)
     setDominoesConnection('connected')
     setDominoesWaiting(false)
+    setDominoesNotice(null)
+    dominoesBotsHeldUntilRef.current = 0
+    dominoesLastRoundRef.current = null
+    dominoesRejectionNoticeRef.current = null
     // Wahoo
     wahooHostRef.current?.destroy()
     wahooHostRef.current = null
@@ -2490,12 +2522,20 @@ export default function App() {
 
   function dominoesUpdateViews() {
     const session = dominoesSessionRef.current!
+    const currentRound = session.session.publicState.roundNumber
+    if (currentRound !== dominoesLastRoundRef.current) {
+      dominoesLastRoundRef.current = currentRound
+      // Every fresh round deals the full double-six set (7 tiles to each of the 2 players, 14
+      // total) — hold bots until each client's local DealIntro (see DominoesTable's maxFlights)
+      // has had time to actually finish, not just estimateDealIntroMs's pure animation window.
+      dominoesBotsHeldUntilRef.current = Date.now() + dominoesDealHoldMs(session.session.publicState.handCounts)
+    }
     const hostSnap = deriveSnapshot(session.session, dominoesLocalPlayerIdRef.current!)
-    setDominoesView({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: dominoesOpponentNameRef.current })
+    setDominoesView({ kind: 'game', revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: dominoesOpponentNameRef.current })
     const opponentId = dominoesOpponentIdRef.current
     if (opponentId && opponentId !== 'bot') {
       const guestSnap = deriveSnapshot(session.session, opponentId)
-      dominoesHostRef.current?.sendTo(opponentId, { revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+      dominoesHostRef.current?.sendTo(opponentId, { kind: 'game', revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
     }
   }
 
@@ -2529,7 +2569,12 @@ export default function App() {
       onAction(guestId, action) {
         if (!dominoesSessionRef.current || guestId !== dominoesOpponentIdRef.current) return
         const result = applyDominoesAction(dominoesSessionRef.current!, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          dominoesHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         dominoesSessionRef.current = result.dm
         dominoesUpdateViews()
       },
@@ -2560,16 +2605,17 @@ export default function App() {
 
   async function runDominoesBot(botId: string, key: string) {
     while (!dominoesStale(key)) {
-      await wait(BASE_MS)
+      const holdRemaining = dominoesBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : DOMINOES_ACTION_MS)
       if (dominoesStale(key)) return
+      if (Date.now() < dominoesBotsHeldUntilRef.current) continue
       const session = dominoesSessionRef.current!
       const ps = session.session.publicState
       if (ps.stage !== 'play' || currentPlayer(ps.turn) !== botId) return
       const result = runDominoesBotTurn(session, botId, dominoesBotStrategy)
       if (!result.outcome.ok) return
       dominoesSessionRef.current = result.dm
-      const snap = deriveSnapshot(result.dm.session, dominoesLocalPlayerId!)
-      setDominoesView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: dominoesOpponentNameRef.current })
+      dominoesUpdateViews()
     }
   }
 
@@ -2597,8 +2643,19 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<DominoesView, DominoesAction>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // dominoesView/localRevision, so it can't be mistaken for (or block) a real state update.
+          dominoesRejectionNoticeRef.current = view.message
+          setDominoesNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setDominoesNotice((prev) => (prev !== null && prev === dominoesRejectionNoticeRef.current ? null : prev))
+        dominoesRejectionNoticeRef.current = null
         setDominoesView(view)
         setDominoesOpponentName(view.opponentName)
       },
@@ -2628,7 +2685,18 @@ export default function App() {
   function dominoesDispatch(action: DominoesAction) {
     if (dominoesRole === 'host' && dominoesLocalPlayerId) {
       const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        dominoesRejectionNoticeRef.current = reason
+        setDominoesNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (dominoesNotice !== null && dominoesNotice === dominoesRejectionNoticeRef.current) {
+        setDominoesNotice(null)
+      }
+      dominoesRejectionNoticeRef.current = null
       dominoesSessionRef.current = result.dm
       dominoesUpdateViews()
     } else if (dominoesRole === 'guest') {
@@ -2644,6 +2712,9 @@ export default function App() {
     const next = createDominoesGame(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
     dominoesSessionRef.current = next
+    // Force the deal-intro hold to recompute even if the finished match's last round happened
+    // to also be round 1 (single-round match) — a rematch always deals a fresh 14-tile hand.
+    dominoesLastRoundRef.current = null
     dominoesUpdateViews()
   }
 
@@ -4786,14 +4857,14 @@ export default function App() {
   // while the actor key is unchanged; stage is part of the key so round transitions
   // abort the loop).
   useEffect(() => {
-    if (dominoesRole !== 'host' || !dominoesView) return
+    if (dominoesRole !== 'host' || dominoesView?.kind !== 'game') return
     runDominoesBotsIfNeeded()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dominoesRole, dominoesView])
 
   // Round transition (pause then start next round)
   useEffect(() => {
-    if (dominoesRole !== 'host' || !dominoesView) return
+    if (dominoesRole !== 'host' || dominoesView?.kind !== 'game') return
     if (dominoesView.publicState.stage === 'roundEnd' && !dominoesView.publicState.matchWinnerId) {
       const t = setTimeout(() => {
         const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId!, { type: 'START_NEXT_ROUND' })
@@ -4805,7 +4876,7 @@ export default function App() {
       return () => clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dominoesRole, dominoesView?.publicState.stage, dominoesView?.publicState.matchWinnerId])
+  }, [dominoesRole, dominoesView?.kind === 'game' ? dominoesView.publicState.stage : undefined, dominoesView?.kind === 'game' ? dominoesView.publicState.matchWinnerId : undefined])
 
   // ---- Wahoo effects (host-only) ----
 
@@ -5307,7 +5378,7 @@ export default function App() {
   }
 
   // Dominoes match results
-  if (dominoesView && dominoesView.publicState.stage === 'over' && dominoesView.publicState.matchWinnerId) {
+  if (dominoesView?.kind === 'game' && dominoesView.publicState.stage === 'over' && dominoesView.publicState.matchWinnerId) {
     return (
       <DominoesResults
         localPlayerId={dominoesLocalPlayerId ?? ''}
@@ -5315,7 +5386,7 @@ export default function App() {
         opponentName={dominoesOpponentName}
         publicState={dominoesView.publicState}
         isHost={dominoesRole === 'host'}
-        notice={error}
+        notice={dominoesNotice ?? error}
         onRematch={dominoesRematch}
         onBackToShelf={resetToEntry}
       />
@@ -5323,22 +5394,20 @@ export default function App() {
   }
 
   // Dominoes table (active match)
-  if (dominoesView && dominoesLocalPlayerId) {
+  if (dominoesView?.kind === 'game' && dominoesLocalPlayerId) {
     return (
       <DominoesTable
         code={dominoesCode}
         localPlayerId={dominoesLocalPlayerId}
-        localName={name}
         opponentName={dominoesOpponentName}
         opponentColor="#5b5bd6"
         connection={dominoesConnection}
-        notice={error}
+        notice={dominoesNotice ?? error}
         publicState={dominoesView.publicState}
         hand={dominoesView.privateState.hand.cards satisfies DominoTile[]}
         onPlayTile={(tileId, arm: DominoArm | 'center') => dominoesDispatch({ type: 'PLAY_TILE', tileId, arm })}
         onDraw={() => dominoesDispatch({ type: 'DRAW_TILE' })}
         onPass={() => dominoesDispatch({ type: 'PASS' })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )
