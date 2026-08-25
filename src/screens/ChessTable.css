@@ -256,3 +256,48 @@ button.ch-piece {
   font-size: 14px;
   color: var(--muted-text);
 }
+
+/* ---- Difficulty picker (host waiting screen) ---- */
+
+.ch-difficulty-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ch-difficulty-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.ch-difficulty-option:hover {
+  border-color: var(--ink);
+}
+
+.ch-difficulty-option--selected {
+  border-color: var(--ch-brand);
+  background: #e3eef7;
+}
+
+.ch-difficulty-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ch-difficulty-desc {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}

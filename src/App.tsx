@@ -182,7 +182,12 @@ type CheckersView =
 type MTView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
-type ChessView = { revision: number; publicState: ChessPublicState; opponentName: string }
+type ChessView =
+  | { kind: 'game'; revision: number; publicState: ChessPublicState; opponentName: string }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type UnoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty; cardBack: string }
   | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
@@ -350,6 +355,19 @@ export const CHECKERS_ACTION_MS = 1300
 // the measured 2.040s cue with margin for render/audio-engine latency — same shape as Wahoo's
 // WAHOO_BUST_EXTRA_MS for its own longer-than-usual cue.
 export const CHECKERS_CROWN_EXTRA_MS = 1000
+// Chess is strictly 2 seats (max 1 bot) and turns strictly alternate, so back-to-back bot
+// actions never happen — the bot only ever moves once per human turn. But bare BASE_MS (900ms)
+// is shorter than the game's own ordinary move sound (piece-drop, measured 1.000s): the wait
+// before the bot's move is a "thinking time" beat measured from whatever move just handed it the
+// turn (the human's own move), so a too-short wait can let the bot's own move-sound fire while
+// that prior move's cue is still playing. Exported so a regression test can pin it against the
+// measured sound durations without mounting the app.
+export const CHESS_ACTION_MS = 1100
+// A promotion (the human's move that just handed the bot its turn) plays king-me (measured
+// 2.000s) — far longer than CHESS_ACTION_MS alone covers. Hold extra, paid before the bot's own
+// move fires, so that cue finishes first — same shape as Checkers' CHECKERS_CROWN_EXTRA_MS,
+// just paid before rather than after since Chess never has a second bot action to protect.
+export const CHESS_PROMOTION_EXTRA_MS = 1000
 // Tic Tac Toe is strictly 2 seats (GAME_MAX_SEATS.ttt), so there's never more than one bot
 // action landing between a human's own turns — the multi-bot "fast forward" risk other games
 // guard against doesn't apply here. But drawn-x/drawn-circle (the human's own mark sound) run
@@ -486,6 +504,7 @@ export default function App() {
   const [chessOpponentId, setChessOpponentId] = useState<string | null>(null)
   const [chessOpponentName, setChessOpponentName] = useState('')
   const [chessView, setChessView] = useState<ChessView | null>(null)
+  const [chessNotice, setChessNotice] = useState<string | null>(null)
   const [chessConnection, setChessConnection] = useState<'connected' | 'disconnected'>('connected')
   const [chessWaiting, setChessWaiting] = useState(false)
   const [chessDifficulty, setChessDifficulty] = useState<ChessDifficulty>('easy')
@@ -636,6 +655,7 @@ export default function App() {
   const chessSessionRef = useRef<ChessSession | null>(null)
   const chessHostRef = useRef<HostHandle<ChessView> | null>(null)
   const chessGuestRef = useRef<GuestHandle<ChessAction> | null>(null)
+  const chessRejectionNoticeRef = useRef<string | null>(null)
   const chessBotBusyRef = useRef(false)
   const chessLocalPlayerIdRef = useRef<string | null>(null)
   const chessOpponentIdRef = useRef<string | null>(null)
@@ -817,7 +837,7 @@ export default function App() {
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
     if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
     if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
-    if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
+    if (chessRole && chessView?.kind === 'game' && chessView.publicState.stage !== 'over') return 'chess'
     if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
     if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
     if (blackjackRole && blackjackStarted && blackjackView?.kind === 'game') return 'blackjack'
@@ -1126,6 +1146,8 @@ export default function App() {
     setChessOpponentName('')
     chessOpponentNameRef.current = ''
     setChessView(null)
+    setChessNotice(null)
+    chessRejectionNoticeRef.current = null
     setChessConnection('connected')
     setChessWaiting(false)
     setChessDifficulty('easy')
@@ -3658,11 +3680,11 @@ export default function App() {
   function chessUpdateViews() {
     const session = chessSessionRef.current!
     const hostSnap = deriveSnapshot(session.session, chessLocalPlayerIdRef.current!)
-    setChessView({ revision: hostSnap.revision, publicState: hostSnap.publicState, opponentName: chessOpponentNameRef.current })
+    setChessView({ kind: 'game', revision: hostSnap.revision, publicState: hostSnap.publicState, opponentName: chessOpponentNameRef.current })
     const opponentId = chessOpponentIdRef.current
     if (opponentId && opponentId !== 'bot') {
       const guestSnap = deriveSnapshot(session.session, opponentId)
-      chessHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, opponentName: name })
+      chessHostRef.current?.broadcast({ kind: 'game', revision: guestSnap.revision, publicState: guestSnap.publicState, opponentName: name })
     }
   }
 
@@ -3696,7 +3718,12 @@ export default function App() {
       onAction(guestId, action) {
         if (!chessSessionRef.current || guestId !== chessOpponentIdRef.current) return
         const result = applyChessAction(chessSessionRef.current!, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          chessHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         chessSessionRef.current = result.game
         chessUpdateViews()
       },
@@ -3730,12 +3757,21 @@ export default function App() {
 
   async function runChessBot(botId: string, key: string) {
     while (!chessStale(key)) {
-      await wait(BASE_MS)
+      await wait(CHESS_ACTION_MS)
       if (chessStale(key)) return
       const session = chessSessionRef.current!
       const ps = session.session.publicState
       if (ps.stage !== 'play') return
       if (currentPlayer(ps.turn) !== botId) return
+      // Whatever move just handed the bot this turn (the human's move, since Chess
+      // is strictly 2-seat and turns always alternate) may have been a promotion,
+      // which plays king-me (measured 2.000s) — far longer than CHESS_ACTION_MS
+      // covers on its own. Hold extra so that cue finishes before this bot move's
+      // own sound fires.
+      if (ps.lastMove?.san.includes('=')) {
+        await wait(CHESS_PROMOTION_EXTRA_MS)
+        if (chessStale(key)) return
+      }
       // 'hard' is not selectable (spec 28) — a stale session could still carry
       // it, so fall through to normal rather than crash on an unknown branch.
       const strategy = ps.difficulty === 'easy'
@@ -3745,7 +3781,7 @@ export default function App() {
       if (!result.outcome.ok) return
       chessSessionRef.current = result.game
       const snap = deriveSnapshot(result.game.session, chessLocalPlayerId!)
-      setChessView({ revision: snap.revision, publicState: snap.publicState, opponentName: chessOpponentNameRef.current })
+      setChessView({ kind: 'game', revision: snap.revision, publicState: snap.publicState, opponentName: chessOpponentNameRef.current })
     }
   }
 
@@ -3773,8 +3809,19 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<ChessView, ChessAction>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // chessView/localRevision, so it can't be mistaken for (or block) a real state update.
+          chessRejectionNoticeRef.current = view.message
+          setChessNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setChessNotice((prev) => (prev !== null && prev === chessRejectionNoticeRef.current ? null : prev))
+        chessRejectionNoticeRef.current = null
         setChessView(view)
         setChessOpponentName(view.opponentName)
       },
@@ -3804,7 +3851,18 @@ export default function App() {
   function chessDispatch(action: ChessAction) {
     if (chessRole === 'host' && chessLocalPlayerId) {
       const result = applyChessAction(chessSessionRef.current!, chessLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        chessRejectionNoticeRef.current = reason
+        setChessNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (chessNotice !== null && chessNotice === chessRejectionNoticeRef.current) {
+        setChessNotice(null)
+      }
+      chessRejectionNoticeRef.current = null
       chessSessionRef.current = result.game
       chessUpdateViews()
     } else if (chessRole === 'guest') {
@@ -5859,7 +5917,7 @@ export default function App() {
       <ChessRoom
         code={chessCode}
         localName={name}
-        notice={error}
+        notice={chessNotice ?? error}
         difficulty={chessDifficulty}
         onSetDifficulty={(d) => { setChessDifficulty(d); chessDifficultyRef.current = d }}
         onAddHouseBot={addChessHouseBot}
@@ -5869,7 +5927,7 @@ export default function App() {
   }
 
   // Chess match results
-  if (chessView && chessView.publicState.stage === 'over' && chessView.publicState.outcome) {
+  if (chessView?.kind === 'game' && chessView.publicState.stage === 'over' && chessView.publicState.outcome) {
     return (
       <ChessResults
         localPlayerId={chessLocalPlayerId ?? ''}
@@ -5877,7 +5935,7 @@ export default function App() {
         opponentName={chessOpponentName}
         publicState={chessView.publicState}
         isHost={chessRole === 'host'}
-        notice={error}
+        notice={chessNotice ?? error}
         onRematch={chessRematch}
         onBackToShelf={resetToEntry}
       />
@@ -5885,7 +5943,7 @@ export default function App() {
   }
 
   // Chess table (active match). Board is public — nothing to hide per player.
-  if (chessView && chessLocalPlayerId) {
+  if (chessView?.kind === 'game' && chessLocalPlayerId) {
     const opponentId = chessView.publicState.seatOrder.find((id) => id !== chessLocalPlayerId) ?? ''
     // Seat colors, same two-color assignment the other 2-player engine games
     // use: local player green, opponent the chess brand cyan (matches what
@@ -5905,14 +5963,13 @@ export default function App() {
         names={chessNames}
         colors={chessColors}
         connection={chessConnection}
-        notice={error}
+        notice={chessNotice ?? error}
         publicState={chessView.publicState}
         onMove={(from, to, promotion) => chessDispatch({ type: 'MOVE', from, to, ...(promotion !== undefined ? { promotion } : {}) })}
         onResign={() => chessDispatch({ type: 'RESIGN' })}
         onOfferDraw={() => chessDispatch({ type: 'OFFER_DRAW' })}
         onAcceptDraw={() => chessDispatch({ type: 'ACCEPT_DRAW' })}
         onDeclineDraw={() => chessDispatch({ type: 'DECLINE_DRAW' })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )

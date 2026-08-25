@@ -27,7 +27,6 @@ export interface ChessTableProps {
   onOfferDraw: () => void
   onAcceptDraw: () => void
   onDeclineDraw: () => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -65,11 +64,8 @@ export function ChessTable({
   onOfferDraw,
   onAcceptDraw,
   onDeclineDraw,
-  onOpenRules,
   onLeave,
 }: ChessTableProps) {
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
-
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -100,10 +96,12 @@ export function ChessTable({
   // Diff lastMove identity (turnNumber:by:san — replaced by every accepted
   // MOVE) plus stage transitions, mirroring the Checkers guards. Both players
   // hear everything — no wasMyTurn gate.
+  // Result sound (winner-only game-win, or silence for a draw/loss) is centralized
+  // in ChessResults, keyed off publicState.outcome — not played here, so a game-
+  // ending move's transition to the results screen never fires it twice.
   const lastMove = publicState.lastMove
   const moveSig = lastMove ? `${publicState.turn.turnNumber}:${lastMove.by}:${lastMove.san}` : 'none'
   const moveSigRef = useRef(moveSig)
-  const stageRef = useRef(publicState.stage)
   useEffect(() => {
     if (moveSig !== moveSigRef.current) {
       moveSigRef.current = moveSig
@@ -115,11 +113,7 @@ export function ChessTable({
         if (lastMove.san.includes('=')) play('king-me')
       }
     }
-    if (publicState.stage !== stageRef.current) {
-      stageRef.current = publicState.stage
-      if (publicState.stage === 'over') play('game-win')
-    }
-  }, [moveSig, lastMove, publicState.stage, play])
+  }, [moveSig, lastMove, play])
 
   // ---- Board interaction ----
   // Legal destinations of the selected piece (promotions included — they

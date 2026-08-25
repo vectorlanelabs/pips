@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ChessDifficulty } from '../board-games/chess/state'
 import { ChessRulesOverlay } from './ChessRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
-import './BattleshipTable.css'
+import './ChessTable.css'
 
 const DIFFICULTIES: { id: ChessDifficulty; name: string; desc: string; disabled?: boolean }[] = [
   { id: 'easy', name: 'Easy', desc: 'Forgiving and a little random.' },
@@ -83,18 +83,18 @@ export function ChessRoom({
           </button>
 
           <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Difficulty</div>
-          <div className="bs-variant-list">
+          <div className="ch-difficulty-list">
             {DIFFICULTIES.map((v) => (
               <button
                 key={v.id}
                 type="button"
                 disabled={v.disabled}
-                className={`bs-variant-option${v.id === difficulty ? ' bs-variant-option--selected' : ''}`}
+                className={`ch-difficulty-option${v.id === difficulty ? ' ch-difficulty-option--selected' : ''}`}
                 onClick={() => onSetDifficulty(v.id)}
                 style={v.disabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
               >
-                <span className="bs-variant-name">{v.name}</span>
-                <span className="bs-variant-desc">{v.desc}</span>
+                <span className="ch-difficulty-name">{v.name}</span>
+                <span className="ch-difficulty-desc">{v.desc}</span>
               </button>
             ))}
           </div>

@@ -45,12 +45,19 @@ export function ChessResults({
   onBackToShelf,
 }: ChessResultsProps) {
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const o = publicState.outcome
+  // Winner-only game-win — silence for a draw and for the loser, so the cue
+  // encodes win/loss/draw semantics instead of sounding like a fanfare for
+  // everyone. The table itself no longer plays a result cue (see ChessTable),
+  // so this is the single place the outcome sound fires.
+  const winnerSeat = o !== null && (o.kind === 'checkmate' || o.kind === 'resign') ? o.winnerSeat : null
+  const isLocalWinner = winnerSeat !== null && publicState.seatOrder[winnerSeat] === localPlayerId
+  useEffect(() => {
+    if (isLocalWinner) play('game-win')
+  }, [isLocalWinner, play])
 
   // Only render when the game is over
-  if (publicState.stage !== 'over' || publicState.outcome === null) return null
-
-  const o = publicState.outcome
+  if (publicState.stage !== 'over' || o === null) return null
 
   // Two fixed rows, one per player — winner first, or both neutral on a draw.
   interface ResultRow {
