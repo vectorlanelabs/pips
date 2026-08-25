@@ -8,6 +8,16 @@
 
 ---
 
+### Resolution (2026-08-24)
+
+All Major and Minor findings are fixed on `fix/review-tier1-rummy-wahoo-ttt` and independently verified (`tsc -b --noEmit` clean, `npm run build` clean, full suite green). One item is **open, pending a game-rule decision, not a bug**:
+
+- **Major #4 (Joker rule):** the current implementation and its intent are now documented in the rules overlay, but whether a *zeroed* Yahtzee box should still unlock Joker scoring in the lower section (as it does today) or should require an actual 50-point Yahtzee first is a real rule call — see [deferred.md](deferred.md).
+
+Do not remove this file until that item is resolved.
+
+---
+
 ### Executive verdict
 
 **needs changes** — the scoring primitives are unusually well covered and the ordinary host-side turn flow is coherent, but the review found a real authoritative-boundary hole: a malformed network action can add arbitrary category keys to a scorecard and eventually satisfy the 13-category completion test. The table is playable on the happy path, and the 2-second bot cadence is substantially more defensible than the old shared 900ms pacing, but Yahtzee still skips the sibling turn-highlight treatment and exposes no meaningful feedback for rejected/stale actions. The main release risk is not the basic category arithmetic; it is unvalidated serialized input and a test suite that does not exercise the room state machine that actually enforces playability.
