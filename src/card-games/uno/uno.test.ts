@@ -11,6 +11,7 @@ import {
   handHasLegalPlay,
   isUnoPlayable,
   unoCardPoints,
+  type UnoAction,
   type UnoLastAction,
   type UnoPrivateState,
   type UnoPublicState,
@@ -91,6 +92,22 @@ function buildGame(config: {
   }
   return { session: createHostSession(publicState, privateStates), stock, rng: createRng(0) }
 }
+
+// ── malformed action defense-in-depth ──────────────────────────
+// App.tsx's onAction guards with isUnoAction (see state.test.ts) before ever reaching here —
+// this documents that applyUnoAction itself never throws on an unrecognized action.type; it
+// rejects cleanly, in case that boundary is ever bypassed (e.g. host-local dispatch).
+
+describe('applyUnoAction with a malformed action', () => {
+  it('rejects an unrecognized type, does not throw, and leaves state untouched', () => {
+    const uno = buildGame({ hands: { p1: cards('uno-10'), p2: [], p3: [], p4: [] } })
+    const before = uno.session.revision
+    expect(() => applyUnoAction(uno, 'p1', { type: 'NOT_A_REAL_ACTION' } as unknown as UnoAction)).not.toThrow()
+    const result = applyUnoAction(uno, 'p1', { type: 'NOT_A_REAL_ACTION' } as unknown as UnoAction)
+    expect(result.outcome.ok).toBe(false)
+    expect(result.uno.session.revision).toBe(before)
+  })
+})
 
 // ── deal ────────────────────────────────────────────────────────
 
@@ -406,6 +423,39 @@ describe('wild', () => {
     expect(pub.handCounts.p2).toBe(p2Before)
     expect(pub.lastAction).toEqual({ by: 'p1', kind: 'play', card: { color: 'wild', kind: 'wild', value: null }, drewCount: 0 })
   })
+
+  // Defense-in-depth for the PeerJS host boundary (App.tsx's onAction guards with isUnoAction,
+  // but that guard only checks the envelope shape — it does not know CHOOSE_COLOR.color must be
+  // one of the four canonical UNO colors). A malformed or hostile guest can still send a
+  // syntactically valid CHOOSE_COLOR action with an out-of-domain color; the rules validator
+  // itself must reject it before activeColor is ever assigned, so canonical state can't be
+  // poisoned with a value no colored card can ever match.
+  it.each([
+    ['an out-of-domain color string', 'purple'],
+    ['an empty string', ''],
+    ['null', null],
+    ['a missing color field', undefined],
+  ])('rejects CHOOSE_COLOR with %s, leaving state and stock unchanged', (_label, color) => {
+    const uno = buildGame({
+      hands: { p1: cards('uno-100', 'uno-10'), p2: [], p3: [], p4: [] },
+      stock: cards('uno-13', 'uno-38', 'uno-63'),
+    })
+    const played = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-100' })
+    expect(played.outcome.ok).toBe(true)
+    const before = played.uno.session.publicState
+    const stockBefore = cardCount(played.uno.stock)
+    const action = color === undefined
+      ? ({ type: 'CHOOSE_COLOR' } as unknown as UnoAction)
+      : ({ type: 'CHOOSE_COLOR', color } as unknown as UnoAction)
+    const r = applyUnoAction(played.uno, 'p1', action)
+    expect(r.outcome.ok).toBe(false)
+    expect(r.outcome.reason).toBe('not a valid color')
+    const after = r.uno.session.publicState
+    expect(after.activeColor).toBe(before.activeColor)
+    expect(after.pendingWild).toEqual(before.pendingWild)
+    expect(cardCount(r.uno.stock)).toBe(stockBefore)
+    expect(r.uno.session.revision).toBe(played.uno.session.revision)
+  })
 })
 
 // ── wild4 ───────────────────────────────────────────────────────
@@ -438,6 +488,32 @@ describe('wild4', () => {
     expect(pub.stockCount).toBe(stockBefore - 4)
     expect(r.uno.stock.cards).toHaveLength(stockBefore - 4)
     expect(pub.lastAction).toEqual({ by: 'p1', kind: 'play', card: { color: 'wild', kind: 'wild4', value: null }, drewCount: 4 })
+  })
+
+  // Same runtime enum guard as the plain-wild path above, exercised for the isDraw4 branch
+  // separately since it's a distinct code path in rules.ts (the draw/skip logic sits AFTER
+  // the color check, so a malformed color must never reach it).
+  it.each([
+    ['an out-of-domain color string', 'purple'],
+    ['null', null],
+  ])('rejects CHOOSE_COLOR with %s on a pending wild4, leaving state and stock unchanged', (_label, color) => {
+    const uno = buildGame({
+      hands: { p1: cards('uno-104', 'uno-10'), p2: [], p3: [], p4: [] },
+      stock: cards('uno-11', 'uno-12', 'uno-13', 'uno-14', 'uno-15'),
+    })
+    const stockBefore = cardCount(uno.stock)
+    const played = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-104' })
+    expect(played.outcome.ok).toBe(true)
+    const before = played.uno.session.publicState
+    const r = applyUnoAction(played.uno, 'p1', { type: 'CHOOSE_COLOR', color } as unknown as UnoAction)
+    expect(r.outcome.ok).toBe(false)
+    expect(r.outcome.reason).toBe('not a valid color')
+    const after = r.uno.session.publicState
+    expect(after.activeColor).toBe(before.activeColor)
+    expect(after.pendingWild).toEqual(before.pendingWild)
+    expect(after.handCounts).toEqual(before.handCounts)
+    expect(cardCount(r.uno.stock)).toBe(stockBefore)   // PLAY_CARD moves hand->discard only; stock untouched either way
+    expect(r.uno.session.revision).toBe(played.uno.session.revision)
   })
 })
 
@@ -916,6 +992,10 @@ describe('bot', () => {
 // ── property-based invariants ───────────────────────────────────
 
 describe('property-based invariants', () => {
+  // Explicit timeout: 50 trials x up to 300 actions each, with conservation/serialization/
+  // host-zone checks after every action, comfortably exceeds Vitest's default 5000ms budget
+  // (measured ~6s locally) without the workload itself being slow or reducible without losing
+  // seat-count/trial coverage — see docs/reviews/uno-review.md Major #1.
   it('stock, conservation, handCounts and wire-safety invariants hold across long random legal sequences', () => {
     for (let trial = 0; trial < 50; trial++) {
       const n = 2 + (trial % 5)   // cycles 2..6 so every seat count gets covered
@@ -952,5 +1032,5 @@ describe('property-based invariants', () => {
         expect(isJsonSerializable(after)).toBe(true)
       }
     }
-  })
+  }, 30000)
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { UnoCard } from '../card-games/uno/deck'
-import { sortUnoHand } from './UnoTable'
+import type { UnoLastAction } from '../card-games/uno/state'
+import { isUnoForcedDrawAction, sortUnoHand } from './UnoTable'
 
 function card(id: string, color: UnoCard['color'], kind: UnoCard['kind'], value: number | null = null): UnoCard {
   return { id, color, kind, value }
@@ -64,5 +65,46 @@ describe('sortUnoHand', () => {
       card('r-5-c', 'red', 'number', 5),
     ]
     expect(sortUnoHand(input).map((c) => c.id)).toEqual(['r-5-a', 'r-5-b', 'r-5-c'])
+  })
+})
+
+// See docs/reviews/uno-review.md Major #4: the forced-draw reveal gate must not also hide
+// cards received through a legal 7 swap or 0 rotation, since those are the player's own hand,
+// not a penalty draw.
+describe('isUnoForcedDrawAction', () => {
+  it('is false when there is no last action yet (fresh round)', () => {
+    expect(isUnoForcedDrawAction(null)).toBe(false)
+  })
+
+  it('is true for an immediate draw2 landing on the next player', () => {
+    const la: UnoLastAction = { by: 'p1', kind: 'play', card: { color: 'red', kind: 'draw2', value: null }, drewCount: 2 }
+    expect(isUnoForcedDrawAction(la)).toBe(true)
+  })
+
+  it('is true for an immediate wild4 landing on the next player', () => {
+    const la: UnoLastAction = { by: 'p1', kind: 'play', card: { color: 'wild', kind: 'wild4', value: null }, drewCount: 4 }
+    expect(isUnoForcedDrawAction(la)).toBe(true)
+  })
+
+  it('is false for a completed 7 swap (drewCount stays 0)', () => {
+    const la: UnoLastAction = {
+      by: 'p1', kind: 'play', card: { color: 'red', kind: 'number', value: 7 }, drewCount: 0, swapTargetPlayerId: 'p2',
+    }
+    expect(isUnoForcedDrawAction(la)).toBe(false)
+  })
+
+  it('is false for a 0 rotation (drewCount stays 0)', () => {
+    const la: UnoLastAction = { by: 'p1', kind: 'play', card: { color: 'red', kind: 'number', value: 0 }, drewCount: 0 }
+    expect(isUnoForcedDrawAction(la)).toBe(false)
+  })
+
+  it('is false for the drawer resolving a stacked pile themselves (kind is "draw", not "play")', () => {
+    const la: UnoLastAction = { by: 'p1', kind: 'draw', card: null, drewCount: 4 }
+    expect(isUnoForcedDrawAction(la)).toBe(false)
+  })
+
+  it('is false for an ordinary play with no draw effect', () => {
+    const la: UnoLastAction = { by: 'p1', kind: 'play', card: { color: 'red', kind: 'number', value: 3 }, drewCount: 0 }
+    expect(isUnoForcedDrawAction(la)).toBe(false)
   })
 })
