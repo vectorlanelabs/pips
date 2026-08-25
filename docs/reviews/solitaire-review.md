@@ -8,6 +8,16 @@
 
 ---
 
+### Resolution (2026-08-24)
+
+All Major and Minor findings are fixed on `fix/review-tier1-rummy-wahoo-ttt` (commit `ecf7efa`) and independently verified (`tsc -b --noEmit` clean, `npm run build` clean, full suite green). One item is **open, pending a copy/product decision, not a bug**:
+
+- **Major #3 (Auto-play "safe" claim):** the actual guarantee is now documented and tested, but whether the rules-overlay copy ("finishes off every remaining safe move for you") still fits that narrower guarantee is a product call — see [deferred.md](deferred.md).
+
+Do not remove this file until that item is resolved.
+
+---
+
 ### Executive verdict
 
 **needs changes** — the solitaire engines are compact, mostly well-factored, and the requested six-file engine suite is green, but the release bar is not met because invalid play gives the player no actionable explanation and the most important cross-variant paths remain under-tested. I found no confirmed blocking rules bug in the code read: Klondike stacking/foundations, FreeCell supermove capacity, Spider same-suit pickup/automatic run clearing, and Pyramid exposure/pairing are internally coherent. The concerns are primarily playability and confidence: one UI-level failure mode is indistinguishable from a dead interaction, and the test suite does not cover the actual dispatch boundary, mode picker/table integration, or several variant-specific edge cases.
