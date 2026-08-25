@@ -170,6 +170,10 @@ type WahooView =
 type CheckersView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: CheckersPublicState; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type MTView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
@@ -311,6 +315,22 @@ export function dominoesDealHoldMs(handCounts: Record<string, number>): number {
   const totalFlights = Object.values(handCounts).reduce((a, b) => a + b, 0)
   return estimateDealIntroMs(totalFlights) + DOMINOES_DEAL_HOLD_BUFFER_MS
 }
+// Checkers: bare BASE_MS (900ms) is shorter than the game's own move sound (measured 1.032s) and
+// far shorter than its crown cue (measured 2.040s, king-me played together with checker-move on a
+// crowning move) — the next bot action could start while the prior move's sound was still playing.
+// Fixed two-player table, no deal intro, so this doesn't compound across seats the way N-player
+// games do, but every move (ordinary, jump, or crown) is still a visible board change a human is
+// watching, per CLAUDE.md's pacing rule.
+// Exported so a regression test can pin it against the measured move/jump sound durations without
+// mounting the app.
+export const CHECKERS_ACTION_MS = 1300
+// A crowning move plays checker-move (or checker-jump) AND king-me together — the combined cue
+// runs the full 2.040s king-me duration, well past what CHECKERS_ACTION_MS alone covers. This
+// extra hold is paid only after a move that actually crowned, on top of the next loop iteration's
+// own CHECKERS_ACTION_MS wait, so a crown's total gap (1300 + 1000 = 2300ms) comfortably clears
+// the measured 2.040s cue with margin for render/audio-engine latency — same shape as Wahoo's
+// WAHOO_BUST_EXTRA_MS for its own longer-than-usual cue.
+export const CHECKERS_CROWN_EXTRA_MS = 1000
 // Tic Tac Toe is strictly 2 seats (GAME_MAX_SEATS.ttt), so there's never more than one bot
 // action landing between a human's own turns — the multi-bot "fast forward" risk other games
 // guard against doesn't apply here. But drawn-x/drawn-circle (the human's own mark sound) run
@@ -395,6 +415,7 @@ export default function App() {
   const [checkersLocalPlayerId, setCheckersLocalPlayerId] = useState<string | null>(null)
   const [checkersView, setCheckersView] = useState<CheckersView | null>(null)
   const [checkersConnection, setCheckersConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [checkersNotice, setCheckersNotice] = useState<string | null>(null)
   const [checkersStarted, setCheckersStarted] = useState(false)
   const [checkersSeats, setCheckersSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
@@ -550,6 +571,7 @@ export default function App() {
   const checkersSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
   const checkersStartedRef = useRef(false)
   const checkersNamesRef = useRef<Record<string, string>>({})
+  const checkersRejectionNoticeRef = useRef<string | null>(null)
   const mtSessionRef = useRef<MTSession | null>(null)
   const mtHostRef = useRef<HostHandle<MTView> | null>(null)
   const mtGuestRef = useRef<GuestHandle<MTAction> | null>(null)
@@ -1006,6 +1028,8 @@ export default function App() {
     checkersLocalPlayerIdRef.current = null
     setCheckersView(null)
     setCheckersConnection('connected')
+    setCheckersNotice(null)
+    checkersRejectionNoticeRef.current = null
     setCheckersStarted(false)
     checkersStartedRef.current = false
     setCheckersSeats([])
@@ -3098,7 +3122,12 @@ export default function App() {
         if (!session) return
         if (!checkersSeatsRef.current.some((s) => s.playerId === guestId)) return
         const result = applyCheckersAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          checkersHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         checkersSessionRef.current = result.game
         checkersBroadcast()
       },
@@ -3143,7 +3172,7 @@ export default function App() {
 
   async function runCheckersBot(botId: string, key: string) {
     while (!checkersStale(key)) {
-      await wait(BASE_MS)
+      await wait(CHECKERS_ACTION_MS)
       if (checkersStale(key)) return
       const session = checkersSessionRef.current!
       const ps = session.session.publicState
@@ -3154,6 +3183,11 @@ export default function App() {
       checkersSessionRef.current = result.game
       const snap = deriveSnapshot(result.game.session, checkersLocalPlayerId!)
       setCheckersView({ kind: 'game', revision: snap.revision, publicState: snap.publicState, names: { ...checkersNamesRef.current } })
+      // A crowning move's combined checker-move/checker-jump + king-me cue runs the full measured
+      // 2.040s — far longer than CHECKERS_ACTION_MS alone covers. Hold extra so the next bot
+      // action (which pays its own CHECKERS_ACTION_MS wait on the next loop iteration) doesn't
+      // start until that cue has actually finished. See CHECKERS_CROWN_EXTRA_MS above.
+      if (result.game.session.publicState.lastMove?.crowned) await wait(CHECKERS_CROWN_EXTRA_MS)
     }
   }
 
@@ -3184,8 +3218,19 @@ export default function App() {
           setCheckersView(view)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // checkersView/localRevision, so it can't be mistaken for (or block) a real state update.
+          checkersRejectionNoticeRef.current = view.message
+          setCheckersNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setCheckersNotice((prev) => (prev !== null && prev === checkersRejectionNoticeRef.current ? null : prev))
+        checkersRejectionNoticeRef.current = null
         setCheckersView(view)
         setCheckersStarted(true)
       },
@@ -3217,7 +3262,18 @@ export default function App() {
       const session = checkersSessionRef.current
       if (!session) return
       const result = applyCheckersAction(session, checkersLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        checkersRejectionNoticeRef.current = reason
+        setCheckersNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (checkersNotice !== null && checkersNotice === checkersRejectionNoticeRef.current) {
+        setCheckersNotice(null)
+      }
+      checkersRejectionNoticeRef.current = null
       checkersSessionRef.current = result.game
       checkersBroadcast()
     } else if (checkersRole === 'guest') {
@@ -5568,7 +5624,7 @@ export default function App() {
         localName={name}
         isHost={checkersRole === 'host'}
         seats={roster}
-        notice={error}
+        notice={checkersNotice ?? error}
         onAddHouseBot={addCheckersHouseBot}
         onStartGame={checkersStart}
         onLeave={resetToEntry}
@@ -5587,7 +5643,7 @@ export default function App() {
         opponentName={opponentName}
         publicState={checkersView.publicState}
         isHost={checkersRole === 'host'}
-        notice={error}
+        notice={checkersNotice ?? error}
         onRematch={checkersRematch}
         onBackToShelf={resetToEntry}
       />
@@ -5610,10 +5666,9 @@ export default function App() {
         names={checkersView.names}
         colors={checkersColors}
         connection={checkersConnection}
-        notice={error}
+        notice={checkersNotice ?? error}
         publicState={checkersView.publicState}
         onMove={(from, to) => checkersDispatch({ type: 'MOVE', from, to })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )

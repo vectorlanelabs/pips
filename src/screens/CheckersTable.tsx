@@ -21,7 +21,6 @@ export interface CheckersTableProps {
   notice?: string | null
   publicState: CheckersPublicState
   onMove: (from: number, to: number) => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -43,11 +42,8 @@ export function CheckersTable({
   notice,
   publicState,
   onMove,
-  onOpenRules,
   onLeave,
 }: CheckersTableProps) {
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
-
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)

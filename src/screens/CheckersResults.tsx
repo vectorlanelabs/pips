@@ -38,14 +38,16 @@ export function CheckersResults({
   onBackToShelf,
 }: CheckersResultsProps) {
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.matchWinnerId === localPlayerId
+  useEffect(() => {
+    if (isLocalWinner) play('game-win')
+  }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (publicState.stage !== 'over' || publicState.matchWinnerId === null) return null
 
   const winnerId = publicState.matchWinnerId
   const winnerName = winnerId === localPlayerId ? localName : opponentName
-  const isLocalWinner = winnerId === localPlayerId
   const headline = isLocalWinner ? 'You take it!' : `${winnerName} takes it!`
   const headlineColor = isLocalWinner ? LOCAL_COLOR : OPPONENT_COLOR
 
