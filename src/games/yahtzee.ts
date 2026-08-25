@@ -32,7 +32,7 @@ export function isFiveKind(vals: number[]): boolean {
 }
 
 export function scoreCategory(vals: number[], cat: YCategory, card: Partial<Record<YCategory, number>> = {}): number {
-  const joker = isFiveKind(vals) && card.yahtzee !== undefined && card[UPPER_CAT_FOR_FACE[vals[0]]] !== undefined
+  const joker = isFiveKind(vals) && card.yahtzee === 50 && card[UPPER_CAT_FOR_FACE[vals[0]]] !== undefined
   const sum = vals.reduce((a, b) => a + b, 0)
   const counts = countByFace(vals)
   const groups = Object.values(counts)
