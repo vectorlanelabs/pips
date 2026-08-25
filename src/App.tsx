@@ -96,7 +96,7 @@ import { ChessResults } from './screens/ChessResults'
 import { ChessRoom } from './screens/ChessRoom'
 
 // ---- Uno (separate parallel session, per CHARTER.md resolution #7) ----
-import { createUnoGame, resolveHouseRules, UNO_HAND_SIZE, UNO_MAX_SEATS, UNO_MIN_SEATS, type UnoAction, type UnoHouseRuleKey, type UnoPublicState, type UnoSession } from './card-games/uno/state'
+import { createUnoGame, isUnoAction, resolveHouseRules, UNO_HAND_SIZE, UNO_MAX_SEATS, UNO_MIN_SEATS, type UnoAction, type UnoHouseRuleKey, type UnoPublicState, type UnoSession } from './card-games/uno/state'
 import { applyUnoAction, runUnoBotTurn } from './card-games/uno/rules'
 import { unoBotStrategy } from './card-games/uno/bot'
 import type { UnoCard } from './card-games/uno/deck'
@@ -199,6 +199,10 @@ type ChessView =
 type UnoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty; cardBack: string }
   | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
@@ -699,6 +703,7 @@ export default function App() {
   const unoSessionRef = useRef<UnoSession | null>(null)
   const unoHostRef = useRef<HostHandle<UnoView> | null>(null)
   const unoGuestRef = useRef<GuestHandle<UnoAction> | null>(null)
+  const unoRejectionNoticeRef = useRef<string | null>(null)
   const unoBotBusyRef = useRef(false)
   const unoLocalPlayerIdRef = useRef<string | null>(null)
   const unoSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
@@ -4116,8 +4121,17 @@ export default function App() {
         const session = unoSessionRef.current
         if (!session) return
         if (!unoSeatsRef.current.some((s) => s.playerId === guestId)) return
+        // action arrives over PeerJS as `unknown` at runtime — the TypeScript UnoAction
+        // union is compile-time only, so a malformed/stale/hostile guest payload must be
+        // rejected here, before it ever reaches action.type inside the validator.
+        if (!isUnoAction(action)) return
         const result = applyUnoAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          unoHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         unoSessionRef.current = result.uno
         unoBroadcast()
       },
@@ -4267,8 +4281,19 @@ export default function App() {
           setUnoDifficulty(view.difficulty)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // unoView/localRevision, so it can't be mistaken for (or block) a real state update.
+          unoRejectionNoticeRef.current = view.message
+          setUnoNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setUnoNotice((prev) => (prev !== null && prev === unoRejectionNoticeRef.current ? null : prev))
+        unoRejectionNoticeRef.current = null
         setUnoView(view)
         setUnoStarted(true)
       },
@@ -4300,7 +4325,18 @@ export default function App() {
       const session = unoSessionRef.current
       if (!session) return
       const result = applyUnoAction(session, unoLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        unoRejectionNoticeRef.current = reason
+        setUnoNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (unoNotice !== null && unoNotice === unoRejectionNoticeRef.current) {
+        setUnoNotice(null)
+      }
+      unoRejectionNoticeRef.current = null
       unoSessionRef.current = result.uno
       unoBroadcast()
     } else if (unoRole === 'guest') {
@@ -6199,7 +6235,6 @@ export default function App() {
           onPass={() => unoDispatch({ type: 'PASS' })}
           onCallUno={(targetPlayerId) => unoDispatch({ type: 'CALL_UNO', targetPlayerId })}
           onStartNextRound={() => unoDispatch({ type: 'START_NEXT_ROUND' })}
-          onOpenRules={() => {}}
           onLeave={resetToEntry}
         />
       </>

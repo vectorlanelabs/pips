@@ -13,7 +13,7 @@ import { addCards, cardCount, moveCards, recyclePile, removeCardsById, topCard, 
 import { shuffleDeck } from '../../card-engine/deck.ts'
 import type { UnoCard, UnoColor } from './deck.ts'
 import type { UnoAction, UnoLastAction, UnoPrivateState, UnoPublicState, UnoSession, UnoStage } from './state.ts'
-import { UNO_TARGET, dealUnoRound, handHasLegalPlay, isUnoPlayable, unoCardPoints } from './state.ts'
+import { UNO_TARGET, dealUnoRound, handHasLegalPlay, isUnoColor, isUnoPlayable, unoCardPoints } from './state.ts'
 
 // The player between the current player and where skipNext lands — the one who draws for
 // draw2/wild4 and who gets skipped past.
@@ -477,6 +477,10 @@ function makeValidator(
 
     if (action.type === 'CHOOSE_COLOR') {
       if (publicState.pendingWild === null) return { ok: false, reason: 'no wild card pending' }
+      // Runtime enum guard: action.color is compile-time-only typed as UnoColor — a malformed
+      // or hostile PeerJS payload can carry any string (or omit the field). Reject before any
+      // state mutation so canonical activeColor can never be poisoned with an out-of-domain value.
+      if (!isUnoColor(action.color)) return { ok: false, reason: 'not a valid color' }
       if (!publicState.pendingWild.isDraw4) {
         return {
           ok: true,

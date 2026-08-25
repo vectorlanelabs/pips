@@ -6,6 +6,7 @@ import { currentPlayer } from '../engine/turn-engine.ts'
 import { topCard } from '../card-engine/zones.ts'
 import { DealIntro } from '../components/DealIntro'
 import { UnoCardBack, UnoCardFace } from '../components/UnoCard'
+import { UnoRulesOverlay } from './UnoRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { TurnSoundToggle } from '../components/TurnSoundToggle'
@@ -31,7 +32,6 @@ export interface UnoTableProps {
   onPass: () => void
   onCallUno: (targetPlayerId: string) => void
   onStartNextRound: () => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -72,6 +72,20 @@ export function sortUnoHand(cards: UnoCard[]): UnoCard[] {
     if (aIsNumber === 1) return (a.value ?? 0) - (b.value ?? 0)
     return ACTION_ORDER.indexOf(a.kind as 'skip' | 'reverse' | 'draw2') - ACTION_ORDER.indexOf(b.kind as 'skip' | 'reverse' | 'draw2')
   })
+}
+
+// ---- Forced-draw reveal gate ----
+//
+// Distinguishes a genuine forced-draw penalty (a draw2/wild4 landing on the next player
+// without any action of their own — hand growth they didn't choose, so the new cards stay
+// face-down until they click Reveal) from a legal 7 swap or 0 rotation (the sevenZero house
+// rule), which also changes the hand's contents but is the player's OWN hand now and must
+// reveal immediately. lastAction.drewCount is only ever nonzero for the actual forced-draw
+// case: CHOOSE_SWAP_TARGET's merged lastAction and the '0' rotation branch in rules.ts both
+// leave it at 0, so this field alone distinguishes the two without inspecting card kind/value.
+// Exported so a test can pin this decision without mounting the component.
+export function isUnoForcedDrawAction(lastAction: UnoLastAction | null): boolean {
+  return lastAction !== null && lastAction.kind === 'play' && lastAction.drewCount > 0
 }
 
 // ---- Uno-call button ----
@@ -250,7 +264,6 @@ export function UnoTable({
   onPass,
   onCallUno,
   onStartNextRound,
-  onOpenRules,
   onLeave,
 }: UnoTableProps) {
   // ---- Derived ----
@@ -274,6 +287,7 @@ export function UnoTable({
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(false)
   // Card ids already shown face-up. New ids that arrive from someone ELSE's
   // draw2/wild4 stay out of this set until the local player reveals them.
   const [knownCardIds, setKnownCardIds] = useState<Set<string>>(() => new Set(hand.map((c) => c.id)))
@@ -284,7 +298,6 @@ export function UnoTable({
   const [showIntro, setShowIntro] = useState(false)
 
   const revealPrevRoundRef = useRef(publicState.round)
-  const revealPrevHandLenRef = useRef(hand.length)
 
   // ---- Effects ----
   // Show the deal intro on mount and on every START_NEXT_ROUND transition;
@@ -317,25 +330,33 @@ export function UnoTable({
   // Forced-draw reveal gate (spec 34h §8) — purely client-side presentation.
   // The engine already put the drawn cards in the hand; we only delay SHOWING
   // them face-up. Own deliberate DRAW_CARDs reveal immediately; a fresh round
-  // is fully revealed by the DealIntro.
+  // is fully revealed by the DealIntro. A legal 7 swap or 0 rotation also
+  // grows/replaces a hand, but those are the player's own hand now — not a
+  // forced-draw penalty — so they must reveal immediately too, not gate behind
+  // a manual click. lastAction.drewCount is only ever nonzero for the actual
+  // forced-draw case (a played draw2/wild4 landing on the next player without
+  // any action of their own) — 7-swap and 0-rotation both leave it at 0 (see
+  // rules.ts's CHOOSE_SWAP_TARGET and the sevenZero '0' branch), so that field
+  // alone distinguishes the two without needing to inspect card kind/value.
   useEffect(() => {
     const roundChanged = publicState.round !== revealPrevRoundRef.current
-    const handGrew = hand.length > revealPrevHandLenRef.current
     const lastAction = publicState.lastAction
     const ownDraw = lastAction !== null && lastAction.kind === 'draw' && lastAction.by === localPlayerId
+    const forcedDraw = isUnoForcedDrawAction(lastAction)
 
-    if (roundChanged) {
+    if (roundChanged || ownDraw || !forcedDraw) {
+      // Fresh round (DealIntro reveals it), my own deliberate draw (already
+      // required a click), or a hand-swap/rotation exchange (it's my own
+      // hand now, not a forced-draw penalty) — every card currently in hand
+      // is known/revealed. For a plain own play this is a no-op (no new ids
+      // were introduced), so it's safe to always take this branch outside
+      // the actual forced-draw case.
       setKnownCardIds(new Set(hand.map((c) => c.id)))
-    } else if (handGrew && ownDraw) {
-      // My own deck draw — already required a click, no double gating.
-      setKnownCardIds((prev) => {
-        const next = new Set(prev)
-        for (const c of hand) next.add(c.id)
-        return next
-      })
     } else {
-      // Hand shrank (prune played ids) OR a forced draw grew it (leave the
-      // new ids unknown so they render face-down until revealed).
+      // A forced draw (opponent's draw2/wild4 landing on me without any
+      // action of my own) grew the hand — prune ids for cards that left the
+      // hand, but leave the newly arrived ones unknown so they render
+      // face-down until the player clicks Reveal.
       setKnownCardIds((prev) => {
         const currentIds = new Set(hand.map((c) => c.id))
         const kept = new Set([...prev].filter((id) => currentIds.has(id)))
@@ -344,7 +365,6 @@ export function UnoTable({
     }
 
     revealPrevRoundRef.current = publicState.round
-    revealPrevHandLenRef.current = hand.length
   }, [hand, publicState.round, publicState.lastAction, localPlayerId])
 
   // ---- Sounds ----
@@ -546,7 +566,7 @@ export function UnoTable({
         <div className="uno-header-actions">
           <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
-          <button type="button" className="btn pill-small" onClick={onOpenRules}>Rules</button>
+          <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
         </div>
       </div>
@@ -820,6 +840,8 @@ export function UnoTable({
         </>
         )}
       </div>
+
+      {rulesOpen && <UnoRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

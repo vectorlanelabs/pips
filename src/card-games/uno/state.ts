@@ -63,6 +63,30 @@ export type UnoAction =
   | { type: 'CALL_UNO'; targetPlayerId: string }
   | { type: 'START_NEXT_ROUND' }
 
+const UNO_ACTION_TYPES = new Set<UnoAction['type']>([
+  'PLAY_CARD', 'CHOOSE_COLOR', 'CHOOSE_SWAP_TARGET', 'DRAW_CARD', 'PASS', 'CALL_UNO', 'START_NEXT_ROUND',
+])
+
+// Runtime guard for the PeerJS host boundary: a guest action arrives over the wire as `unknown`
+// (the TypeScript UnoAction union is compile-time only, not a network validator), so the host
+// must confirm it's actually a plain object with a recognized `type` string before dispatching it
+// into applyUnoAction — never trust the network cast. Mirrors Rummy's isRummyAction.
+export function isUnoAction(value: unknown): value is UnoAction {
+  if (typeof value !== 'object' || value === null) return false
+  const type = (value as { type?: unknown }).type
+  return typeof type === 'string' && UNO_ACTION_TYPES.has(type as UnoAction['type'])
+}
+
+const UNO_COLORS: UnoColor[] = ['red', 'yellow', 'green', 'blue']
+
+// Runtime enum guard for CHOOSE_COLOR's `color` field — the TypeScript UnoColor union doesn't
+// exist at runtime, so a malformed/hostile guest can send any string here (or omit the field
+// entirely). Used at the rules.ts validator boundary, before `activeColor` is ever assigned,
+// so an out-of-domain value is rejected rather than poisoning canonical state.
+export function isUnoColor(value: unknown): value is UnoColor {
+  return typeof value === 'string' && (UNO_COLORS as string[]).includes(value)
+}
+
 export interface UnoSession {
   session: HostSession<UnoPublicState, UnoPrivateState>
   stock: Zone<UnoCard>       // host-only, mirrors Rummy's stock wrapper — never part of HostSession
