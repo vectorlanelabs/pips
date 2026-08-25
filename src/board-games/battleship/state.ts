@@ -96,6 +96,9 @@ export function shipCellsAt(anchor: number, len: number, orient: Orientation): n
   return Array.from({ length: len }, (_, i) => anchor + i * BOARD_SIZE)
 }
 
+// Ships may be placed directly adjacent to each other, orthogonally or diagonally — touch-legal
+// is the deliberate, tested house rule here, not an oversight. A no-touch mode is a possible
+// future addition (this app doesn't have house-rule toggles anywhere yet).
 export function fits(board: (ShipId | null)[], cells: number[] | null): boolean {
   return cells !== null && cells.every((c) => board[c] === null)
 }
@@ -158,6 +161,7 @@ export function randomFleet(
 // length as a straight contiguous horizontal or vertical line, nothing overlaps
 // (impossible in a single array, but counts/shape are still validated), and the
 // board is exactly the 100-cell grid.
+// No adjacency/no-touch check by design — see the note on `fits` above.
 export function validFleet(board: (ShipId | null)[]): boolean {
   if (board.length !== BOARD_CELLS) return false
   let filled = 0

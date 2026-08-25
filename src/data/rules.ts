@@ -43,7 +43,7 @@ export const RULES: Record<Game, RuleContent> = {
       'You must roll at least once before writing a score.',
       'Every category gets used exactly once — a zero is allowed if nothing fits.',
       'A second (or later) five-of-a-kind, once your Yahtzee box already has a value — even a zeroed-out one — adds +100 on top of whatever box you score it in.',
-      'That same five-of-a-kind can also fill an open lower box at its flat value (25 full house, 30 small straight, 40 large straight) as a Joker, once the Yahtzee box is no longer open.',
+      'That same five-of-a-kind can also fill an open lower box at its flat value (25 full house, 30 small straight, 40 large straight) as a Joker, once you\'ve scored an actual 50-point Yahtzee.',
       'Highest grand total after thirteen turns wins; a tie goes to whoever sits earliest at the table.',
     ],
   },

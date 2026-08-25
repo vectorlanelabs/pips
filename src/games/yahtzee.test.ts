@@ -63,7 +63,7 @@ describe('scoreCategory — full house (empty card, joker off)', () => {
   })
 
   it('five of a kind → 0 without a filled yahtzee box', () => {
-    // Not a 3+2 split, and the joker needs card.yahtzee to be defined
+    // Not a 3+2 split, and the joker needs a real 50-point Yahtzee already scored
     expect(scoreCategory([2, 2, 2, 2, 2], 'fullHouse', {})).toBe(0)
   })
 })
@@ -115,10 +115,9 @@ describe('scoreCategory — joker branch (five of a kind + filled yahtzee + fill
     expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(40)
   })
 
-  it('zeroed yahtzee box still enables the joker (checks !== undefined)', () => {
-    // A 0 in the yahtzee box means it was filled but the first yahtzee was scored elsewhere
+  it('a zeroed yahtzee box does not enable the joker — only a real 50-point Yahtzee does', () => {
     const card = { yahtzee: 0, fours: 0 }
-    expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(40)
+    expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(0)
   })
 
   it('matching upper box open → no wildcard', () => {

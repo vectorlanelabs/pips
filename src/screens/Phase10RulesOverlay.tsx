@@ -7,7 +7,7 @@ export function Phase10RulesOverlay({ onClose }: { onClose: () => void }) {
     'The 10 phases are completed in order. You must complete your current phase before moving to the next — fail a hand and you repeat the same phase next round.',
     'Your turn: draw from the stock, or take the top of the discard pile — never a Skip, those can never be picked up from discard.',
     'You may lay your whole phase from your hand at once (once per hand), then hit cards onto any laid group — yours or the opponent’s — once your own phase is down. Discard exactly one card to end your turn.',
-    'A discarded Skip card skips the opponent’s next turn — once per player per round.',
+    'A discarded Skip card skips the opponent’s next turn — no limit per round, so repeated Skips against the same player keep stacking.',
     'Scoring: every round, whoever didn’t go out scores the point value of what’s left in their hand — numbers 1–9 cost 5, 10–12 cost 10, Skip costs 15, Wild costs 25. The round winner scores 0. Lower total is better.',
     'First to complete Phase 10 and go out wins the match. If more than one player completes Phase 10 in the same hand, the lowest total score wins.',
     'If the stock runs out, drawing recycles the discard pile (keeping the top card in place). If that’s not possible either, the round ends with no score and a new one deals.',

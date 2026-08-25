@@ -1,6 +1,6 @@
 export function BattleshipRulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
-    'Place your five ships on your grid: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2). Rotate with the button or spacebar.',
+    'Place your five ships on your grid: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2). Rotate with the button or spacebar. Ships may touch — there’s no no-touch rule here.',
     'Take turns firing one shot at the enemy waters. Hit or miss, the turn passes.',
     'A ship goes down when every one of its squares is hit — sinking it scores you a point and reveals its shape.',
     'Your fleet panel shows your true damage; the enemy\u2019s only lights up as you sink their ships.',
