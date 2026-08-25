@@ -60,10 +60,16 @@ export function sortSkipBoHand(cards: Card[]): Card[] {
 // discard-pile top). The select-then-confirm model holds ONE source at a
 // time; clicking any other source replaces it.
 
+// Every selection carries the id of the EXACT card that was on top when it was selected — not
+// just "which slot" — so a host-accepted action (which changes the slot's top card, not just
+// empties it) is distinguishable from a rejected one. See selectionCard below: a slot whose top
+// card id no longer matches the selection is "gone" and the selection auto-clears, whether that
+// slot is now empty (hand/discard-target case) or now shows a DIFFERENT card on top
+// (stock/discard-source case, where the next card in the pile becomes the new top).
 type SkipBoSelection =
-  | { kind: 'stock' }
+  | { kind: 'stock'; cardId: string }
   | { kind: 'hand'; cardId: string }
-  | { kind: 'discard'; pileIndex: number }
+  | { kind: 'discard'; pileIndex: number; cardId: string }
 
 function selectionMatches(selection: SkipBoSelection, next: SkipBoSelection): boolean {
   switch (selection.kind) {
@@ -83,9 +89,10 @@ function selectionCard(
   discardTops: (Card | null)[],
 ): Card | null {
   if (!selection) return null
-  if (selection.kind === 'stock') return stockTop
+  if (selection.kind === 'stock') return stockTop && stockTop.id === selection.cardId ? stockTop : null
   if (selection.kind === 'hand') return hand.find((c) => c.id === selection.cardId) ?? null
-  return discardTops[selection.pileIndex] ?? null
+  const top = discardTops[selection.pileIndex] ?? null
+  return top && top.id === selection.cardId ? top : null
 }
 
 // ---- Status line ----
@@ -223,7 +230,7 @@ export function SkipBoTable({
     if (myHandCount > p.myHandCount) {
       play('card-draw')
     }
-    if (!p.roundOver && publicState.roundOver && publicState.winnerId !== null) {
+    if (!p.roundOver && publicState.roundOver && publicState.winnerId === localPlayerId) {
       play('game-win')
     }
     if (notice && !noticeSeenRef.current) {
@@ -236,7 +243,7 @@ export function SkipBoTable({
       buildCardCount, myStockCount, myHandCount, drawCount,
       roundOver: publicState.roundOver, wasMyTurn: isMyTurn,
     }
-  }, [buildCardCount, myStockCount, myHandCount, drawCount, publicState.roundOver, publicState.winnerId, isMyTurn, notice, play])
+  }, [buildCardCount, myStockCount, myHandCount, drawCount, publicState.roundOver, publicState.winnerId, isMyTurn, notice, play, localPlayerId])
 
   // ---- Computed ----
   const sortedHand = useMemo(() => sortSkipBoHand(hand), [hand])
@@ -262,13 +269,18 @@ export function SkipBoTable({
     [canAct],
   )
 
+  // Neither handler clears `selection` itself — the host hasn't accepted the action yet at the
+  // moment these fire (the guest path is a network round trip). Clearing here would be the
+  // "optimistically clears before the host has accepted" bug: on a rejection, the selected card
+  // is still exactly where it was, so the "selected card is gone" effect above correctly leaves
+  // the ring in place; on acceptance, that same effect clears it once the card's identity has
+  // actually left its slot.
   const handlePlayOnto = useCallback(
     (buildPileIndex: number) => {
       if (!canAct || !selection || !legalPileIndices.includes(buildPileIndex)) return
       if (selection.kind === 'stock') onPlayStock(buildPileIndex)
       else if (selection.kind === 'hand') onPlayHand(selection.cardId, buildPileIndex)
       else onPlayDiscard(selection.pileIndex, buildPileIndex)
-      setSelection(null)
     },
     [canAct, selection, legalPileIndices, onPlayStock, onPlayHand, onPlayDiscard],
   )
@@ -277,7 +289,6 @@ export function SkipBoTable({
     (pileIndex: number) => {
       if (!canAct || selection?.kind !== 'hand') return
       onDiscard(selection.cardId, pileIndex)
-      setSelection(null)
     },
     [canAct, selection, onDiscard],
   )
@@ -315,7 +326,7 @@ export function SkipBoTable({
               {names[pid] ?? pid} {publicState.stockCounts[pid] ?? 0}
             </span>
           ))}
-          <span className="sb-stock-hint">fewest wins</span>
+          <span className="sb-stock-hint">cards left</span>
         </div>
       </div>
 
@@ -456,7 +467,7 @@ export function SkipBoTable({
                     card={stockTop}
                     size="tile"
                     selected={selection?.kind === 'stock'}
-                    onClick={canAct ? () => handleSelect({ kind: 'stock' }) : undefined}
+                    onClick={canAct ? () => handleSelect({ kind: 'stock', cardId: stockTop.id }) : undefined}
                   />
                 ) : (
                   <span className="sb-empty-tile" />
@@ -478,7 +489,7 @@ export function SkipBoTable({
                   const selected = sourceClickable && selection?.kind === 'discard' && selection.pileIndex === i
                   const handleClick = discardTarget
                     ? () => handleDiscardOnto(i)
-                    : () => handleSelect({ kind: 'discard', pileIndex: i })
+                    : () => handleSelect({ kind: 'discard', pileIndex: i, cardId: card!.id })
                   return (
                     <div
                       key={i}

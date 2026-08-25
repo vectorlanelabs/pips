@@ -111,6 +111,14 @@
   transition: background 0.2s, border-color 0.2s;
 }
 
+/* A 2-player table has exactly one opponent tile — the 4-way cap above exists to keep a lone
+   WRAPPED tile (5th+ seat spilling to a second row) from stretching across the whole row, not
+   to shrink the only opponent a 2-player game will ever have. When the tile is the rail's only
+   child, let it use the full row instead of wasting three quarters of the rail. */
+.sb-opp-rail .sb-opp-tile:only-child {
+  max-width: 100%;
+}
+
 .sb-opp-tile-top {
   display: flex;
   align-items: center;

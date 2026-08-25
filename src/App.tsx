@@ -106,7 +106,7 @@ import { UnoResults } from './screens/UnoResults'
 import { UnoRoom } from './screens/UnoRoom'
 
 // ---- Skip-Bo (separate parallel session, per CHARTER.md resolution #7) ----
-import { createSkipBoGame, SKIPBO_MAX_SEATS, SKIPBO_MIN_SEATS, type SkipBoAction, type SkipBoPublicState, type SkipBoSession } from './card-games/skipbo/state'
+import { createSkipBoGame, SKIPBO_MAX_SEATS, SKIPBO_MIN_SEATS, isSkipBoAction, type SkipBoAction, type SkipBoPublicState, type SkipBoSession } from './card-games/skipbo/state'
 import { applySkipBoAction, runSkipBoBotTurn } from './card-games/skipbo/rules'
 import { skipBoBotStrategy } from './card-games/skipbo/bot'
 import { SkipBoTable } from './screens/SkipBoTable'
@@ -180,6 +180,10 @@ type UnoView =
 type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type BlackjackView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: BlackjackPublicState; names: Record<string, string> }
@@ -207,11 +211,27 @@ const UNO_ACTION_MS = 1600
 // per-client render/paint time on top of that estimate.
 const UNO_DEAL_HOLD_BUFFER_MS = 700
 // Skip-Bo: a turn is a chain of individual card plays (stock/hand/discard),
-// each a state-changing animation and sound a human watches land. The bot
-// loop therefore waits BASE_MS before EVERY individual action — not once per
-// turn — so a full 4-bot table never blurs a run of plays together between a
-// human's own turns.
+// each a state-changing animation and sound a human watches land. The bot loop
+// waits before EVERY individual action — not once per turn — but bare BASE_MS
+// (900ms) is still too fast: at a full 4-seat table, up to 3 bots' worth of
+// these chained plays can land back-to-back between a human's own turns,
+// blurring into the "fast forward" CLAUDE.md warns against (same shape as
+// Rummy's draw/meld/discard chain — reuses its measured card-game-scale pace
+// rather than the generic board-game BASE_MS).
+// Exported so a regression test can pin it against BASE_MS without mounting the app.
+export const SKIPBO_ACTION_MS = 1600
+// Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
+// render/paint time on top of estimateDealIntroMs's pure animation estimate.
 const SKIPBO_DEAL_HOLD_BUFFER_MS = 700
+
+// Pure so a regression test can pin the round-start bot hold against the actual 5-card starting
+// hand deal without mounting the app. Skip-Bo always deals exactly 5 hand cards per seat (unlike
+// Dominoes' variable per-round hand size), so this takes seat count directly rather than a
+// handCounts record. Stockpiles are never part of DealIntro's flight count (see SkipBoTable's
+// `maxFlights`), only the 5-card starting hands are.
+export function skipBoDealHoldMs(seatCount: number): number {
+  return estimateDealIntroMs(seatCount * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
+}
 // Rummy: same "fast forward" problem as Uno — a turn is draw, then optional meld/lay-off(s),
 // then discard, each its own broadcast state change with its own card sound. A full 4-seat
 // table means up to 3 bots' worth of these actions can land between a human's own turns, so
@@ -584,6 +604,7 @@ export default function App() {
   const skipBoBotSeatsRef = useRef<Set<string>>(new Set())
   const skipBoBotCounterRef = useRef(0)
   const skipBoBotsHeldUntilRef = useRef(0)
+  const skipBoRejectionNoticeRef = useRef<string | null>(null)
   const blackjackSessionRef = useRef<BlackjackSession | null>(null)
   const blackjackHostRef = useRef<HostHandle<BlackjackView> | null>(null)
   const blackjackGuestRef = useRef<GuestHandle<BlackjackAction> | null>(null)
@@ -1084,6 +1105,7 @@ export default function App() {
     skipBoBotCounterRef.current = 0
     skipBoNamesRef.current = {}
     skipBoBotsHeldUntilRef.current = 0
+    skipBoRejectionNoticeRef.current = null
     // Blackjack
     blackjackHostRef.current?.destroy()
     blackjackHostRef.current = null
@@ -4169,8 +4191,17 @@ export default function App() {
         const session = skipBoSessionRef.current
         if (!session) return
         if (!skipBoSeatsRef.current.some((s) => s.playerId === guestId)) return
+        // action arrives over PeerJS as `unknown` at runtime — the TypeScript SkipBoAction
+        // union is compile-time only, so a malformed/stale/hostile guest payload must be
+        // rejected here, before it ever reaches action.type inside the validator.
+        if (!isSkipBoAction(action)) return
         const result = applySkipBoAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          skipBoHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         skipBoSessionRef.current = result.game
         skipBoBroadcast()
       },
@@ -4213,7 +4244,7 @@ export default function App() {
     skipBoNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     // Hold bots until every client's DealIntro (5 starting-hand cards per seat,
     // stockpiles are not animated) has played out, plus latency slack.
-    skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    skipBoBotsHeldUntilRef.current = Date.now() + skipBoDealHoldMs(playerIds.length)
     skipBoStartedRef.current = true
     setSkipBoStarted(true)
     skipBoBroadcast()
@@ -4222,7 +4253,7 @@ export default function App() {
   async function runSkipBoBot(botId: string, key: string) {
     while (!skipBoStale(key)) {
       const holdRemaining = skipBoBotsHeldUntilRef.current - Date.now()
-      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
+      await wait(holdRemaining > 0 ? holdRemaining : SKIPBO_ACTION_MS)
       if (skipBoStale(key)) return
       if (Date.now() < skipBoBotsHeldUntilRef.current) continue
       const session = skipBoSessionRef.current!
@@ -4266,8 +4297,19 @@ export default function App() {
           setSkipBoStarted(false)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // skipBoView/localRevision, so it can't be mistaken for (or block) a real state update.
+          skipBoRejectionNoticeRef.current = view.message
+          setSkipBoNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setSkipBoNotice((prev) => (prev !== null && prev === skipBoRejectionNoticeRef.current ? null : prev))
+        skipBoRejectionNoticeRef.current = null
         setSkipBoView(view)
         setSkipBoStarted(true)
       },
@@ -4299,7 +4341,18 @@ export default function App() {
       const session = skipBoSessionRef.current
       if (!session) return
       const result = applySkipBoAction(session, skipBoLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        skipBoRejectionNoticeRef.current = reason
+        setSkipBoNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (skipBoNotice !== null && skipBoNotice === skipBoRejectionNoticeRef.current) {
+        setSkipBoNotice(null)
+      }
+      skipBoRejectionNoticeRef.current = null
       skipBoSessionRef.current = result.game
       skipBoBroadcast()
     } else if (skipBoRole === 'guest') {
@@ -4320,7 +4373,7 @@ export default function App() {
     const next = createSkipBoGame(playerIds, seed, ps.cardBack)
     next.session = { ...next.session, revision: prevRevision + 1 }
     skipBoSessionRef.current = next
-    skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    skipBoBotsHeldUntilRef.current = Date.now() + skipBoDealHoldMs(playerIds.length)
     skipBoBroadcast()
   }
 

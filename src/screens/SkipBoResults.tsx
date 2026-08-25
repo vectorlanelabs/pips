@@ -33,7 +33,9 @@ export function SkipBoResults({
 }: SkipBoResultsProps) {
   void localName // kept in props for symmetry with the other results screens; the headline uses the winner's name
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  // Every game reaching a results screen shares this cue — only the actual winner hears it,
+  // never the loser (see docs/reviews/skipbo-review.md Major #2).
+  useEffect(() => { if (publicState.winnerId === localPlayerId) play('game-win') }, [])
 
   // Only render when the game is over
   if (!publicState.roundOver || !publicState.winnerId) return null
@@ -44,9 +46,9 @@ export function SkipBoResults({
   const headline = isLocalWinner ? 'You went out first!' : `${winnerName} went out first!`
   const headlineColor = colors[winnerId] ?? BRAND
 
-  // Final stockpile counts as a fun stat, ascending — fewest remaining is the
-  // next-best finishing position, matching the table header's "fewest wins"
-  // framing. Deliberately NOT a numbered 1st/2nd/3rd ranking table.
+  // Final stockpile counts as a fun stat, ascending by cards left — the game is already
+  // decided by whoever emptied their stockpile first, not by this count, so this is
+  // deliberately NOT a numbered 1st/2nd/3rd finishing-order ranking table.
   const rows = publicState.seatOrder
     .map((id) => ({
       id,
@@ -117,7 +119,7 @@ export function SkipBoResults({
               }} />
               <span style={{ fontWeight: 700, fontSize: 18, flex: 1 }}>{row.name}</span>
               <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>
-                stockpile remaining
+                cards left in stockpile
               </span>
               <span style={{ fontSize: 32, fontWeight: 700 }}>{row.remaining}</span>
             </div>

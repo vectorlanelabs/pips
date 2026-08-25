@@ -52,6 +52,20 @@ export type SkipBoAction =
   | { type: 'DISCARD'; cardId: string; pileIndex: number }       // 0-3, which of the player's OWN 4 discard piles to land the card on; ends the turn
   | { type: 'PASS' }                                             // only legal when hand.cards.length === 0
 
+const SKIPBO_ACTION_TYPES = new Set<SkipBoAction['type']>([
+  'PLAY_STOCK', 'PLAY_HAND', 'PLAY_DISCARD', 'DISCARD', 'PASS',
+])
+
+// Runtime guard for the PeerJS host boundary: a guest action arrives over the wire as `unknown`
+// (the TypeScript SkipBoAction union is compile-time only, not a network validator), so the host
+// must confirm it's actually a plain object with a recognized `type` string before dispatching it
+// into applySkipBoAction — never trust the network cast. Mirrors Rummy's isRummyAction.
+export function isSkipBoAction(value: unknown): value is SkipBoAction {
+  if (typeof value !== 'object' || value === null) return false
+  const type = (value as { type?: unknown }).type
+  return typeof type === 'string' && SKIPBO_ACTION_TYPES.has(type as SkipBoAction['type'])
+}
+
 export interface SkipBoSession {
   session: HostSession<SkipBoPublicState, SkipBoPrivateState>
   drawPile: Zone   // host-only, never part of HostSession — the shared face-down draw pile. Its

@@ -219,6 +219,18 @@ describe('createSkipBoGame', () => {
     expect(snapshot.publicState.stockTops['p1']?.id).toBe(p1Top.id)
     expect(snapshot.publicState.stockTops['p2']?.id).toBe(topCard(game.stocks['p2'])!.id)
   })
+
+  it('a complete per-seat snapshot survives a lossless JSON round-trip over the wire, at every seat', () => {
+    // The leakage test above checks WHAT's visible; this checks the snapshot is actually safe
+    // to send over PeerJS at all (plain data, no NaN/undefined/class instances) and that nothing
+    // is lost or corrupted crossing the wire boundary — every seat, not just one.
+    const game = createSkipBoGame(['p1', 'p2', 'p3', 'p4'], 99)
+    for (const playerId of ['p1', 'p2', 'p3', 'p4']) {
+      const snapshot = deriveSnapshot(game.session, playerId)
+      const roundTripped = JSON.parse(JSON.stringify(snapshot))
+      expect(roundTripped).toEqual(snapshot)
+    }
+  })
 })
 
 // ── building-pile legality and auto-targeting ──────────────────
