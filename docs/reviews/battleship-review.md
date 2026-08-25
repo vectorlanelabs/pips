@@ -8,6 +8,16 @@
 
 ---
 
+### Resolution (2026-08-24)
+
+All Blocking and Minor findings, and every Major finding except adjacency, are fixed on `fix/review-tier1-rummy-wahoo-ttt` (commit `8198a9d`) and independently verified (`tsc -b --noEmit` clean, `npm run build` clean, full suite green). One item is **open, pending a game-rule decision, not a bug**:
+
+- **Major #4 (ship-adjacency / "no-touch" rule):** whether ships may be placed touching is genuinely unspecified — see [deferred.md](deferred.md) for the two options. Left unimplemented either way pending that decision.
+
+Do not remove this file until that item is resolved.
+
+---
+
 ### Executive verdict
 
 **needs changes** — the core engine is compact, host-owned, and substantially correct on normal standard/streak play, and the 42 tests are real tests rather than an empty smoke screen. But free-for-all bot pacing has a confirmed sound/animation race: the loop's buffer is conditionally skipped in exactly the variant where repeated shots are expected, so the next bot shot starts every 900ms despite 1.968s/3.672s/5.664s shot sounds. Results also play `game-win` for the loser, and rejected actions disappear silently. The adversarial `oscar.test.ts` is useful, but it deliberately codifies one host-authority vulnerability as a passing test instead of making the suite fail until the invariant is fixed.
