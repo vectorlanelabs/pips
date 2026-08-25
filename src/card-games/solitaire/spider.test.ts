@@ -208,4 +208,56 @@ describe('spiderLegalDestinations', () => {
     const dests = spiderLegalDestinations(state, { kind: 'tableau', index: 3 }, 1)
     expect(dests).toEqual([{ kind: 'tableau', index: 0 }, { kind: 'tableau', index: 2 }])
   })
+
+  it('a multi-card same-suit run checks against the run\'s bottom (highest) card, not its top', () => {
+    const state = buildState({
+      tableau: [
+        ['10S'],           // accepts the run (needs a card one rank below 10, i.e. 9)
+        ['8S'],            // wrong rank for the run's bottom card — rejected
+        [],                // empty column always accepts
+        ['9S', '8S', '7S'], // the moving run: 9S is its bottom (highest rank), 7S its top
+        ['2S'], ['2S'], ['2S'], ['2S'], ['2S'], ['2S'],
+      ],
+    })
+    const dests = spiderLegalDestinations(state, { kind: 'tableau', index: 3 }, 3)
+    expect(dests).toEqual([{ kind: 'tableau', index: 0 }, { kind: 'tableau', index: 2 }])
+  })
+})
+
+describe('applySpiderMove — final partial stock deal', () => {
+  it('deals a partial final row when fewer cards remain in stock than columns', () => {
+    const state = buildState({
+      tableau: Array.from({ length: 10 }, () => ['5S']),
+      stock: ['KS', 'QS', 'JS'],
+    })
+    const result = applySpiderMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // Only the first 3 columns (dealt from the top of stock backwards) get a
+    // new face-up card; the remaining 7 are untouched.
+    const lengths = result.state.tableau.map((col) => col.length)
+    expect(lengths.filter((l) => l === 2)).toHaveLength(3)
+    expect(lengths.filter((l) => l === 1)).toHaveLength(7)
+    expect(result.state.stock).toHaveLength(0)
+    expect(result.state.moves).toBe(1)
+  })
+})
+
+describe('applySpiderMove — won guard', () => {
+  it('rejects a MOVE once the game is already won', () => {
+    const state = buildState({ tableau: [['6H'], ['5S']] })
+    state.won = true
+
+    const move = applySpiderMove(state, { type: 'MOVE', from: { kind: 'tableau', index: 1 }, to: { kind: 'tableau', index: 0 }, count: 1 })
+    expect(move.ok).toBe(false)
+  })
+
+  it('rejects a DRAW once the game is already won', () => {
+    const state = buildState({ tableau: Array.from({ length: 10 }, () => ['5S']), stock: ['KS'] })
+    state.won = true
+
+    const draw = applySpiderMove(state, { type: 'DRAW' })
+    expect(draw.ok).toBe(false)
+  })
 })

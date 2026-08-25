@@ -251,6 +251,110 @@ describe('pyramidLegalDestinations', () => {
     const state = buildState({ rows: [['A♠'], ['2♠', 'Q♠']] })
     expect(pyramidLegalDestinations(state, { kind: 'pyramid', row: 0, col: 0 })).toEqual([])
   })
+
+  it('excludes the waste from its own destination list — no self-pairing', () => {
+    const state = buildState({
+      rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']],
+      waste: ['9♠'],
+    })
+    // Querying FROM the waste itself: the pyramid's exposed 4♠ (9+4=13) is a
+    // legal partner, but the waste slot must never appear as its own
+    // destination even though locKey-wise a waste `loc` and a waste
+    // destination are indistinguishable.
+    const dests = pyramidLegalDestinations(state, { kind: 'waste' })
+    expect(dests).toEqual([{ kind: 'pyramid', row: 6, col: 2 }])
+    expect(dests.some((d) => d.kind === 'waste')).toBe(false)
+  })
+})
+
+describe('applyPyramidMove — won guard', () => {
+  it('rejects REMOVE_PAIR once the game is already won', () => {
+    const state = buildState({ rows: [[], [], [], [], [], [], ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠']] })
+    state.won = true
+
+    const result = applyPyramidMove(state, {
+      type: 'REMOVE_PAIR',
+      a: { kind: 'pyramid', row: 6, col: 0 },
+      b: { kind: 'pyramid', row: 6, col: 6 },
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects REMOVE_KING once the game is already won', () => {
+    const state = buildState({ rows: [['K♠']] })
+    state.won = true
+
+    const result = applyPyramidMove(state, { type: 'REMOVE_KING', loc: { kind: 'pyramid', row: 0, col: 0 } })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects DRAW once the game is already won', () => {
+    const state = buildState({ stock: ['5♠'] })
+    state.won = true
+
+    const result = applyPyramidMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('full pyramid clear (28-card win through sequential removals)', () => {
+  it('wins by clearing every row bottom-to-top with real REMOVE_KING/REMOVE_PAIR moves', () => {
+    // Built so each row's cards resolve into pairs summing to 13, with one
+    // King per "odd" row taking the leftover slot. Rows are cleared bottom
+    // (row 6) to top (row 0): a row only becomes exposed once the ENTIRE
+    // row below it is gone, so clearing strictly in this order is always
+    // legal, and by the time row 0's lone King is removed every card in
+    // the 28-card pyramid has actually been accounted for.
+    const state = buildState({
+      rows: [
+        ['K♣'],
+        ['3♣', '10♣'],
+        ['3♦', '10♦', 'K♦'],
+        ['3♠', '10♠', '3♥', '10♥'],
+        ['2♦', 'J♦', '2♣', 'J♣', 'K♥'],
+        ['A♣', 'Q♣', '2♠', 'J♠', '2♥', 'J♥'],
+        ['A♠', 'Q♠', 'A♥', 'Q♥', 'A♦', 'Q♦', 'K♠'],
+      ],
+    })
+
+    const kingMove = (row: number, col: number) =>
+      ({ type: 'REMOVE_KING' as const, loc: { kind: 'pyramid' as const, row, col } })
+    const pairMove = (row: number, c1: number, c2: number) =>
+      ({
+        type: 'REMOVE_PAIR' as const,
+        a: { kind: 'pyramid' as const, row, col: c1 },
+        b: { kind: 'pyramid' as const, row, col: c2 },
+      })
+
+    const moves = [
+      // row 6 (base, always exposed): 3 pairs + 1 King
+      pairMove(6, 0, 1), pairMove(6, 2, 3), pairMove(6, 4, 5), kingMove(6, 6),
+      // row 5, now fully exposed: 3 pairs
+      pairMove(5, 0, 1), pairMove(5, 2, 3), pairMove(5, 4, 5),
+      // row 4: 2 pairs + 1 King
+      pairMove(4, 0, 1), pairMove(4, 2, 3), kingMove(4, 4),
+      // row 3: 2 pairs
+      pairMove(3, 0, 1), pairMove(3, 2, 3),
+      // row 2: 1 pair + 1 King
+      pairMove(2, 0, 1), kingMove(2, 2),
+      // row 1: 1 pair
+      pairMove(1, 0, 1),
+      // row 0: the last King
+      kingMove(0, 0),
+    ]
+
+    let current = state
+    for (const move of moves) {
+      const outcome = applyPyramidMove(current, move)
+      expect(outcome.ok).toBe(true)
+      if (!outcome.ok) return
+      current = outcome.state
+    }
+
+    expect(current.pyramidRows.flat().every((c) => c === null)).toBe(true)
+    expect(current.won).toBe(true)
+    expect(current.moves).toBe(moves.length)
+  })
 })
 
 describe('pyramidKingMove', () => {

@@ -644,4 +644,76 @@ describe('Klondike', () => {
     })
     expect(result2.ok).toBe(false)
   })
+
+  it('rejects any move once the game is already won', () => {
+    const state = buildState({ tableau: [['K♥'], []] })
+    state.won = true
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 1,
+    })
+    expect(result.ok).toBe(false)
+
+    const drawResult = applyMove({ ...state, stock: [findCardInDeck('spades', 'A')] }, { type: 'DRAW' })
+    expect(drawResult.ok).toBe(false)
+  })
+})
+
+describe('Klondike Draw 3', () => {
+  it('draws 3 at a time, preserving chronological order — top of stock drawn first (buried), last drawn ends up playable on top of waste', () => {
+    const state = buildState({ stock: ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠'] })
+    state.mode = 'klondike3'
+
+    const result = applyMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // 7♠ (the stock top) is drawn first and ends up buried; 5♠, drawn last,
+    // ends up on top of the waste and is the only one actually playable.
+    expect(result.state.waste.map((c) => c.rank)).toEqual(['7', '6', '5'])
+    expect(result.state.stock.map((c) => c.rank)).toEqual(['2', '3', '4'])
+    expect(result.state.moves).toBe(1)
+  })
+
+  it('draws a partial group when fewer than 3 cards remain in stock', () => {
+    const state = buildState({ stock: ['A♠', '2♠'] })
+    state.mode = 'klondike3'
+
+    const result = applyMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // Stock is [A♠, 2♠] bottom-to-top, so 2♠ (the top) is drawn first and
+    // ends up buried; A♠, drawn last, ends up playable on top of the waste.
+    expect(result.state.waste.map((c) => c.rank)).toEqual(['2', 'A'])
+    expect(result.state.stock).toEqual([])
+  })
+
+  it('recycles the waste back into the stock, preserving order for the next draw-3 pass', () => {
+    let state: SolitaireState = buildState({ stock: ['2♠', '3♠', '4♠', '5♠', '6♠', '7♠'] })
+    state.mode = 'klondike3'
+
+    let result = applyMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    state = result.state
+
+    result = applyMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    state = result.state
+
+    expect(state.stock).toEqual([])
+    expect(state.waste.map((c) => c.rank)).toEqual(['7', '6', '5', '4', '3', '2'])
+
+    result = applyMove(state, { type: 'DRAW' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.state.waste).toEqual([])
+    expect(result.state.stock.map((c) => c.rank)).toEqual(['2', '3', '4', '5', '6', '7'])
+  })
 })

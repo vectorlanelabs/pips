@@ -67,6 +67,19 @@
   margin-bottom: 18px;
 }
 
+.sol-notice {
+  display: inline-block;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  margin: -8px 0 18px;
+}
+
 .sol-stuck-banner {
   display: flex;
   align-items: center;

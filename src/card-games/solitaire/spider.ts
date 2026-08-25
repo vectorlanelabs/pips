@@ -96,6 +96,10 @@ function clearCompleteRun(tableau: Card[][], faceUp: number[], col: number): { t
 }
 
 export function applySpiderMove(state: SolitaireState, move: SolitaireMove): MoveOutcome {
+  if (state.won) {
+    return { ok: false, reason: 'game is already won' }
+  }
+
   if (move.type === 'DRAW') {
     if (state.stock.length === 0) {
       return { ok: false, reason: 'stock is empty' }

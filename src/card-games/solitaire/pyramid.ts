@@ -78,6 +78,10 @@ function finish(state: SolitaireState): MoveOutcome {
 }
 
 export function applyPyramidMove(state: SolitaireState, move: SolitaireMove): MoveOutcome {
+  if (state.won) {
+    return { ok: false, reason: 'game is already won' }
+  }
+
   if (move.type === 'DRAW') {
     if (state.stock.length > 0) {
       const card = state.stock[state.stock.length - 1]

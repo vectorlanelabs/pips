@@ -70,3 +70,30 @@ options:
    choice rather than an unspecified gap.
 
 ---
+
+## From [solitaire-review.md](solitaire-review.md)
+
+**Solitaire Auto-play "safe" copy.** `SolitaireRulesOverlay.tsx` (Klondike/
+Draw 3/FreeCell copy) tells the player Auto-play "finishes off every
+remaining safe move for you." The actual guarantee `autoCompleteMoves`
+provides (now documented in `shared.ts` and proven by a new reversibility
+test in `autocomplete.test.ts`) is narrower than that phrase could imply: it
+only ever fires once the UI's `noHiddenCardsLeft` gate holds (every card
+face up, stock/waste empty, so nothing is hidden to lose), every move it
+makes is legal at the moment it's generated, and every move is reversible —
+the engine allows moving a foundation's top card back onto a legal tableau/
+cell spot, on top of the table's own Undo button. It does **not** guarantee
+the sequence is the strategically optimal one: a card it eagerly sends to a
+foundation may have had another, mutually exclusive, legal tableau
+destination a human might have preferred to keep it in play for. Whether
+"safe" is the right word for that — accurate (nothing is lost or hidden,
+everything is reversible) vs. potentially overpromising (a player could read
+"safe" as "won't cost me the game") — is a copy/product call, not a bug fix,
+so the wording itself was left untouched pending this decision.
+
+**Question:** does "finishes off every remaining safe move for you" still
+feel like the right description given the narrower guarantee above, or
+should the copy be softened (e.g. "finishes off every remaining legal
+foundation move for you")?
+
+---

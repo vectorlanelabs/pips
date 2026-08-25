@@ -106,4 +106,37 @@ describe('autoCompleteMoves', () => {
     const final = applyAll(state, moves)
     expect(final.won).toBe(true)
   })
+
+  // Proves the documented safety contract narrowly: autoCompleteMoves does not
+  // pick the strategically best line (it eagerly sends 2♣ to its foundation
+  // even though 2♣ also had a legal tableau destination), but the move it
+  // makes is reversible — the engine still lets that exact card be pulled
+  // back off the foundation onto the tableau spot it would otherwise have
+  // taken. Nothing the batch does is a dead end.
+  it('is reversible: a foundation move it makes can be moved back onto the tableau destination it bypassed', () => {
+    const state = emptyState('freecell')
+    state.foundations[0] = [card('clubs', 'A')]
+    state.cells[0] = card('clubs', '2')
+    state.tableau[1] = [card('diamonds', '3')]
+    state.faceUp[1] = 1
+
+    const moves = autoCompleteMoves(state)
+    expect(moves).toEqual([{ type: 'MOVE', from: { kind: 'cell', index: 0 }, to: { kind: 'foundation', index: 0 }, count: 1 }])
+
+    const afterAuto = applyAll(state, moves)
+    expect(afterAuto.foundations[0].map((c) => c.rank)).toEqual(['A', '2'])
+    expect(afterAuto.cells[0]).toBeNull()
+
+    const reversed = applyMove(afterAuto, {
+      type: 'MOVE',
+      from: { kind: 'foundation', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 1,
+    })
+    expect(reversed.ok).toBe(true)
+    if (reversed.ok) {
+      expect(reversed.state.tableau[1].map((c) => c.rank)).toEqual(['3', '2'])
+      expect(reversed.state.foundations[0].map((c) => c.rank)).toEqual(['A'])
+    }
+  })
 })

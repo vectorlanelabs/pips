@@ -51,7 +51,6 @@ function pyramidCardPosition(row: number, col: number) {
 }
 
 export interface SolitaireTableProps {
-  localName: string
   state: SolitaireState
   cardBack: string
   dealId: number
@@ -63,7 +62,6 @@ export interface SolitaireTableProps {
 }
 
 export function SolitaireTable({
-  localName,
   state,
   cardBack,
   dealId,
@@ -73,7 +71,6 @@ export function SolitaireTable({
   onDealAgain,
   onLeave,
 }: SolitaireTableProps) {
-  void localName
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled } = useSound()
   // Two independent interaction paths can each put a card "in flight":
   // `selection` for click-to-select-then-click-a-destination (with the
@@ -110,6 +107,18 @@ export function SolitaireTable({
   const [stuckCycles, setStuckCycles] = useState(0)
   const [dismissedAtCycle, setDismissedAtCycle] = useState(0)
   const playedSinceReshuffleRef = useRef(false)
+  // A rejected move only gets an error sound otherwise — no explanation of
+  // WHY it failed, which reads as a dead drop target. Surface the engine's
+  // own MoveOutcome.reason briefly; it's cleared by the next successful
+  // move (below) or this timeout, whichever comes first.
+  const [rejectionNotice, setRejectionNotice] = useState<string | null>(null)
+  const rejectionTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (rejectionTimeoutRef.current !== null) window.clearTimeout(rejectionTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (dealId !== introShownForDealIdRef.current) {
@@ -179,8 +188,19 @@ export function SolitaireTable({
     if (result.ok) {
       onMove(move)
       setSelection(null)
+      if (rejectionTimeoutRef.current !== null) {
+        window.clearTimeout(rejectionTimeoutRef.current)
+        rejectionTimeoutRef.current = null
+      }
+      setRejectionNotice(null)
     } else {
       play('error')
+      setRejectionNotice(result.reason)
+      if (rejectionTimeoutRef.current !== null) window.clearTimeout(rejectionTimeoutRef.current)
+      rejectionTimeoutRef.current = window.setTimeout(() => {
+        rejectionTimeoutRef.current = null
+        setRejectionNotice(null)
+      }, 2200)
     }
   }
 
@@ -370,8 +390,10 @@ export function SolitaireTable({
 
   // Auto-play only offers itself once there's no hidden information left to
   // reveal by playing on: every tableau card is face up, and (klondike) the
-  // stock/waste are empty — at that point the rest of the game is fully
-  // known, so cascading every remaining safe foundation move is risk-free.
+  // stock/waste are empty. This is `autoCompleteMoves`'s entire safety
+  // precondition (see its doc comment in shared.ts) — the function itself
+  // doesn't check for face-down cards, so it's this gate's job to make sure
+  // there's nothing left to hide before the batch runs.
   const noHiddenCardsLeft = state.stock.length === 0
     && state.waste.length === 0
     && state.tableau.every((col, i) => state.faceUp[i] === col.length)
@@ -603,6 +625,8 @@ export function SolitaireTable({
             </div>
 
             <div className="sol-status">{getStatusLine()}</div>
+
+            {rejectionNotice && <div className="sol-notice">{rejectionNotice}</div>}
 
             {stuck && (
               <div className="sol-stuck-banner">

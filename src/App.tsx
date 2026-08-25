@@ -6350,7 +6350,6 @@ export default function App() {
     }
     return (
       <SolitaireTable
-        localName={name}
         state={current}
         cardBack={rummyCardBack}
         dealId={solitaireDealId}

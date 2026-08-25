@@ -59,6 +59,10 @@ function locKey(loc: SolitaireLoc): string {
 }
 
 export function applyMove(state: SolitaireState, move: SolitaireMove): MoveOutcome {
+  if (state.won) {
+    return { ok: false, reason: 'game is already won' }
+  }
+
   if (move.type !== 'DRAW' && move.type !== 'MOVE') {
     return { ok: false, reason: 'unsupported move type for this mode' }
   }
@@ -333,6 +337,25 @@ function foundationSources(state: SolitaireState): SolitaireLoc[] {
 // from play (bounded by the 52-card deck); returns the moves in the order
 // they'd need to be applied, not the final state, so a caller can dispatch
 // them one at a time through its own reducer.
+//
+// Safety contract (this is ALL this function actually guarantees — see
+// SolitaireTable.tsx's `noHiddenCardsLeft` for the precondition the UI
+// enforces before it will call this): this function itself never checks
+// whether any card is still face down. It is only "safe" to call once the
+// caller has independently confirmed every card is already face up and
+// stock/waste are empty (i.e. `noHiddenCardsLeft`) — at that point there is
+// no hidden information left for a foundation move to bury, since nothing
+// is hidden to begin with. Within that precondition, every move it returns
+// is (a) already legal at the moment it's generated (each one is checked
+// via `findFoundationMove`/`canPlaceOnFoundation`) and (b) reversible: the
+// engine's `applyMove` allows moving a foundation's top card back onto a
+// legal tableau/cell destination (see `from.kind === 'foundation'` above),
+// so a batch this function produces can always be unwound card by card, in
+// addition to the table's own Undo button reverting the whole batch at once.
+// It does NOT guarantee the sequence it picks is strategically optimal — a
+// card it sends to a foundation may have had another, mutually exclusive,
+// legal tableau destination a human might have preferred to keep it in play
+// for.
 export function autoCompleteMoves(state: SolitaireState): SolitaireMove[] {
   const moves: SolitaireMove[] = []
   let current = state

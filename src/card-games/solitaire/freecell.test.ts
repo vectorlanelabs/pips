@@ -535,4 +535,200 @@ describe('FreeCell', () => {
     })
     expect(result.ok).toBe(false)
   })
+
+  it('foundation → tableau accepted when stackable', () => {
+    const state = buildState({
+      foundations: { spades: ['A♠', '2♠'] },
+      tableau: [['3♥']],
+    })
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'foundation', index: 3 },
+      to: { kind: 'tableau', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.foundations[3].map((c) => c.rank)).toEqual(['A'])
+    expect(result.state.tableau[0].map((c) => c.rank)).toEqual(['3', '2'])
+  })
+
+  it('foundation → empty cell accepted', () => {
+    const state = buildState({
+      foundations: { spades: ['A♠', '2♠'] },
+      cells: [null, null, null, null],
+    })
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'foundation', index: 3 },
+      to: { kind: 'cell', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.cells[0]?.rank).toBe('2')
+    expect(result.state.foundations[3].map((c) => c.rank)).toEqual(['A'])
+  })
+
+  it('foundation source rejects moving more than 1 card', () => {
+    const state = buildState({
+      foundations: { spades: ['A♠', '2♠'] },
+      tableau: [['3♥']],
+    })
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'foundation', index: 3 },
+      to: { kind: 'tableau', index: 0 },
+      count: 2,
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects an empty foundation as a source', () => {
+    const state = createSolitaireGame('freecell', 1)
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'foundation', index: 0 },
+      to: { kind: 'tableau', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects waste as a source — freecell has no waste pile', () => {
+    const state = createSolitaireGame('freecell', 1)
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'waste' },
+      to: { kind: 'tableau', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects an out-of-range cell index as a source', () => {
+    const state = createSolitaireGame('freecell', 1)
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'cell', index: 4 },
+      to: { kind: 'tableau', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects an out-of-range tableau index as a source', () => {
+    const state = createSolitaireGame('freecell', 1)
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 8 },
+      to: { kind: 'cell', index: 0 },
+      count: 1,
+    })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('supermove cap is computed from state BEFORE the move — a source column that would end up empty as a result of this same move does not inflate its own cap', () => {
+    const state = buildState({
+      tableau: [
+        ['9♠', '8♥', '7♠', '6♥'], // source: 4-card run, the column's entire contents
+        ['10♥'],                  // destination: accepts the run (9♠ on 10♥)
+        Array(6).fill('A♣'),
+        Array(6).fill('A♦'),
+        Array(6).fill('A♥'),
+        Array(6).fill('2♣'),
+        Array(6).fill('2♦'),
+        Array(6).fill('2♥'),
+      ],
+      cells: ['3♣', '3♦', '3♥', '3♠'], // 0 empty cells
+    })
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 4,
+    })
+
+    // Cap is (0 empty cells + 1) * 2^(0 OTHER empty columns) = 1. Moving the
+    // source column's entire run would leave it empty afterward, but that
+    // can't retroactively count toward this same move's own cap.
+    expect(result.ok).toBe(false)
+  })
+
+  it('supermove after a source/destination interaction: a card freed from a cell by an earlier move raises the cap for a later one', () => {
+    const state = buildState({
+      tableau: [
+        ['J♠', '10♥', '9♠'], // will become the supermove source
+        ['Q♥'],              // supermove destination (accepts J♠)
+        ['4♠'],              // destination for the cell-freeing move below
+        Array(6).fill('A♣'),
+        Array(6).fill('A♦'),
+        Array(6).fill('A♥'),
+        Array(6).fill('2♣'),
+        Array(6).fill('2♦'),
+      ],
+      cells: ['3♦', '3♥', '3♠', null], // 1 empty cell to start
+    })
+
+    // With 1 empty cell and 0 empty columns, cap is (1+1)*2^0 = 2 — the
+    // 3-card run is rejected before anything frees up a second cell.
+    const tooBig = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 3,
+    })
+    expect(tooBig.ok).toBe(false)
+
+    // Free the second cell by moving its card (3♦) onto the 4♠ column.
+    const freed = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'cell', index: 0 },
+      to: { kind: 'tableau', index: 2 },
+      count: 1,
+    })
+    expect(freed.ok).toBe(true)
+    if (!freed.ok) return
+    expect(freed.state.cells[0]).toBeNull()
+
+    // Now 2 empty cells, 0 empty columns: cap is (2+1)*2^0 = 3 — the same
+    // 3-card supermove that was rejected above now succeeds.
+    const nowFits = applyMove(freed.state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 3,
+    })
+    expect(nowFits.ok).toBe(true)
+    if (!nowFits.ok) return
+    expect(nowFits.state.tableau[1].map((c) => c.rank)).toEqual(['Q', 'J', '10', '9'])
+  })
+
+  it('rejects any move once the game is already won', () => {
+    const state = createSolitaireGame('freecell', 1)
+    state.won = true
+
+    const result = applyMove(state, {
+      type: 'MOVE',
+      from: { kind: 'tableau', index: 0 },
+      to: { kind: 'tableau', index: 1 },
+      count: 1,
+    })
+    expect(result.ok).toBe(false)
+  })
 })
