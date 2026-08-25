@@ -109,16 +109,16 @@ function initConnect4(seats: Seat[]): Connect4State {
 function initHangman(seats: Seat[]): HangmanState {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
-  return startHangmanRound({ word: '', guessed: [], wrong: [], phase: 'setting', guesserIdx: 1, over: false, pendingWinnerId: null, status: '', wins }, seats)
+  return startHangmanRound({ word: '', guessed: [], wrong: [], phase: 'setting', guesserIdx: 1, over: false, pendingWinnerId: null, status: '', wins, rejection: null }, seats)
 }
 
 function startHangmanRound(base: HangmanState, seats: Seat[]): HangmanState {
   const setterIdx = base.guesserIdx === 0 ? 1 : 0
   const setter = seats[setterIdx]
   if (!setter || setter.bot) {
-    return { ...base, word: randomWord(), guessed: [], wrong: [], phase: 'guessing', over: false, pendingWinnerId: null, status: `Guess ${seats[base.guesserIdx]?.name ?? "the"}'s word.` }
+    return { ...base, word: randomWord(), guessed: [], wrong: [], phase: 'guessing', over: false, pendingWinnerId: null, status: `Guess ${seats[base.guesserIdx]?.name ?? "the"}'s word.`, rejection: null }
   }
-  return { ...base, word: '', guessed: [], wrong: [], phase: 'setting', over: false, pendingWinnerId: null, status: `Give ${seats[base.guesserIdx]?.name ?? 'them'} a word to guess.` }
+  return { ...base, word: '', guessed: [], wrong: [], phase: 'setting', over: false, pendingWinnerId: null, status: `Give ${seats[base.guesserIdx]?.name ?? 'them'} a word to guess.`, rejection: null }
 }
 
 export function makeRoom(code: string, game: Game, hostName: string, hostId: string): RoomState {
@@ -497,23 +497,39 @@ function connect4AdvanceRound(state: RoomState): RoomState {
 
 // ---------- Hangman ----------
 
+// Transient rejection notice for a Hangman action the host declined to apply — matches TTT's
+// tttReject precedent (docs/reviews/hangman-review.md major #4, see `git show 6211c0d`). Set on
+// the room-wide broadcast state, but only rendered by the seat named in `seatId`.
+function hangmanReject(state: RoomState, h: HangmanState, by: string, reason: string): RoomState {
+  return { ...state, hangman: { ...h, rejection: { seatId: by, reason, nonce: Date.now() } } }
+}
+
 function hangmanSetWord(state: RoomState, by: string, word: string): RoomState {
   if (state.screen !== 'hangman') return state
   const h = state.hangman
+  if (h.phase !== 'setting') return hangmanReject(state, h, by, 'A word has already been set.')
   const setterIdx = h.guesserIdx === 0 ? 1 : 0
-  if (state.seats[setterIdx]?.id !== by) return state
-  const clean = word.trim().toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim()
-  if (clean.replace(/ /g, '').length < 3) return state
-  return { ...state, hangman: { ...h, word: clean, phase: 'guessing', guessed: [], wrong: [], status: `Guess ${state.seats[h.guesserIdx]?.name}'s word.` } }
+  if (state.seats[setterIdx]?.id !== by) return hangmanReject(state, h, by, "It's not your turn to set a word.")
+  const clean = word.trim().toUpperCase().replace(/\s+/g, ' ')
+  // Reject outright rather than silently stripping stray characters — the setter's copy
+  // promises "letters and spaces only," so a rejected submission with a reason is the honest
+  // response to a character that copy doesn't allow (docs/reviews/hangman-review.md minor).
+  if (!/^[A-Z ]*$/.test(clean)) return hangmanReject(state, h, by, 'Letters and spaces only — remove other characters.')
+  if (clean.replace(/ /g, '').length < 3) return hangmanReject(state, h, by, 'Word needs at least 3 letters.')
+  return { ...state, hangman: { ...h, word: clean, phase: 'guessing', guessed: [], wrong: [], status: `Guess ${state.seats[h.guesserIdx]?.name}'s word.`, rejection: null } }
 }
 
 function hangmanGuess(state: RoomState, by: string, letter: string): RoomState {
   if (state.screen !== 'hangman') return state
   const h = state.hangman
-  if (h.phase !== 'guessing') return state
-  if (state.seats[h.guesserIdx]?.id !== by) return state
-  const L = letter.toUpperCase()
-  if (h.guessed.includes(L)) return state
+  if (h.phase !== 'guessing') return hangmanReject(state, h, by, "There's no word to guess right now.")
+  if (state.seats[h.guesserIdx]?.id !== by) return hangmanReject(state, h, by, "It's not your turn to guess.")
+  // A crafted/stale PeerJS action can send anything as `letter` — normalize case, then reject
+  // anything that isn't exactly one A-Z character before it can become a canonical
+  // guessed/wrong entry (docs/reviews/hangman-review.md major #1).
+  const L = letter.trim().toUpperCase()
+  if (!/^[A-Z]$/.test(L)) return hangmanReject(state, h, by, 'Guess a single letter, A through Z.')
+  if (h.guessed.includes(L)) return hangmanReject(state, h, by, `You already guessed ${L}.`)
   const guessed = [...h.guessed, L]
   const wrong = h.word.includes(L) ? h.wrong : [...h.wrong, L]
   const solved = isWordSolved(h.word, guessed)
@@ -528,10 +544,10 @@ function hangmanGuess(state: RoomState, by: string, letter: string): RoomState {
     const status = solved ? `${guesser?.name ?? 'They'} solved it!` : `Out of guesses — it was "${h.word}".`
     return {
       ...state, seats,
-      hangman: { ...h, guessed, wrong, over: true, phase: 'roundOver', pendingWinnerId, status, wins },
+      hangman: { ...h, guessed, wrong, over: true, phase: 'roundOver', pendingWinnerId, status, wins, rejection: null },
     }
   }
-  return { ...state, hangman: { ...h, guessed, wrong } }
+  return { ...state, hangman: { ...h, guessed, wrong, rejection: null } }
 }
 
 function hangmanAdvanceRound(state: RoomState): RoomState {

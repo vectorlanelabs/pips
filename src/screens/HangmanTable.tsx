@@ -8,6 +8,14 @@ import { useTurnStartSound } from '../hooks/useTurnStartSound'
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const PART_THRESHOLD = { head: 1, body: 2, armL: 3, armR: 4, legL: 5, legR: 6 }
 
+// Mirrors the host's hangmanSetWord validation (src/state/room.ts) so the button disables
+// before a submission would be rejected, rather than letting punctuation through only to
+// have the host bounce it (docs/reviews/hangman-review.md minor: setter copy vs. behavior).
+function isValidHangmanWord(raw: string): boolean {
+  const clean = raw.trim().toUpperCase().replace(/\s+/g, ' ')
+  return /^[A-Z ]*$/.test(clean) && clean.replace(/ /g, '').length >= 3
+}
+
 function Gallows({ wrong }: { wrong: number }) {
   const part = (show: boolean, style: React.CSSProperties) => (
     <div style={{ position: 'absolute', background: 'var(--coral)', borderRadius: 4, transition: 'opacity .2s', opacity: show ? 1 : 0, ...style }} />
@@ -70,6 +78,26 @@ export function HangmanTable({
     soundSigRef.current = { guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, wasGuesser: iAmGuesser }
   }, [h.wrong.length, h.guessed.length, h.over, h.word, h.guessed, iAmGuesser, play])
 
+  // Rejected actions (out-of-turn/out-of-phase word or guess, a duplicate letter, a malformed
+  // guess payload, punctuation in a set word) are otherwise silent no-ops — surface them
+  // briefly to the player who triggered them so a rejected attempt doesn't read as a dead
+  // button. `rejection` is broadcast on the shared room state but only shown to the seat it
+  // names (matches TttTable's precedent).
+  const [rejectionText, setRejectionText] = useState<string | null>(null)
+  const lastRejectionNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!h.rejection || h.rejection.seatId !== localSeatId) return
+    if (h.rejection.nonce === lastRejectionNonceRef.current) return
+    lastRejectionNonceRef.current = h.rejection.nonce
+    setRejectionText(h.rejection.reason)
+    const timer = setTimeout(() => setRejectionText(null), 2200)
+    return () => clearTimeout(timer)
+  }, [h.rejection, localSeatId])
+
+  // Active-seat highlight, matching TttTable/Connect4Table: the setter is "active" while
+  // setting, the guesser while guessing; nobody is highlighted once the round is over.
+  const activeSeatId = h.phase === 'setting' ? setter?.id : h.phase === 'guessing' ? guesser?.id : null
+
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
       <TableHeader
@@ -105,13 +133,16 @@ export function HangmanTable({
                       <button
                         type="button"
                         className="btn btn-coral"
-                        disabled={wordInput.replace(/[^a-zA-Z]/g, '').length < 3}
+                        disabled={!isValidHangmanWord(wordInput)}
                         onClick={() => { onSetWord(wordInput); setWordInput('') }}
                       >
                         Send it over
                       </button>
                     </div>
                     <p style={{ fontSize: 13, color: 'var(--faint-text)', marginTop: 8 }}>Letters and spaces only.</p>
+                    {rejectionText && (
+                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', marginTop: 8 }}>{rejectionText}</p>
+                    )}
                   </>
                 )}
               </>
@@ -128,6 +159,11 @@ export function HangmanTable({
                   <button type="button" className="btn btn-coral btn-lg" style={{ marginBottom: 16 }} onClick={onAdvanceRound}>
                     Continue
                   </button>
+                )}
+                {rejectionText && (
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', margin: '-8px 0 16px' }}>
+                    {rejectionText}
+                  </div>
                 )}
                 <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Gallows wrong={h.wrong.length} />
@@ -163,12 +199,22 @@ export function HangmanTable({
                   {ALPHABET.map((letter) => {
                     const used = h.guessed.includes(letter)
                     const correct = used && h.word.includes(letter)
+                    const disabledReason = h.over
+                      ? 'This round is already over.'
+                      : used
+                        ? `Already guessed — ${correct ? 'correct' : 'wrong'}.`
+                        : !iAmGuesser
+                          ? `Waiting on ${guesser?.name ?? 'the guesser'}.`
+                          : undefined
                     return (
                       <button
                         key={letter}
                         type="button"
                         disabled={!iAmGuesser || used || h.over}
                         onClick={() => onGuess(letter)}
+                        aria-label={`Guess the letter ${letter}`}
+                        aria-disabled={!iAmGuesser || used || h.over}
+                        title={disabledReason}
                         style={{
                           width: 42, height: 44, borderRadius: 12, fontWeight: 700,
                           border: correct ? '3px solid var(--ink)' : '3px solid transparent',
@@ -190,15 +236,30 @@ export function HangmanTable({
 
         <div style={{ flex: '1 1 230px', maxWidth: 330 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {room.seats.map((s) => (
-              <div key={s.id} style={{ border: '3px solid var(--ink)', borderRadius: 18, padding: '12px 16px', boxShadow: '0 7px 0 var(--grey-border)' }}>
-                <div style={{ fontWeight: 700 }}>{s.name}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
-                  {h.wins[s.id] ?? 0}
-                  <span style={{ fontSize: 13, fontWeight: 500, marginLeft: 6, color: 'var(--muted-text)' }}>first to 2</span>
+            {room.seats.map((s) => {
+              const isActive = s.id === activeSeatId
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    border: '3px solid var(--ink)', borderRadius: 18, padding: '12px 16px',
+                    background: isActive ? s.color : '#fff', color: isActive ? '#fff' : 'var(--body-text)',
+                    boxShadow: isActive ? 'none' : '0 7px 0 var(--grey-border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                    <span>{s.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>
+                      {isActive ? (s.id === localSeatId ? (h.phase === 'setting' ? 'your word' : 'your guess') : '') : ''}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+                    {h.wins[s.id] ?? 0}
+                    <span style={{ fontSize: 13, fontWeight: 500, marginLeft: 6, color: isActive ? 'rgba(255,255,255,.8)' : 'var(--muted-text)' }}>first to 2</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

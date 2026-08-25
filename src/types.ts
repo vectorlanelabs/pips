@@ -167,6 +167,11 @@ export interface HangmanState {
   pendingWinnerId: string | null
   status: string
   wins: Record<string, number>
+  // Transient feedback for a rejected hangmanSetWord/hangmanGuess — set on the room-wide
+  // broadcast state, but only rendered by the seat named in `seatId` (see HangmanTable,
+  // matching TttState.rejection). `nonce` lets the same rejection reason fire visible
+  // feedback twice in a row (e.g. two stale guesses of the same already-guessed letter).
+  rejection: { seatId: string; reason: string; nonce: number } | null
 }
 
 export interface RoomState {

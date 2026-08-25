@@ -678,3 +678,167 @@ describe('ttt', () => {
     }
   })
 })
+
+describe('hangman', () => {
+  // Two human seats: startHangmanRound puts the setter opposite the guesser (guesserIdx
+  // starts at 1), so the host ('h1') sets the first word and the guest ('g1') guesses it.
+  function hangmanRoom(): RoomState {
+    let room = makeRoom('TEST-7', 'hangman', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    return applyAction(room, { type: 'startGame' }, 'h1')
+  }
+
+  function setWord(room: RoomState, word: string, by = 'h1') {
+    return applyAction(room, { type: 'hangmanSetWord', word }, by)
+  }
+
+  function guess(room: RoomState, letter: string, by = 'g1') {
+    return applyAction(room, { type: 'hangmanGuess', letter }, by)
+  }
+
+  it('starts with the setter opposite the guesser, awaiting a word', () => {
+    const room = hangmanRoom()
+    expect(room.hangman.phase).toBe('setting')
+    expect(room.hangman.guesserIdx).toBe(1)
+  })
+
+  it('rejects a word submitted by anyone other than the setter', () => {
+    const room = hangmanRoom()
+    const result = setWord(room, 'CASTLE', 'g1')
+    expect(result.hangman.phase).toBe('setting')
+    expect(result.hangman.word).toBe('')
+    expect(result.hangman.rejection?.seatId).toBe('g1')
+    expect(result.hangman.rejection?.reason).toBeTruthy()
+  })
+
+  it('rejects a word under three letters', () => {
+    const room = hangmanRoom()
+    const result = setWord(room, 'AT')
+    expect(result.hangman.phase).toBe('setting')
+    expect(result.hangman.rejection?.seatId).toBe('h1')
+  })
+
+  it('rejects a word containing anything but letters and spaces, without silently stripping it', () => {
+    const room = hangmanRoom()
+    for (const bad of ['C@T', 'CAT!', 'CAT1', "CAT'S"]) {
+      const result = setWord(room, bad)
+      expect(result.hangman.phase).toBe('setting')
+      expect(result.hangman.word).toBe('')
+      expect(result.hangman.rejection?.reason).toBeTruthy()
+    }
+  })
+
+  it('accepts a valid word, normalizing case and collapsing whitespace', () => {
+    const room = hangmanRoom()
+    const result = setWord(room, '  peanut   butter  ')
+    expect(result.hangman.phase).toBe('guessing')
+    expect(result.hangman.word).toBe('PEANUT BUTTER')
+    expect(result.hangman.rejection).toBeNull()
+  })
+
+  it('rejects a guess submitted by anyone other than the guesser', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    const result = guess(room, 'C', 'h1')
+    expect(result.hangman.guessed).toEqual([])
+    expect(result.hangman.rejection?.seatId).toBe('h1')
+  })
+
+  it('rejects a guess outside the guessing phase (setting and roundOver)', () => {
+    const settingRoom = hangmanRoom()
+    const duringSetting = guess(settingRoom, 'C')
+    expect(duringSetting.hangman.guessed).toEqual([])
+    expect(duringSetting.hangman.rejection?.reason).toBeTruthy()
+
+    let over = hangmanRoom()
+    over = setWord(over, 'CAT')
+    over = { ...over, hangman: { ...over.hangman, phase: 'roundOver' } }
+    const duringRoundOver = guess(over, 'C')
+    expect(duringRoundOver.hangman.guessed).toEqual([])
+    expect(duringRoundOver.hangman.rejection?.reason).toBeTruthy()
+  })
+
+  it('normalizes a lowercase guess to uppercase and accepts it', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    room = guess(room, 'c')
+    expect(room.hangman.guessed).toEqual(['C'])
+    expect(room.hangman.rejection).toBeNull()
+  })
+
+  it('rejects a duplicate guessed letter without changing guessed/wrong', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    room = guess(room, 'C')
+    const dup = guess(room, 'c')
+    expect(dup.hangman.guessed).toEqual(['C'])
+    expect(dup.hangman.rejection?.reason).toBeTruthy()
+  })
+
+  it('rejects empty, multi-character, and punctuation guess payloads without mutating state', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    for (const bad of ['', 'AB', '1', '!', '  ', 'a1', 'AA']) {
+      const result = guess(room, bad)
+      expect(result.hangman.guessed).toEqual(room.hangman.guessed)
+      expect(result.hangman.wrong).toEqual(room.hangman.wrong)
+      expect(result.hangman.rejection?.reason).toBeTruthy()
+    }
+  })
+
+  it('clears the rejection notice on the next legal guess', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    room = guess(room, '1') // rejected, malformed
+    expect(room.hangman.rejection).not.toBeNull()
+    room = guess(room, 'C') // legal
+    expect(room.hangman.rejection).toBeNull()
+  })
+
+  it('reveals every occurrence of a correctly guessed repeated letter and solves multi-word phrases', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'SEA SHELL')
+    for (const letter of ['S', 'E', 'A', 'H', 'L']) room = guess(room, letter)
+    expect(room.hangman.phase).toBe('roundOver')
+    expect(room.hangman.over).toBe(true)
+    expect(room.hangman.wins.g1).toBe(1)
+    expect(room.seats.find((s) => s.id === 'g1')?.score).toBe(1)
+  })
+
+  it('loses the round after six wrong guesses without awarding a win', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    for (const letter of ['B', 'D', 'F', 'G', 'H', 'J']) room = guess(room, letter)
+    expect(room.hangman.phase).toBe('roundOver')
+    expect(room.hangman.over).toBe(true)
+    expect(room.hangman.wrong.length).toBe(6)
+    expect(room.hangman.wins).toEqual({ h1: 0, g1: 0 })
+  })
+
+  it('alternates the guesser for the next round after a non-match-ending round', () => {
+    let room = hangmanRoom()
+    room = setWord(room, 'CAT')
+    for (const letter of ['B', 'D', 'F', 'G', 'H', 'J']) room = guess(room, letter)
+    expect(room.hangman.pendingWinnerId).toBeNull()
+    room = applyAction(room, { type: 'hangmanAdvanceRound' }, 'h1')
+    expect(room.screen).toBe('hangman')
+    expect(room.hangman.guesserIdx).toBe(0)
+  })
+
+  it('rejects hangmanAdvanceRound before the round is over', () => {
+    const room = hangmanRoom()
+    const result = applyAction(room, { type: 'hangmanAdvanceRound' }, 'h1')
+    expect(result).toBe(room)
+  })
+
+  it('sends the match to results once a seat reaches two wins', () => {
+    let room = hangmanRoom()
+    room = {
+      ...room,
+      hangman: { ...room.hangman, phase: 'roundOver', over: true, pendingWinnerId: 'g1', wins: { h1: 0, g1: 2 } },
+    }
+    room = applyAction(room, { type: 'hangmanAdvanceRound' }, 'h1')
+    expect(room.screen).toBe('results')
+    expect(room.winnerId).toBe('g1')
+  })
+})
