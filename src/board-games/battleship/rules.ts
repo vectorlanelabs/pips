@@ -19,6 +19,10 @@ export const validateBattleshipAction: ActionValidator<
 > = (session, playerId, action) => {
   const { publicState, privateStates } = session
 
+  if (!publicState.turn.playerOrder.includes(playerId)) {
+    return { ok: false, reason: 'not a participant in this match' }
+  }
+
   if (action.type === 'PLACE_FLEET') {
     if (publicState.stage !== 'placing') return { ok: false, reason: 'not in placing stage' }
     if (publicState.placedReady[playerId]) return { ok: false, reason: 'already placed' }

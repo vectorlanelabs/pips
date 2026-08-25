@@ -38,12 +38,13 @@ export function BattleshipResults({
   onBackToShelf,
 }: BattleshipResultsProps) {
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.winnerId === localPlayerId
+  useEffect(() => {
+    if (isLocalWinner) play('game-win')
+  }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (publicState.stage !== 'over' || publicState.winnerId === null) return null
-
-  const isLocalWinner = publicState.winnerId === localPlayerId
   const headline = isLocalWinner ? 'You sank the whole enemy fleet!' : `${opponentName} sank your whole fleet!`
   const headlineColor = isLocalWinner ? LOCAL_COLOR : OPPONENT_COLOR
 

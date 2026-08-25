@@ -37,7 +37,6 @@ import './BattleshipTable.css'
 export interface BattleshipTableProps {
   code: string
   localPlayerId: string
-  localName: string
   opponentName: string
   opponentColor: string
   connection: 'connected' | 'disconnected'
@@ -46,7 +45,6 @@ export interface BattleshipTableProps {
   board: (ShipId | null)[]     // your own board (privateState) — all null until your PLACE_FLEET is accepted
   onPlaceFleet: (board: (ShipId | null)[]) => void
   onFire: (cell: number) => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -123,7 +121,6 @@ function ShipOverlays({ board, hits, alwaysDim }: {
 export function BattleshipTable({
   code,
   localPlayerId,
-  localName,
   opponentName,
   opponentColor,
   connection,
@@ -132,11 +129,8 @@ export function BattleshipTable({
   board,
   onPlaceFleet,
   onFire,
-  onOpenRules,
   onLeave,
 }: BattleshipTableProps) {
-  void localName // preserved in props for M4b wiring; unused in this presentational milestone
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
   const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
   const variant = publicState.variant
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId

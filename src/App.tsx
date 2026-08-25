@@ -153,7 +153,12 @@ type RummyView =
 type Phase10View =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
-type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
+type BattleshipView =
+  | { kind: 'game'; revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type DominoesView =
   | { kind: 'game'; revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
   // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
@@ -277,6 +282,20 @@ const SHOT_SOUND_BUFFER_MS: Record<'hit' | 'miss' | 'sunk', number> = {
   hit: 2800,
   sunk: 4800,
 }
+// Whether the SAME bot will fire again on the loop's next iteration, and if so, how long to hold
+// first so this shot's sound has time to finish. In 'free' mode extraTurn always runs and
+// currentPlayer never changes — the bot keeps firing regardless of who "currentPlayer" nominally
+// is — so gating on currentPlayer alone (as this used to) left free mode with NO hold at all after
+// the first shot. Gate on the same continuation condition the bot loop itself uses (variant ===
+// 'free', or currentPlayer === botId for a streak hit/sink), not the vestigial turn pointer.
+// Exported so a regression test can pin this against a real free-mode hit/sink trace without
+// mounting the app or the bot loop's own timers.
+export function battleshipShotHoldMs(ps: BattleshipPublicState, botId: string): number {
+  if (ps.stage !== 'battle') return 0
+  const botFiresAgain = ps.variant === 'free' || currentPlayer(ps.turn) === botId
+  if (!botFiresAgain) return 0
+  return SHOT_SOUND_BUFFER_MS[ps.lastShot?.result ?? 'miss']
+}
 // Blackjack: bets are already placed and the round is already dealt in
 // public state the instant betting closes, so nothing gates the bots'
 // first hit/stand decision except this hold -- without it a bot could act
@@ -384,6 +403,7 @@ export default function App() {
   const [battleshipOpponentName, setBattleshipOpponentName] = useState('')
   const [battleshipView, setBattleshipView] = useState<BattleshipView | null>(null)
   const [battleshipConnection, setBattleshipConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [battleshipNotice, setBattleshipNotice] = useState<string | null>(null)
   const [battleshipWaiting, setBattleshipWaiting] = useState(false)
   const [battleshipVariant, setBattleshipVariant] = useState<BattleshipVariant>('standard')
 
@@ -541,6 +561,7 @@ export default function App() {
   const battleshipOpponentIdRef = useRef<string | null>(null)
   const battleshipOpponentNameRef = useRef('')
   const battleshipVariantRef = useRef<BattleshipVariant>('standard')
+  const battleshipRejectionNoticeRef = useRef<string | null>(null)
   const dominoesSessionRef = useRef<DominoesSession | null>(null)
   const dominoesHostRef = useRef<HostHandle<DominoesView> | null>(null)
   const dominoesGuestRef = useRef<GuestHandle<DominoesAction> | null>(null)
@@ -762,7 +783,7 @@ export default function App() {
     if (legacy && legacy.screen !== 'room' && legacy.screen !== 'results') return legacy.game
     if (rummyRole && rummyStarted && rummyView?.kind === 'game' && !rummyView.publicState.matchWinnerId) return 'rummy'
     if (phase10Role && phase10Started && phase10View?.kind === 'game' && !phase10View.publicState.matchWinnerId) return 'phase10'
-    if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
+    if (battleshipRole && battleshipView?.kind === 'game' && battleshipView.publicState.stage !== 'over') return 'battleship'
     if (dominoesRole && dominoesView?.kind === 'game' && dominoesView.publicState.stage !== 'over') return 'dominoes'
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
     if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
@@ -968,6 +989,8 @@ export default function App() {
     battleshipOpponentNameRef.current = ''
     setBattleshipView(null)
     setBattleshipConnection('connected')
+    setBattleshipNotice(null)
+    battleshipRejectionNoticeRef.current = null
     setBattleshipWaiting(false)
     setBattleshipVariant('standard')
     battleshipVariantRef.current = 'standard'
@@ -2378,11 +2401,11 @@ export default function App() {
   function battleshipUpdateViews() {
     const session = battleshipSessionRef.current!
     const hostSnap = deriveSnapshot(session.session, battleshipLocalPlayerIdRef.current!)
-    setBattleshipView({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: battleshipOpponentNameRef.current })
+    setBattleshipView({ kind: 'game', revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: battleshipOpponentNameRef.current })
     const opponentId = battleshipOpponentIdRef.current
     if (opponentId && opponentId !== 'bot') {
       const guestSnap = deriveSnapshot(session.session, opponentId)
-      battleshipHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+      battleshipHostRef.current?.broadcast({ kind: 'game', revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
     }
   }
 
@@ -2416,7 +2439,12 @@ export default function App() {
       onAction(guestId, action) {
         if (!battleshipSessionRef.current || guestId !== battleshipOpponentIdRef.current) return
         const result = applyBattleshipAction(battleshipSessionRef.current!, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          battleshipHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         battleshipSessionRef.current = result.bs
         battleshipUpdateViews()
       },
@@ -2459,16 +2487,15 @@ export default function App() {
       if (!result.outcome.ok) return
       battleshipSessionRef.current = result.bs
       const snap = deriveSnapshot(result.bs.session, battleshipLocalPlayerId!)
-      setBattleshipView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: battleshipOpponentNameRef.current })
+      setBattleshipView({ kind: 'game', revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: battleshipOpponentNameRef.current })
       // A streak/free-for-all extra turn keeps the SAME bot firing every
       // BASE_MS with no natural pause. ship-miss/-hit/-sunk run 2/3.7/5.7s —
       // far longer than BASE_MS — so a hot streak stacks shot sounds on top
       // of each other. Hold the next shot off long enough for this one's
       // sound to finish before firing again.
-      const newPs = result.bs.session.publicState
-      if (newPs.stage === 'battle' && currentPlayer(newPs.turn) === botId) {
-        const extra = SHOT_SOUND_BUFFER_MS[newPs.lastShot?.result ?? 'miss']
-        await wait(extra)
+      const holdMs = battleshipShotHoldMs(result.bs.session.publicState, botId)
+      if (holdMs > 0) {
+        await wait(holdMs)
         if (battleshipStale(key)) return
       }
     }
@@ -2498,8 +2525,19 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<BattleshipView, BattleshipAction>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // battleshipView/localRevision, so it can't be mistaken for (or block) a real state update.
+          battleshipRejectionNoticeRef.current = view.message
+          setBattleshipNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setBattleshipNotice((prev) => (prev !== null && prev === battleshipRejectionNoticeRef.current ? null : prev))
+        battleshipRejectionNoticeRef.current = null
         setBattleshipView(view)
         setBattleshipOpponentName(view.opponentName)
       },
@@ -2529,7 +2567,18 @@ export default function App() {
   function battleshipDispatch(action: BattleshipAction) {
     if (battleshipRole === 'host' && battleshipLocalPlayerId) {
       const result = applyBattleshipAction(battleshipSessionRef.current!, battleshipLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        battleshipRejectionNoticeRef.current = reason
+        setBattleshipNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (battleshipNotice !== null && battleshipNotice === battleshipRejectionNoticeRef.current) {
+        setBattleshipNotice(null)
+      }
+      battleshipRejectionNoticeRef.current = null
       battleshipSessionRef.current = result.bs
       battleshipUpdateViews()
     } else if (battleshipRole === 'guest') {
@@ -5434,7 +5483,7 @@ export default function App() {
   }
 
   // Battleship match results
-  if (battleshipView && battleshipView.publicState.stage === 'over' && battleshipView.publicState.winnerId) {
+  if (battleshipView?.kind === 'game' && battleshipView.publicState.stage === 'over' && battleshipView.publicState.winnerId) {
     return (
       <BattleshipResults
         localPlayerId={battleshipLocalPlayerId ?? ''}
@@ -5442,7 +5491,7 @@ export default function App() {
         opponentName={battleshipOpponentName}
         publicState={battleshipView.publicState}
         isHost={battleshipRole === 'host'}
-        notice={error}
+        notice={battleshipNotice ?? error}
         onRematch={battleshipRematch}
         onBackToShelf={resetToEntry}
       />
@@ -5450,21 +5499,19 @@ export default function App() {
   }
 
   // Battleship table (active match)
-  if (battleshipView && battleshipLocalPlayerId) {
+  if (battleshipView?.kind === 'game' && battleshipLocalPlayerId) {
     return (
       <BattleshipTable
         code={battleshipCode}
         localPlayerId={battleshipLocalPlayerId}
-        localName={name}
         opponentName={battleshipOpponentName}
         opponentColor="#1a6fae"
         connection={battleshipConnection}
-        notice={error}
+        notice={battleshipNotice ?? error}
         publicState={battleshipView.publicState}
         board={battleshipView.privateState.board}
         onPlaceFleet={(b: (ShipId | null)[]) => battleshipDispatch({ type: 'PLACE_FLEET', board: b })}
         onFire={(cell) => battleshipDispatch({ type: 'FIRE', cell })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )

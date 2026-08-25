@@ -45,3 +45,28 @@ architecture, not a Wahoo-only patch.
 actually needs same-turn re-entry?
 
 ---
+
+## From [battleship-review.md](battleship-review.md)
+
+**Battleship ship-adjacency (no-touch) rule.** `validFleet` (`state.ts:153-172`)
+checks board length, ship IDs, exact counts, and straight contiguous geometry,
+but never checks whether one ship's cells neighbor another ship's cells. The
+placement UI's `fits` (`state.ts:99-101`) only checks occupancy, so two ships
+placed directly adjacent — orthogonally or diagonally — are accepted by both
+the client preview and the host validator today. Neither the rules overlay
+(`BattleshipRulesOverlay.tsx`) nor the spec states a rule either way.
+
+**Question:** should Battleship enforce the traditional "ships cannot touch,
+not even diagonally" house rule, or is touching intentionally legal? Two
+options:
+
+1. **No-touch (traditional house rule).** Reject a fleet where any two ships'
+   cells are orthogonally or diagonally adjacent, in both `validFleet` (host)
+   and `fits`/preview (client), and add adjacent/diagonal-contact tests. State
+   the rule explicitly in the rules overlay.
+2. **Touch-legal (looser, still-valid Battleship variant).** Leave `validFleet`
+   and `fits` as they are, but state explicitly in the rules overlay that
+   ships may touch, and add an acceptance test so the behavior is a deliberate
+   choice rather than an unspecified gap.
+
+---

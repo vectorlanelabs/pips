@@ -200,16 +200,20 @@ describe('oscar — FIRE cell type confusion', () => {
 })
 
 describe('oscar — host authority: unauthorized third player', () => {
-  it('PLACE_FLEET from a playerId outside the session can inject state the real players never agreed to', () => {
+  it('PLACE_FLEET from a playerId outside the session is rejected and mutates nothing', () => {
     const game = createBattleshipGame(['p1', 'p2'], 1)
     const mallory = applyBattleshipAction(game, 'mallory', { type: 'PLACE_FLEET', board: fleetA() })
-    // Documenting current behavior: the validator has no participant check, so
-    // an action bearing an arbitrary playerId is accepted and injects a phantom
-    // player into placedReady/privateStates. Host-app code must be relied on to
-    // never call applyBattleshipAction with a playerId that isn't a real session
-    // participant; this module does not defend against it itself.
-    expect(mallory.outcome.ok).toBe(true)
-    expect(mallory.bs.session.publicState.placedReady).toEqual({ p1: false, p2: false, mallory: true })
-    expect(mallory.bs.session.privateStates['mallory']).toEqual({ board: fleetA() })
+    // The engine now enforces participant membership directly: an action bearing a playerId
+    // that isn't in publicState.turn.playerOrder is rejected before it can touch canonical
+    // state, closing the boundary as defense-in-depth alongside the App-side guest guard.
+    expect(mallory.outcome.ok).toBe(false)
+    expect(mallory.bs.session.publicState.placedReady).toEqual({ p1: false, p2: false })
+    expect(mallory.bs.session.privateStates['mallory']).toBeUndefined()
+  })
+
+  it('FIRE from a playerId outside the session is rejected', () => {
+    const game = createBattleshipGame(['p1', 'p2'], 1)
+    const mallory = applyBattleshipAction(game, 'mallory', { type: 'FIRE', cell: 0 })
+    expect(mallory.outcome.ok).toBe(false)
   })
 })

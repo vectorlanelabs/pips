@@ -125,6 +125,11 @@ export function allSunk(board: (ShipId | null)[], hits: (CellMark | null)[]): bo
 
 // Rejection-sampling placement: for each ship not in alreadyPlaced, try a random
 // orientation and anchor until the ship fits on the (optionally pre-filled) board.
+// Bounded so a malformed or near-saturated `base` fails loudly instead of spinning
+// forever — the caller always supplies a valid partial board (UI drafts, or the bot's
+// own empty board), so this cap should never be hit on any real input.
+const RANDOM_FLEET_MAX_ATTEMPTS_PER_SHIP = 10000
+
 export function randomFleet(
   rand: () => number,
   base?: (ShipId | null)[],
@@ -134,13 +139,16 @@ export function randomFleet(
   for (const ship of SHIPS) {
     if (alreadyPlaced?.includes(ship.id)) continue
     let placed = false
-    while (!placed) {
+    for (let attempt = 0; !placed && attempt < RANDOM_FLEET_MAX_ATTEMPTS_PER_SHIP; attempt++) {
       const orient: Orientation = rand() < 0.5 ? 'h' : 'v'
       const cells = shipCellsAt(Math.floor(rand() * BOARD_CELLS), ship.len, orient)
       if (cells && fits(board, cells)) {
         for (const c of cells) board[c] = ship.id
         placed = true
       }
+    }
+    if (!placed) {
+      throw new Error(`randomFleet: could not place ${ship.id} after ${RANDOM_FLEET_MAX_ATTEMPTS_PER_SHIP} attempts — base board has no room left`)
     }
   }
   return board
