@@ -262,6 +262,230 @@ describe('connect4', () => {
   })
 })
 
+describe('farkle — room transitions', () => {
+  // Builds a farkle room with h1 on turn, `turnScore` already banked-in-hand, optional unresolved
+  // `dice` still on the table, and h1's running seat score set to `seatScore` (0 = not yet open).
+  function farkleRoomAt(turnScore: number, dice: RoomState['farkle']['dice'] = [], seatScore = 0): RoomState {
+    let room = makeRoom('TEST-F', 'farkle', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    return {
+      ...room,
+      screen: 'farkle' as const,
+      seats: room.seats.map((s) => (s.id === 'h1' ? { ...s, score: seatScore } : s)),
+      farkle: { ...room.farkle, turnScore, dice, kept: [] },
+    }
+  }
+
+  describe('opening threshold', () => {
+    it('rejects banking one short of the 500 opening threshold', () => {
+      const room = farkleRoomAt(499)
+      const result = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(0)
+      expect(result.farkle.rejection?.seatId).toBe('h1')
+      expect(result.farkle.rejection?.reason).toContain('500')
+    })
+
+    it('accepts banking exactly at the 500 opening threshold', () => {
+      const room = farkleRoomAt(500)
+      const result = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(500)
+      expect(result.farkle.rejection).toBeNull()
+    })
+
+    it('once open, banks any positive total without re-clearing the 500 bar', () => {
+      const room = farkleRoomAt(50, [], 1000)
+      const result = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(1050)
+    })
+
+    it('rejects banking with nothing on the table, even once already open', () => {
+      const room = farkleRoomAt(0, [], 1000)
+      const result = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(1000)
+      expect(result.farkle.rejection?.reason).toBe('Nothing to bank yet.')
+    })
+  })
+
+  describe('roll/bank validation', () => {
+    it('rejects farkleBank and farkleRoll when the selected dice do not all score', () => {
+      const room = farkleRoomAt(0, [
+        { id: 0, val: 2, sel: true, rot: 0 },
+        { id: 1, val: 5, sel: true, rot: 0 },
+      ])
+      const bankResult = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(bankResult.farkle.rejection?.reason).toMatch(/scoring dice/)
+      const rollResult = applyAction(room, { type: 'farkleRoll' }, 'h1')
+      expect(rollResult.farkle.rejection?.reason).toMatch(/scoring dice/)
+      expect(rollResult.farkle.dice).toEqual(room.farkle.dice)
+    })
+
+    it('rejects rolling again when dice are on the table but nothing is selected', () => {
+      const room = farkleRoomAt(0, [{ id: 0, val: 2, sel: false, rot: 0 }])
+      const result = applyAction(room, { type: 'farkleRoll' }, 'h1')
+      expect(result.farkle.dice).toEqual(room.farkle.dice)
+      expect(result.farkle.rejection?.reason).toBeTruthy()
+    })
+
+    it('rejects every farkle action from a seat that is not the active turn', () => {
+      const room = farkleRoomAt(500)
+      const actions = [
+        { type: 'farkleRoll' as const },
+        { type: 'farkleToggle' as const, dieId: 0 },
+        { type: 'farkleBank' as const },
+        { type: 'farkleEndTurn' as const },
+      ]
+      for (const action of actions) {
+        const result = applyAction(room, action, 'g1')
+        expect(result.turnIdx).toBe(room.turnIdx)
+        expect(result.farkle.rejection?.seatId).toBe('g1')
+        expect(result.farkle.rejection?.reason).toBe("It's not your turn.")
+      }
+    })
+
+    it('clears a stale rejection notice on the next legal action', () => {
+      const room = farkleRoomAt(500)
+      const rejected = applyAction(room, { type: 'farkleBank' }, 'g1')
+      expect(rejected.farkle.rejection?.seatId).toBe('g1')
+      const result = applyAction(rejected, { type: 'farkleBank' }, 'h1')
+      expect(result.farkle.rejection).toBeNull()
+    })
+  })
+
+  describe('stale/invalid dieId', () => {
+    function diceRoom(): RoomState {
+      let room = makeRoom('TEST-F2', 'farkle', 'Host', 'h1')
+      room = addSeat(room, 'g1', 'Guest', false)
+      return {
+        ...room,
+        screen: 'farkle' as const,
+        farkle: {
+          ...room.farkle,
+          dice: [
+            { id: 1, val: 3, sel: false, rot: 0 },
+            { id: 2, val: 5, sel: false, rot: 0 },
+          ],
+        },
+      }
+    }
+
+    it('toggling an absent dieId is a harmless no-op', () => {
+      const room = diceRoom()
+      const result = applyAction(room, { type: 'farkleToggle', dieId: 999 }, 'h1')
+      expect(result.farkle.dice).toEqual(room.farkle.dice)
+    })
+
+    it('toggling a negative/stale dieId is a harmless no-op', () => {
+      const room = diceRoom()
+      const result = applyAction(room, { type: 'farkleToggle', dieId: -1 }, 'h1')
+      expect(result.farkle.dice).toEqual(room.farkle.dice)
+    })
+
+    it('toggling the same dieId twice (duplicate toggle) returns it to unselected', () => {
+      const room = diceRoom()
+      const once = applyAction(room, { type: 'farkleToggle', dieId: 2 }, 'h1')
+      expect(once.farkle.dice.find((d) => d.id === 2)?.sel).toBe(true)
+      const twice = applyAction(once, { type: 'farkleToggle', dieId: 2 }, 'h1')
+      expect(twice.farkle.dice.find((d) => d.id === 2)?.sel).toBe(false)
+    })
+  })
+
+  describe('bust and hot dice', () => {
+    // Cycling mock guarantees every rolled die is a 2, 3, 4, or 6 (never a 1 or 5, and never
+    // three-of-a-kind), so any roll is a guaranteed bust. rollDie consumes two Math.random()
+    // calls per die (val + rot).
+    const bustVals = [0.2, 0.4, 0.6, 0.85]
+    let bustIdx = 0
+
+    beforeEach(() => {
+      bustIdx = 0
+      vi.spyOn(Math, 'random').mockImplementation(() => bustVals[bustIdx++ % bustVals.length])
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('a bust loses the turn total and counts a farkle for the seat', () => {
+      // No dice currently on the table (rolling fresh); 2 dice already kept means the roll asks
+      // for the remaining 4 — the same die count the cycling mock is proven to bust on above.
+      const room = farkleRoomAt(450, [])
+      const withKept = { ...room, farkle: { ...room.farkle, kept: [1, 1] } }
+      const result = applyAction(withKept, { type: 'farkleRoll' }, 'h1')
+      expect(result.farkle.farkle).toBe(true)
+      expect(result.farkle.lost).toBe(450)
+      expect(result.seats.find((s) => s.id === 'h1')!.farkles).toBe(1)
+      // The busted roll doesn't touch the seat's banked score.
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(0)
+    })
+  })
+
+  describe('hot dice', () => {
+    beforeEach(() => {
+      vi.spyOn(Math, 'random').mockReturnValue(0) // every new die comes up a 1 (always scores)
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('keeping all six scoring dice resets kept and rolls a fresh six', () => {
+      const room = farkleRoomAt(500, [{ id: 5, val: 5, sel: true, rot: 0 }], 0)
+      const withKept = { ...room, farkle: { ...room.farkle, kept: [1, 1, 1, 1, 1], turnScore: 500 } }
+      const result = applyAction(withKept, { type: 'farkleRoll' }, 'h1')
+      expect(result.farkle.kept).toEqual([])
+      expect(result.farkle.dice).toHaveLength(6)
+      expect(result.farkle.turnScore).toBe(550) // 500 + 50 for the selected single 5
+      expect(result.farkle.farkle).toBe(false)
+    })
+  })
+
+  describe('final round', () => {
+    it('crossing the winning score during a bank starts the final round', () => {
+      const room = farkleRoomAt(500, [], 9600)
+      const result = applyAction(room, { type: 'farkleBank' }, 'h1')
+      expect(result.farkle.finalRound).toBe(true)
+      expect(result.farkle.finalTrigger).toBe('h1')
+      expect(result.seats.find((s) => s.id === 'h1')!.score).toBe(10100)
+      expect(result.screen).toBe('farkle') // the lap has just started, not completed yet
+    })
+
+    it('a bank that wraps the turn back to the trigger seat completes the match', () => {
+      let room = makeRoom('TEST-F3', 'farkle', 'Host', 'h1')
+      room = addSeat(room, 'g1', 'Guest', false)
+      room = addSeat(room, 'g2', 'Guest 2', false)
+      room = {
+        ...room,
+        screen: 'farkle' as const,
+        turnIdx: 2,
+        seats: room.seats.map((s) => (s.id === 'h1' ? { ...s, score: 10500 } : s.id === 'g2' ? { ...s, score: 400 } : s)),
+        farkle: { ...room.farkle, finalRound: true, finalTrigger: 'h1', turnScore: 500, dice: [] },
+      }
+      const result = applyAction(room, { type: 'farkleBank' }, 'g2')
+      expect(result.screen).toBe('results')
+      expect(result.winnerId).toBe('h1')
+    })
+
+    it('breaks a tie for highest score by stable seat order (earliest seat wins)', () => {
+      let room = makeRoom('TEST-F4', 'farkle', 'Host', 'h1')
+      room = addSeat(room, 'g1', 'Guest', false)
+      room = addSeat(room, 'g2', 'Guest 2', false)
+      room = {
+        ...room,
+        screen: 'farkle' as const,
+        turnIdx: 0,
+        seats: room.seats.map((s) => ({ ...s, score: 5000 })), // every seat tied
+        farkle: { ...room.farkle, finalRound: true, finalTrigger: 'g1', turnScore: 0, dice: [] },
+      }
+      const result = applyAction(room, { type: 'farkleEndTurn' }, 'h1')
+      expect(result.screen).toBe('results')
+      // All three seats tie at 5000; checkFarkleMatchEnd sorts by score with a stable sort, so
+      // ties keep the original seat order — the earliest-seated tied player wins. This documents
+      // CURRENT behavior (see the matching bullet in src/data/rules.ts), not a re-derived rule.
+      expect(result.winnerId).toBe('h1')
+    })
+  })
+})
+
 describe('ttt', () => {
   function tttRoom(): RoomState {
     let room = makeRoom('TEST-5', 'ttt', 'Host', 'h1')

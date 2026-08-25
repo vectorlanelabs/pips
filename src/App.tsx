@@ -358,6 +358,26 @@ export const CHECKERS_CROWN_EXTRA_MS = 1000
 // while the human's own mark sound is still playing. TTT_ACTION_MS gives the longer of the two
 // mark sounds room to finish before the bot moves.
 const TTT_ACTION_MS = 1600
+// Farkle reused bare BASE_MS (900ms) before every roll and a bare 0.6 factor (540ms) before
+// selecting kept dice or deciding to bank/reroll, with no Farkle-specific measurement, despite
+// scaling to 8 seats (GAME_MAX_SEATS.farkle) — up to 7 bots' turns can land between a human's
+// own turns (CLAUDE.md: judge pacing at a maxed-out table, not one bot in isolation). Every roll
+// is a visible state change on every client (useDiceAnimation's flicker isn't gated to the
+// acting seat, unlike sound — see FarkleTable), so it needs real read time regardless of who's
+// rolling. dice-roll/hot-dice run 1.392s/1.411s (measured via ffprobe); FARKLE_ACTION_MS clears
+// the longer of the two with margin. FARKLE_DECIDE_MS covers the shorter keep-dice/bank-or-
+// reroll decisions that follow a roll (analogous to the 0.6 factor other games use), which don't
+// have their own sound to clear.
+export const FARKLE_ACTION_MS = 1500
+export const FARKLE_DECIDE_MS = 900
+// Extra hold paid only before the FIRST roll of a fresh turn (never a mid-turn re-roll, which
+// only ever follows a plain roll's own dice-roll/hot-dice cue) — bank-points and farkle-bust are
+// heard only by the seat that banked/busted (FarkleTable gates sound on the acting player's own
+// turn) but still run far longer than an ordinary roll: bank-points measures 4.032s, and
+// farkle-bust measures 2.904s on top of its own 420ms flicker-settle delay (see FarkleTable's
+// bustTimer). FARKLE_ACTION_MS + FARKLE_TURN_START_EXTRA_MS (1500 + 2700 = 4200ms) clears the
+// longer of the two with margin, so the next seat's first roll never lands mid-cue.
+export const FARKLE_TURN_START_EXTRA_MS = 2700
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -4792,14 +4812,21 @@ export default function App() {
   // ---- End Skip-Bo helpers ----
 
   async function runFarkleBot(seatId: string, key: string) {
+    // Only the very first roll of this call is the start of a fresh turn — it's the one that
+    // follows the PREVIOUS seat's bank/bust cue (see FARKLE_TURN_START_EXTRA_MS above). Every
+    // later iteration is a mid-turn re-roll (hot dice or "roll again"), which only ever follows
+    // this same bot's own plain dice-roll/hot-dice cue, already cleared by FARKLE_ACTION_MS.
+    let freshTurn = true
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
-      await wait(BASE_MS * pace)
+      const rollWaitMs = FARKLE_ACTION_MS + (freshTurn ? FARKLE_TURN_START_EXTRA_MS : 0)
+      freshTurn = false
+      await wait(rollWaitMs * pace)
       if (stale(key)) return
       const rolled = hostApply({ type: 'farkleRoll' }, seatId)
       if (!rolled) return
       if (rolled.farkle.farkle) {
-        await wait(BASE_MS * pace)
+        await wait(FARKLE_ACTION_MS * pace)
         if (stale(key)) return
         hostApply({ type: 'farkleEndTurn' }, seatId)
         return
@@ -4809,7 +4836,7 @@ export default function App() {
         rolled.farkle.dice.map((d) => d.val), rolled.farkle.turnScore, seat.score,
         rolled.farkle.openingScore, rolled.farkle.winningScore, rolled.botDifficulty,
       )
-      await wait(BASE_MS * pace * 0.6)
+      await wait(FARKLE_DECIDE_MS * pace)
       if (stale(key)) return
       let cur = rolled
       for (const idx of move.keepIndices) {
@@ -4818,7 +4845,7 @@ export default function App() {
         if (!next) return
         cur = next
       }
-      await wait(BASE_MS * pace * 0.6)
+      await wait(FARKLE_DECIDE_MS * pace)
       if (stale(key)) return
       if (move.bank) {
         hostApply({ type: 'farkleBank' }, seatId)

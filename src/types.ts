@@ -93,7 +93,6 @@ export interface FarkleState {
   dice: Die[]
   kept: number[]
   turnScore: number
-  rolling: boolean
   farkle: boolean
   lost: number
   finalRound: boolean
@@ -103,6 +102,11 @@ export interface FarkleState {
   log: LogEntry[]
   winningScore: number
   openingScore: number
+  // Transient feedback for a rejected farkle action (roll/toggle/bank/endTurn) — set on the
+  // room-wide broadcast state, but only rendered by the seat named in `seatId` (see
+  // FarkleTable, matching TttState.rejection). `nonce` lets the same rejection reason fire
+  // visible feedback twice in a row (e.g. two stale bank presses in a row).
+  rejection: { seatId: string; reason: string; nonce: number } | null
 }
 
 export type YCategory =

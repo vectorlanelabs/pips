@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RoomState } from '../types'
 import { bestSubset, scoreSelection, tookFinalTurn } from '../games/farkle'
 import { Die } from '../components/Die'
@@ -84,6 +84,21 @@ export function FarkleTable({
       return () => clearTimeout(t)
     }
   }, [isMyTurn, f.farkle])
+
+  // Rejected actions (out-of-turn, a non-scoring selection, banking under the opening threshold,
+  // or nothing to bank) are otherwise silent no-ops — surface them briefly to the player who
+  // triggered them so a rejected attempt doesn't read as a dead button. `rejection` is broadcast
+  // on the shared room state but only shown to the seat it names (matches TttTable's precedent).
+  const [rejectionText, setRejectionText] = useState<string | null>(null)
+  const lastRejectionNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!f.rejection || f.rejection.seatId !== localSeatId) return
+    if (f.rejection.nonce === lastRejectionNonceRef.current) return
+    lastRejectionNonceRef.current = f.rejection.nonce
+    setRejectionText(f.rejection.reason)
+    const timer = setTimeout(() => setRejectionText(null), 2200)
+    return () => clearTimeout(timer)
+  }, [f.rejection, localSeatId])
 
   const trigIdx = f.finalTrigger ? room.seats.findIndex((s) => s.id === f.finalTrigger) : -1
 
@@ -178,6 +193,11 @@ export function FarkleTable({
             </div>
           </div>
 
+          {rejectionText && (
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--coral)', marginTop: 12 }}>
+              {rejectionText}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 18 }}>
             <button type="button" className="btn btn-coral btn-lg" disabled={f.farkle ? !isMyTurn : !canRoll} onClick={f.farkle ? onEndTurn : onRoll}>
               {rollLabel}

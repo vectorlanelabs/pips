@@ -78,9 +78,9 @@ export function makeSeat(id: string, name: string, bot: boolean, isHost: boolean
 
 function initFarkle(): FarkleState {
   return {
-    dice: [], kept: [], turnScore: 0, rolling: false, farkle: false, lost: 0,
+    dice: [], kept: [], turnScore: 0, farkle: false, lost: 0,
     finalRound: false, finalTrigger: null, status: 'Six dice, ready.', round: 1, log: [],
-    winningScore: 10000, openingScore: 500,
+    winningScore: 10000, openingScore: 500, rejection: null,
   }
 }
 
@@ -233,19 +233,27 @@ function isFarkleTurn(state: RoomState, by: string) {
   return state.seats[state.turnIdx]?.id === by
 }
 
+// Transient rejection notice for a Farkle action the host declined to apply — matches TTT's
+// tttReject precedent (docs/reviews/farkle-review.md major #3, see `git show 6211c0d`). Set on
+// the room-wide broadcast state, but only rendered by the seat named in `seatId`.
+function farkleReject(state: RoomState, f: FarkleState, by: string, reason: string): RoomState {
+  return { ...state, farkle: { ...f, rejection: { seatId: by, reason, nonce: Date.now() } } }
+}
+
 function farkleRoll(state: RoomState, by: string): RoomState {
-  if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
+  if (state.screen !== 'farkle') return state
   let f = state.farkle
+  if (!isFarkleTurn(state, by)) return farkleReject(state, f, by, "It's not your turn.")
   const selected = f.dice.filter((d) => d.sel)
   let turnScore = f.turnScore
   let kept = f.kept
   if (selected.length > 0) {
     const { valid, score } = scoreSelection(selected.map((d) => d.val))
-    if (!valid) return state
+    if (!valid) return farkleReject(state, f, by, "Select scoring dice — that mix doesn't score.")
     turnScore += score
     kept = [...kept, ...selected.map((d) => d.val)]
   } else if (f.dice.length > 0) {
-    return state
+    return farkleReject(state, f, by, 'Set aside a scoring die before rolling again.')
   }
   let remaining = 6 - kept.length
   if (remaining === 0) { remaining = 6; kept = [] }
@@ -258,17 +266,21 @@ function farkleRoll(state: RoomState, by: string): RoomState {
     return {
       ...state,
       seats,
-      farkle: { ...f, dice, kept, turnScore: 0, farkle: true, lost: turnScore, status: 'Farkle!', log },
+      farkle: { ...f, dice, kept, turnScore: 0, farkle: true, lost: turnScore, status: 'Farkle!', log, rejection: null },
     }
   }
-  return { ...state, farkle: { ...f, dice, kept, turnScore, farkle: false, status: 'Keep what scores.' } }
+  return { ...state, farkle: { ...f, dice, kept, turnScore, farkle: false, status: 'Keep what scores.', rejection: null } }
 }
 
 function farkleToggle(state: RoomState, by: string, dieId: number): RoomState {
-  if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
+  if (state.screen !== 'farkle') return state
   const f = state.farkle
+  if (!isFarkleTurn(state, by)) return farkleReject(state, f, by, "It's not your turn.")
+  // An absent/duplicate/stale dieId simply matches no die and is a no-op — harmless, since the
+  // host is the sole source of the dice array and a client can only ever reference ids it was
+  // actually sent (docs/reviews/farkle-review.md minor: covered by tests, not a behavior change).
   const dice = f.dice.map((d) => (d.id === dieId ? { ...d, sel: !d.sel } : d))
-  return { ...state, farkle: { ...f, dice } }
+  return { ...state, farkle: { ...f, dice, rejection: null } }
 }
 
 // Ends the match if the final lap just completed (turn arrived back at the
@@ -287,18 +299,21 @@ function checkFarkleMatchEnd(
 }
 
 function farkleBank(state: RoomState, by: string): RoomState {
-  if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
+  if (state.screen !== 'farkle') return state
   const f = state.farkle
+  if (!isFarkleTurn(state, by)) return farkleReject(state, f, by, "It's not your turn.")
   const selected = f.dice.filter((d) => d.sel)
   let turnScore = f.turnScore
   if (selected.length > 0) {
     const { valid, score } = scoreSelection(selected.map((d) => d.val))
-    if (!valid) return state
+    if (!valid) return farkleReject(state, f, by, "Select scoring dice — that mix doesn't score.")
     turnScore += score
   }
   const seat = state.seats.find((s) => s.id === by)!
-  if (seat.score === 0 && turnScore < f.openingScore) return state
-  if (turnScore <= 0) return state
+  if (seat.score === 0 && turnScore < f.openingScore) {
+    return farkleReject(state, f, by, `Reach ${f.openingScore.toLocaleString()} to open.`)
+  }
+  if (turnScore <= 0) return farkleReject(state, f, by, 'Nothing to bank yet.')
   const newScore = seat.score + turnScore
   const seats = state.seats.map((s) => (s.id === by ? { ...s, score: newScore, best: Math.max(s.best, turnScore) } : s))
   const log = [...f.log, { who: seat.name, color: seat.color, amount: turnScore, tone: 'bank' as const }]
@@ -308,16 +323,22 @@ function farkleBank(state: RoomState, by: string): RoomState {
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
   const ended = checkFarkleMatchEnd(seats, turnIdx, finalRound, finalTrigger)
   if (ended) {
-    return { ...state, seats, screen: 'results', winnerId: ended.winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [] } }
+    return { ...state, seats, screen: 'results', winnerId: ended.winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [], rejection: null } }
   }
-  return { ...state, seats, turnIdx, farkle: { ...f, log, turnScore: 0, dice: [], kept: [], farkle: false, finalRound, finalTrigger, round, status: 'Six dice, ready.' } }
+  return {
+    ...state,
+    seats,
+    turnIdx,
+    farkle: { ...f, log, turnScore: 0, dice: [], kept: [], farkle: false, finalRound, finalTrigger, round, status: 'Six dice, ready.', rejection: null },
+  }
 }
 
 function farkleEndTurn(state: RoomState, by: string): RoomState {
-  if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
+  if (state.screen !== 'farkle') return state
   const f = state.farkle
+  if (!isFarkleTurn(state, by)) return farkleReject(state, f, by, "It's not your turn.")
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
-  const nextFarkle = { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.' }
+  const nextFarkle = { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.', rejection: null }
   const ended = checkFarkleMatchEnd(state.seats, turnIdx, f.finalRound, f.finalTrigger)
   if (ended) return { ...state, turnIdx, screen: 'results', winnerId: ended.winnerId, farkle: nextFarkle }
   return { ...state, turnIdx, farkle: nextFarkle }

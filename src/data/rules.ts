@@ -23,6 +23,7 @@ export const RULES: Record<Game, RuleContent> = {
       'Keep all six scoring dice and all six come back — hot dice.',
       'Bank at least 500 the first time you get on the board.',
       'First to 10,000 triggers a final round; highest score when it comes back around wins.',
+      'A tie for highest score goes to whoever sits earliest at the table.',
     ],
   },
   yahtzee: {
