@@ -119,3 +119,33 @@ tests in `yahtzee.test.ts` that currently lock in the zeroed-box behavior
 would need to change together.
 
 ---
+
+## From [phase10-review.md](phase10-review.md)
+
+**Phase 10 Skip-card rule contradiction.** `Phase10RulesOverlay.tsx` says a
+discarded Skip skips the opponent's next turn "once per player per round."
+`rules.ts`'s `DISCARD_CARD` handler has no per-round Skip-target tracking at
+all: every discarded Skip calls `skipNext`, unconditionally, every time. The
+existing integration tests explicitly codify the repeat behavior as correct
+(`phase10.test.ts`, `'discarding a second Skip the same round skips again'`)
+— this isn't an oversight, it's a prior deliberate choice that the overlay
+copy was never brought in line with. In a 3-6 player game, a player can be
+skipped repeatedly in the same round; in 2-player, the same opponent can be
+denied every intervening turn by repeatedly discarding Skips.
+
+**Question:** which behavior is actually intended?
+
+1. **Once-per-player-per-round (matches the overlay today).** Add
+   round-scoped tracking of which target/player has already been skipped
+   this round, reject a repeat `DISCARD_CARD` of a Skip against an
+   already-skipped target with a surfaced reason (or simply not re-apply
+   `skipNext` for it — the discard itself still succeeds, only the skip
+   effect doesn't reapply), reset the tracking in `START_NEXT_ROUND`, and
+   replace the two tests that currently assert the repeat-Skip behavior
+   with tests asserting the restriction.
+2. **No restriction (matches the engine today).** Leave `rules.ts` and the
+   existing tests as they are, and correct the rules overlay bullet to
+   describe what actually happens (drop "once per player per round" —
+   every discarded Skip skips the next turn, full stop).
+
+---

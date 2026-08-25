@@ -34,13 +34,15 @@ export function Phase10Results({
 }: Phase10ResultsProps) {
   void localName // kept in props for symmetry with the other results screens; the headline uses the winner's name
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.matchWinnerId === localPlayerId
+  // Only the winner hears the victory cue — the loser hearing the same 'game-win' fanfare
+  // would contradict the "X wins!" headline they're looking at.
+  useEffect(() => { if (isLocalWinner) play('game-win') }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (!publicState.matchWinnerId) return null
 
   const winnerId = publicState.matchWinnerId
-  const isLocalWinner = winnerId === localPlayerId
   const headline = isLocalWinner ? 'You win!' : `${names[winnerId] ?? winnerId} wins!`
   const headlineColor = colors[winnerId] ?? BRAND
 
