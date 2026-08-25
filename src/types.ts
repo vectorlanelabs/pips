@@ -122,6 +122,11 @@ export interface YahtzeeState {
   rolling: boolean
   status: string
   lastTurn: { name: string; color: string; category: YCategory; points: number } | null
+  // Transient feedback for a rejected yahtzee action (roll/toggleHold/score) — set on the
+  // room-wide broadcast state, but only rendered by the seat named in `seatId` (see
+  // YahtzeeTable, matching TttState/FarkleState.rejection). `nonce` lets the same rejection
+  // reason fire visible feedback twice in a row.
+  rejection: { seatId: string; reason: string; nonce: number } | null
 }
 
 export interface TttState {

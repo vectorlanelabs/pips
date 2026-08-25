@@ -97,3 +97,25 @@ should the copy be softened (e.g. "finishes off every remaining legal
 foundation move for you")?
 
 ---
+
+## From [yahtzee-review.md](yahtzee-review.md)
+
+**Yahtzee Joker rule after a zeroed Yahtzee box.** `scoreCategory` in
+`src/games/yahtzee.ts` treats the Joker (five-of-a-kind scoring in an open
+lower box once the Yahtzee box is no longer open) as available whenever
+`card.yahtzee !== undefined` — that includes a Yahtzee box that was
+deliberately scored as a 0, not just one that scored the real 50. This is
+now documented as-is in the rules overlay (`src/data/rules.ts`) and locked in
+by existing tests (`src/games/yahtzee.test.ts`), so players can at least see
+what the app does. Whether that specific case — Joker scoring still being
+available after a *zeroed* Yahtzee box — is the intended standard-Yahtzee
+house rule, versus Joker scoring that should only unlock after an actual
+50-point Yahtzee, is a rule call this pass did not make.
+
+**Question:** should a zeroed-out Yahtzee box still unlock Joker scoring in
+the lower section, or should Jokers require an actual scored (50-point)
+Yahtzee first? If the latter, `scoreCategory`'s `joker` predicate and the
+tests in `yahtzee.test.ts` that currently lock in the zeroed-box behavior
+would need to change together.
+
+---
