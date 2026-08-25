@@ -33,13 +33,15 @@ export function MexicanTrainResults({
 }: MexicanTrainResultsProps) {
   void localName // kept in props for symmetry with the other results screens; the headline uses the winner's name
   const { play } = useSound()
-  useEffect(() => { play('game-win') }, [])
+  const isLocalWinner = publicState.matchWinnerId === localPlayerId
+  // Only the winner hears the victory cue — the loser hearing the same 'game-win' fanfare
+  // contradicts what their own screen says happened.
+  useEffect(() => { if (isLocalWinner) play('game-win') }, [isLocalWinner, play])
 
   // Only render when the match is over
   if (publicState.stage !== 'over' || publicState.matchWinnerId === null) return null
 
   const winnerId = publicState.matchWinnerId
-  const isLocalWinner = winnerId === localPlayerId
   const headline = isLocalWinner ? 'You take it!' : `${names[winnerId] ?? winnerId} takes it!`
   const headlineColor = colors[winnerId] ?? BRAND
   const lede = `${names[winnerId] ?? winnerId} finished with the fewest pips after all thirteen rounds.`

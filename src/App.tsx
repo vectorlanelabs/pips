@@ -182,6 +182,10 @@ type CheckersView =
 type MTView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type ChessView =
   | { kind: 'game'; revision: number; publicState: ChessPublicState; opponentName: string }
   // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
@@ -267,6 +271,18 @@ const WAHOO_ACTION_MS = 1600
 // the full cue (1600 + 1600 = 3200ms > 2904ms, with margin for network/render latency).
 const WAHOO_BUST_EXTRA_MS = 1600
 const MT_ACTION_MS = 1100
+// Same rationale as DOMINOES_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
+// render/paint time on top of estimateDealIntroMs's pure animation estimate.
+const MT_DEAL_HOLD_BUFFER_MS = 700
+
+// Pure so a regression test can pin the round-start bot hold against the actual dealt-tile total
+// (32-72 tiles across 2-8 seats) without mounting the app. `handCounts` is the fresh-round
+// MTPublicState field — every seat's hand size sums to the total DealIntro flight count (see
+// MexicanTrainTable's `maxFlights={hand.length + others total}`).
+export function mtDealHoldMs(handCounts: Record<string, number>): number {
+  const totalFlights = Object.values(handCounts).reduce((a, b) => a + b, 0)
+  return estimateDealIntroMs(totalFlights) + MT_DEAL_HOLD_BUFFER_MS
+}
 // Yahtzee was reusing bare BASE_MS across its 3-roll/2-hold/1-score turn shape, which measured at
 // ~4.6s per bot turn against a human averaging ~10-13s per turn on the same table (see spec/
 // console-timing audit) — the bot felt like it was "always my turn" instead of a real opponent
@@ -652,6 +668,9 @@ export default function App() {
   const mtBotSeatsRef = useRef<Set<string>>(new Set())
   const mtBotCounterRef = useRef(0)
   const mtDroppedRef = useRef<string[]>([])
+  const mtBotsHeldUntilRef = useRef(0)
+  const mtLastRoundRef = useRef<number | null>(null)
+  const mtRejectionNoticeRef = useRef<string | null>(null)
   const chessSessionRef = useRef<ChessSession | null>(null)
   const chessHostRef = useRef<HostHandle<ChessView> | null>(null)
   const chessGuestRef = useRef<GuestHandle<ChessAction> | null>(null)
@@ -1131,6 +1150,9 @@ export default function App() {
     mtBotSeatsRef.current.clear()
     mtBotCounterRef.current = 0
     mtNamesRef.current = {}
+    mtBotsHeldUntilRef.current = 0
+    mtLastRoundRef.current = null
+    mtRejectionNoticeRef.current = null
     // Chess
     chessHostRef.current?.destroy()
     chessHostRef.current = null
@@ -3427,6 +3449,14 @@ export default function App() {
       return
     }
     const session = mtSessionRef.current!
+    const currentRound = session.session.publicState.round
+    if (currentRound !== mtLastRoundRef.current) {
+      mtLastRoundRef.current = currentRound
+      // Every fresh round deals the full 2-8-seat, 32-72-tile spread — hold bots until each
+      // client's local DealIntro (see MexicanTrainTable's maxFlights) has had time to actually
+      // finish, not just estimateDealIntroMs's pure animation window.
+      mtBotsHeldUntilRef.current = Date.now() + mtDealHoldMs(session.session.publicState.handCounts)
+    }
     const hostSnap = deriveSnapshot(session.session, mtLocalPlayerIdRef.current!)
     setMTView({
       kind: 'game',
@@ -3489,7 +3519,12 @@ export default function App() {
         if (!session) return
         if (!mtSeatsRef.current.some((s) => s.playerId === guestId)) return
         const result = applyMTAction(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          mtHostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         mtSessionRef.current = result.mt
         mtBroadcast()
       },
@@ -3561,8 +3596,10 @@ export default function App() {
 
   async function runMTBots(botId: string, key: string) {
     while (!mtStale(key)) {
-      await wait(MT_ACTION_MS)
+      const holdRemaining = mtBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : MT_ACTION_MS)
       if (mtStale(key)) return
+      if (Date.now() < mtBotsHeldUntilRef.current) continue
       const session = mtSessionRef.current!
       const ps = session.session.publicState
       if (ps.stage !== 'play') return
@@ -3610,8 +3647,19 @@ export default function App() {
           setMTView(view)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // mtView/localRevision, so it can't be mistaken for (or block) a real state update.
+          mtRejectionNoticeRef.current = view.message
+          setMTNotice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setMTNotice((prev) => (prev !== null && prev === mtRejectionNoticeRef.current ? null : prev))
+        mtRejectionNoticeRef.current = null
         setMTView(view)
         setMTStarted(true)
       },
@@ -3643,7 +3691,18 @@ export default function App() {
       const session = mtSessionRef.current
       if (!session) return
       const result = applyMTAction(session, mtLocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        mtRejectionNoticeRef.current = reason
+        setMTNotice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (mtNotice !== null && mtNotice === mtRejectionNoticeRef.current) {
+        setMTNotice(null)
+      }
+      mtRejectionNoticeRef.current = null
       mtSessionRef.current = result.mt
       mtBroadcast()
     } else if (mtRole === 'guest') {
@@ -3661,6 +3720,9 @@ export default function App() {
     const next = createMexicanTrainGame(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
     mtSessionRef.current = next
+    // Force the deal-intro hold to recompute even if the finished match's last round happened
+    // to also be round 0 — a rematch always deals a fresh full spread of hands.
+    mtLastRoundRef.current = null
     mtBroadcast()
   }
 

@@ -8,8 +8,8 @@ export function MexicanTrainRulesOverlay({ onClose }: { onClose: () => void }) {
   const rules = [
     'You may always play on your own train or the Mexican train.',
     'Another player’s train is only playable when its signal turns green (marked open).',
-    'Can’t play? Draw one tile; if it’s still no help, your train opens and your turn passes.',
-    'Playing a double earns you an extra play right away.',
+    'Can’t play? Draw one tile; if it’s still no help, your train opens and your turn passes. If the boneyard is empty, your turn passes automatically.',
+    'Playing a double earns you an extra play right away — you stay the active player until you resolve it (play again, or draw/pass if you’re stuck).',
     'The engine drops by one double each round, 12 down to 0.',
   ]
 

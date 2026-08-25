@@ -29,16 +29,20 @@ export function MexicanTrainRoom({
   const [rulesOpen, setRulesOpen] = useState(false)
 
   function copyLink() {
+    if (!navigator.clipboard) return
     const url = `${location.origin}${location.pathname}?join=${code}`
-    navigator.clipboard?.writeText(url).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1800)
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    }).catch(() => {})
   }
 
   function copyCode() {
-    navigator.clipboard?.writeText(code).catch(() => {})
-    setCodeCopied(true)
-    setTimeout(() => setCodeCopied(false), 1800)
+    if (!navigator.clipboard) return
+    navigator.clipboard.writeText(code).then(() => {
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 1800)
+    }).catch(() => {})
   }
 
   const hostName = seats.find((s) => s.isHost)?.name ?? 'the host'

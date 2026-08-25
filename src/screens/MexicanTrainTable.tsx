@@ -274,8 +274,14 @@ export function MexicanTrainTable({
     () => computeRailStatus(publicState, localPlayerId, names),
     [publicState, localPlayerId, names],
   )
+  // Boneyard empty + no legal play: the host auto-applies PASS for you after a short beat
+  // (see App.tsx's auto-pass effect) — nothing to click, so say so instead of leaving the
+  // player wondering why the table went quiet.
+  const autoPassing = canAct && noLegalPlay && publicState.boneyardCount === 0
   const hint = canAct
-    ? (selectedTile !== null ? 'Tap a glowing train to place it.' : 'Pick a tile from your hand.')
+    ? (autoPassing
+        ? 'No move — passing…'
+        : selectedTile !== null ? 'Tap a glowing train to place it.' : 'Pick a tile from your hand.')
     : null
   const canDraw = canAct && noLegalPlay && publicState.boneyardCount > 0
 
@@ -358,6 +364,7 @@ export function MexicanTrainTable({
             shuffleSound="domino-shuffle"
             renderCardBack={(p) => <MTTileBack {...p} />}
             onComplete={() => setShowIntro(false)}
+            maxFlights={hand.length + others.reduce((sum, o) => sum + o.handSize, 0)}
           />
         ) : (
         <>
@@ -409,7 +416,7 @@ export function MexicanTrainTable({
             <div className="mt-track-stub" />
           </div>
 
-          {/* The five lanes */}
+          {/* The lanes: one Mexican train shared by everyone, plus one train per seat */}
           <div className="mt-lanes">
             {laneOrder.map((lane) => {
               const isMex = lane === 'mex'
