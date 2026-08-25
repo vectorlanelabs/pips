@@ -40,7 +40,7 @@ function savedCardBack(): string {
 }
 
 // ---- Phase 10 (separate parallel session, per CHARTER.md resolution #7) ----
-import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
+import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, PHASE10_HAND_SIZE, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
 import { applyPhase10Action, runPhase10BotTurn } from './card-games/phase10/rules'
 import { phase10BotStrategy } from './card-games/phase10/bot'
 import { Phase10Table } from './screens/Phase10Table'
@@ -153,6 +153,10 @@ type RummyView =
 type Phase10View =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
+  // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
+  // action is rejected — carries the validator's reason so the table can show WHY nothing happened
+  // instead of the action just silently doing nothing. Never stored as the guest's current view.
+  | { kind: 'notice'; message: string }
 type BattleshipView =
   | { kind: 'game'; revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
   // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
@@ -259,6 +263,15 @@ const RUMMY_ACTION_MS = 1600
 // Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
 // render/paint time on top of estimateDealIntroMs's pure animation estimate.
 const RUMMY_DEAL_HOLD_BUFFER_MS = 700
+// Phase 10: same turn shape as Rummy (draw, then optional lay-phase/hit(s), then discard),
+// each its own broadcast state change with its own card sound — reuses Rummy's measured
+// card-game-scale pace for the identical reason, not as a blind default (see CLAUDE.md's
+// "never reuse a shared pacing constant" rule). At a full 6-seat table this still leaves a
+// human able to follow up to 5 consecutive bot turns between their own.
+const PHASE10_ACTION_MS = 1600
+// Same rationale as UNO_DEAL_HOLD_BUFFER_MS: slack for network latency and per-client
+// render/paint time on top of estimateDealIntroMs's pure animation estimate.
+const PHASE10_DEAL_HOLD_BUFFER_MS = 700
 // Wahoo: reused bare BASE_MS (900ms) + a 450ms pass/bust-only buffer, which cuts off the game's
 // own sounds — measured dice-roll runs 1.392s and piece-drop runs 1.032s, both longer than a
 // bare 900ms gap between actions. WAHOO_ACTION_MS covers every ordinary action (roll or move)
@@ -617,6 +630,9 @@ export default function App() {
   const phase10NamesRef = useRef<Record<string, string>>({})
   const phase10BotSeatsRef = useRef<Set<string>>(new Set())
   const phase10BotCounterRef = useRef(0)
+  const phase10BotsHeldUntilRef = useRef(0)
+  const phase10LastRoundRef = useRef<number | null>(null)
+  const phase10RejectionNoticeRef = useRef<string | null>(null)
   const battleshipSessionRef = useRef<BattleshipSession | null>(null)
   const battleshipHostRef = useRef<HostHandle<BattleshipView> | null>(null)
   const battleshipGuestRef = useRef<GuestHandle<BattleshipAction> | null>(null)
@@ -1041,6 +1057,9 @@ export default function App() {
     phase10BotSeatsRef.current.clear()
     phase10BotCounterRef.current = 0
     phase10NamesRef.current = {}
+    phase10BotsHeldUntilRef.current = 0
+    phase10LastRoundRef.current = null
+    phase10RejectionNoticeRef.current = null
     // Battleship
     battleshipHostRef.current?.destroy()
     battleshipHostRef.current = null
@@ -2251,6 +2270,12 @@ export default function App() {
       return
     }
     const session = phase10SessionRef.current!
+    const currentRound = session.session.publicState.roundNumber
+    if (currentRound !== phase10LastRoundRef.current) {
+      phase10LastRoundRef.current = currentRound
+      const totalFlights = session.session.publicState.seatOrder.length * PHASE10_HAND_SIZE
+      phase10BotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(totalFlights) + PHASE10_DEAL_HOLD_BUFFER_MS
+    }
     const hostSnap = deriveSnapshot(session.session, phase10LocalPlayerIdRef.current!)
     setPhase10View({
       kind: 'game',
@@ -2311,7 +2336,12 @@ export default function App() {
         if (!session) return
         if (!phase10SeatsRef.current.some((s) => s.playerId === guestId)) return
         const result = applyPhase10Action(session, guestId, action)
-        if (!result.outcome.ok) return
+        if (!result.outcome.ok) {
+          // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
+          // their action did nothing, even though canonical state didn't change.
+          phase10HostRef.current?.sendTo(guestId, { kind: 'notice', message: result.outcome.reason ?? 'that move is not allowed' })
+          return
+        }
         phase10SessionRef.current = result.game
         phase10Broadcast()
       },
@@ -2361,8 +2391,10 @@ export default function App() {
 
   async function runPhase10Bot(botId: string, key: string) {
     while (!phase10Stale(key)) {
-      await wait(BASE_MS)
+      const holdRemaining = phase10BotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : PHASE10_ACTION_MS)
       if (phase10Stale(key)) return
+      if (Date.now() < phase10BotsHeldUntilRef.current) continue
       const session = phase10SessionRef.current!
       const ps = session.session.publicState
       if (ps.roundOver || ps.matchWinnerId) return
@@ -2404,8 +2436,19 @@ export default function App() {
           setPhase10Started(false)
           return
         }
+        if (view.kind === 'notice') {
+          // Out-of-band rejection feedback for MY OWN last action — never touches
+          // phase10View/localRevision, so it can't be mistaken for (or block) a real state update.
+          phase10RejectionNoticeRef.current = view.message
+          setPhase10Notice(view.message)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
+        // A fresh accepted state means my last action (if any) went through — clear a
+        // rejection notice I set, but never stomp an unrelated one (e.g. a disconnect banner).
+        setPhase10Notice((prev) => (prev !== null && prev === phase10RejectionNoticeRef.current ? null : prev))
+        phase10RejectionNoticeRef.current = null
         setPhase10View(view)
         setPhase10Started(true)
       },
@@ -2437,7 +2480,18 @@ export default function App() {
       const session = phase10SessionRef.current
       if (!session) return
       const result = applyPhase10Action(session, phase10LocalPlayerId, action)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        const reason = result.outcome.reason ?? 'that move is not allowed'
+        phase10RejectionNoticeRef.current = reason
+        setPhase10Notice(reason)
+        return
+      }
+      // Only clear the notice if it's still the rejection message this same function set —
+      // don't stomp an unrelated notice (e.g. a disconnect banner) that may have arrived since.
+      if (phase10Notice !== null && phase10Notice === phase10RejectionNoticeRef.current) {
+        setPhase10Notice(null)
+      }
+      phase10RejectionNoticeRef.current = null
       phase10SessionRef.current = result.game
       phase10Broadcast()
     } else if (phase10Role === 'guest') {
@@ -5615,7 +5669,6 @@ export default function App() {
         onLayPhase={(cardIds) => phase10Dispatch({ type: 'LAY_PHASE', cardIds })}
         onHit={(targetPlayerId, groupIndex, cardIds) => phase10Dispatch({ type: 'HIT', targetPlayerId, groupIndex, cardIds })}
         onDiscard={(cardId) => phase10Dispatch({ type: 'DISCARD_CARD', cardId })}
-        onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
     )

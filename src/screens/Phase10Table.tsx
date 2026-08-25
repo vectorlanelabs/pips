@@ -32,7 +32,6 @@ export interface Phase10TableProps {
   onLayPhase: (cardIds: string[]) => void
   onHit: (targetPlayerId: string, groupIndex: number, cardIds: string[]) => void
   onDiscard: (cardId: string) => void
-  onOpenRules: () => void
   onLeave: () => void
 }
 
@@ -248,6 +247,12 @@ function GroupCluster({ cards, type, ownerColor, ownerShadow, caption, onHit }: 
       <div
         className={`p10-group${onHit ? ' p10-group--hittable' : ''}`}
         onClick={onHit}
+        onKeyDown={onHit ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onHit()
+          }
+        } : undefined}
         role={onHit ? 'button' : undefined}
         tabIndex={onHit ? 0 : undefined}
       >
@@ -360,11 +365,9 @@ export function Phase10Table({
   onLayPhase,
   onHit,
   onDiscard,
-  onOpenRules,
   onLeave,
 }: Phase10TableProps) {
   void localName // kept in props for symmetry; names[localPlayerId] is the canonical local display name
-  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Derived ----
   const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
@@ -495,13 +498,19 @@ export function Phase10Table({
     [publicState, localPlayerId, names],
   )
 
-  // DRAW_FROM_STOCK is always a legal attempt during the draw phase — the validator itself
-  // handles an empty stock by recycling the discard pile or, if that's not possible either,
-  // blocking the round. Gating this on stockCount > 0 would make the stock unclickable in
-  // exactly the states the engine is designed to resolve.
-  const canDrawStock = canAct && publicState.turn.phase === 'draw'
   const pile = publicState.discardPile.cards
   const discardTop = pile.length > 0 ? pile[pile.length - 1] : null
+  // DRAW_FROM_STOCK is a legal attempt during the draw phase in every empty-stock state
+  // EXCEPT one: stock empty + exactly one non-Skip card on the discard pile. There, the
+  // validator rejects it outright — a lone drawable discard card must be taken via
+  // DRAW_FROM_DISCARD instead, not recycled (recycling needs >= 2 discard cards; a lone
+  // Skip or an empty discard blocks the round rather than rejecting). Every other empty-stock
+  // case (0 discard cards, a lone Skip, or 2+ discard cards) the engine resolves itself, so
+  // gating on stockCount > 0 in general would make the stock unclickable in states it's
+  // designed to handle — only this one exact rejection case needs disabling here.
+  const stockDrawBlockedByLoneDiscard =
+    publicState.stockCount === 0 && pile.length === 1 && discardTop?.meta?.kind !== 'skip'
+  const canDrawStock = canAct && publicState.turn.phase === 'draw' && !stockDrawBlockedByLoneDiscard
   // Top card only, and a Skip can never be taken off the discard pile.
   const canDrawDiscard = canAct && publicState.turn.phase === 'draw' && discardTop !== null && discardTop.meta?.kind !== 'skip'
 

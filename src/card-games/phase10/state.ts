@@ -96,6 +96,11 @@ export const PHASE10_MAX_SEATS = 6   // 108-card deck at a 10-card hand: 6 playe
                                        // still leave 47 in stock — comfortable; matches real Phase 10's own
                                        // official 6-player cap, both lines of reasoning agree
 
+// Cards dealt to each seated player at the start of every round. Exported so the host's deal-intro
+// pacing (App.tsx) can compute the total number of card flights (seatOrder.length * PHASE10_HAND_SIZE)
+// without duplicating this number.
+export const PHASE10_HAND_SIZE = 10
+
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
 export function dealRound(
   playerIds: string[],
@@ -106,7 +111,7 @@ export function dealRound(
   let remaining = shuffled
   const hands: Record<string, Zone> = {}
   for (const playerId of playerIds) {
-    const { dealt, remaining: rest } = dealCards(remaining, 10)
+    const { dealt, remaining: rest } = dealCards(remaining, PHASE10_HAND_SIZE)
     hands[playerId] = addCards(createHand(playerId), dealt)
     remaining = rest
   }

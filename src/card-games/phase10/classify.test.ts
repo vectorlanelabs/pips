@@ -402,4 +402,154 @@ describe('classifyPhaseHand', () => {
     expect(result.groups).toHaveLength(1)
     expect(result.groups![0].type).toBe('run')
   })
+
+  it('accepts phase 2 with a set of 3 plus a run of 4', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '5'),
+      numberCard('c2', 'blue', '5'),
+      numberCard('c3', 'green', '5'),
+      numberCard('c4', 'red', '1'),
+      numberCard('c5', 'red', '2'),
+      numberCard('c6', 'red', '3'),
+      numberCard('c7', 'red', '4'),
+    ], PHASES[1])
+    expect(result.valid).toBe(true)
+    expect(result.groups).toHaveLength(2)
+    expect(result.groups!.map((g) => g.type).sort()).toEqual(['run', 'set'])
+  })
+
+  it('rejects phase 2 when the run part has a gap and no wild', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '5'),
+      numberCard('c2', 'blue', '5'),
+      numberCard('c3', 'green', '5'),
+      numberCard('c4', 'red', '1'),
+      numberCard('c5', 'red', '2'),
+      numberCard('c6', 'red', '3'),
+      numberCard('c7', 'red', '9'),
+    ], PHASES[1])
+    expect(result.valid).toBe(false)
+  })
+
+  it('accepts phase 3 with a set of 4 plus a run of 4', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '7'),
+      numberCard('c2', 'blue', '7'),
+      numberCard('c3', 'green', '7'),
+      numberCard('c4', 'yellow', '7'),
+      numberCard('c5', 'red', '9'),
+      numberCard('c6', 'red', '10'),
+      numberCard('c7', 'red', '11'),
+      numberCard('c8', 'red', '12'),
+    ], PHASES[2])
+    expect(result.valid).toBe(true)
+    expect(result.groups).toHaveLength(2)
+    expect(result.groups!.map((g) => g.type).sort()).toEqual(['run', 'set'])
+  })
+
+  it('rejects phase 3 when the set part is only 3 cards, not 4', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '7'),
+      numberCard('c2', 'blue', '7'),
+      numberCard('c3', 'green', '7'),
+      numberCard('c4', 'red', '9'),
+      numberCard('c5', 'red', '10'),
+      numberCard('c6', 'red', '11'),
+      numberCard('c7', 'red', '12'),
+      numberCard('c8', 'yellow', '1'),
+    ], PHASES[2])
+    expect(result.valid).toBe(false)
+  })
+
+  it('accepts phase 5 with an 8-card run', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '1'),
+      numberCard('c2', 'red', '2'),
+      numberCard('c3', 'red', '3'),
+      numberCard('c4', 'red', '4'),
+      numberCard('c5', 'red', '5'),
+      numberCard('c6', 'red', '6'),
+      numberCard('c7', 'red', '7'),
+      numberCard('c8', 'red', '8'),
+    ], PHASES[4])
+    expect(result.valid).toBe(true)
+    expect(result.groups).toHaveLength(1)
+    expect(result.groups![0].type).toBe('run')
+  })
+
+  it('rejects phase 5 with only a 7-card run (one short)', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '1'),
+      numberCard('c2', 'red', '2'),
+      numberCard('c3', 'red', '3'),
+      numberCard('c4', 'red', '4'),
+      numberCard('c5', 'red', '5'),
+      numberCard('c6', 'red', '6'),
+      numberCard('c7', 'red', '7'),
+      numberCard('c8', 'blue', '9'),
+    ], PHASES[4])
+    expect(result.valid).toBe(false)
+  })
+
+  it('accepts phase 6 with a 9-card run', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '1'),
+      numberCard('c2', 'red', '2'),
+      numberCard('c3', 'red', '3'),
+      numberCard('c4', 'red', '4'),
+      numberCard('c5', 'red', '5'),
+      numberCard('c6', 'red', '6'),
+      numberCard('c7', 'red', '7'),
+      numberCard('c8', 'red', '8'),
+      numberCard('c9', 'red', '9'),
+    ], PHASES[5])
+    expect(result.valid).toBe(true)
+    expect(result.groups).toHaveLength(1)
+    expect(result.groups![0].type).toBe('run')
+  })
+
+  it('rejects phase 6 with a duplicated rank breaking the run', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '1'),
+      numberCard('c2', 'red', '2'),
+      numberCard('c3', 'red', '3'),
+      numberCard('c4', 'red', '4'),
+      numberCard('c5', 'red', '5'),
+      numberCard('c6', 'red', '6'),
+      numberCard('c7', 'red', '7'),
+      numberCard('c8', 'red', '8'),
+      numberCard('c9', 'blue', '8'),
+    ], PHASES[5])
+    expect(result.valid).toBe(false)
+  })
+
+  it('accepts phase 7 with two sets of 4', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '3'),
+      numberCard('c2', 'blue', '3'),
+      numberCard('c3', 'green', '3'),
+      numberCard('c4', 'yellow', '3'),
+      numberCard('c5', 'red', '8'),
+      numberCard('c6', 'blue', '8'),
+      numberCard('c7', 'green', '8'),
+      numberCard('c8', 'yellow', '8'),
+    ], PHASES[6])
+    expect(result.valid).toBe(true)
+    expect(result.groups).toHaveLength(2)
+    expect(result.groups!.every((g) => g.type === 'set')).toBe(true)
+  })
+
+  it('rejects phase 7 when one set is short a matching card', () => {
+    const result = classifyPhaseHand([
+      numberCard('c1', 'red', '3'),
+      numberCard('c2', 'blue', '3'),
+      numberCard('c3', 'green', '3'),
+      numberCard('c4', 'yellow', '3'),
+      numberCard('c5', 'red', '8'),
+      numberCard('c6', 'blue', '8'),
+      numberCard('c7', 'green', '8'),
+      numberCard('c8', 'yellow', '9'),
+    ], PHASES[6])
+    expect(result.valid).toBe(false)
+  })
 })

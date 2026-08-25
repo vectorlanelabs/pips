@@ -23,7 +23,7 @@ export function Phase10RulesOverlay({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
         <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginTop: 14 }}>
-          Work up the phase ladder, one hand at a time. Two players, a dedicated 108-card deck.
+          Work up the phase ladder, one hand at a time. Two to six players, a dedicated 108-card deck.
         </p>
         <ul style={{ marginTop: 16, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {bullets.map((b) => (

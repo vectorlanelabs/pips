@@ -482,7 +482,7 @@
   flex: none;
 }
 
-/* A group the single selected card can validly be hit onto — matches the yellow
+/* A group the currently selected card(s) can validly be hit onto — matches the yellow
    "you may act here" language used elsewhere (selected cards, drawable stock). */
 .p10-group--hittable {
   cursor: pointer;

@@ -352,6 +352,319 @@ describe('Phase 10 integration harness', () => {
     expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(10)
   })
 
+  // Direct applyPhase10Action fixtures for the phases that previously had no end-to-end
+  // coverage (only 1, 4, 8, 9, 10 were exercised through the host action boundary).
+  it('LAY_PHASE — phase 2 (1 set of 3 + 1 run of 4) valid selection', () => {
+    const p1Cards = ['p10-8', 'p10-32', 'p10-56', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-42', 'p10-44', 'p10-46']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 1, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-8', 'p10-32', 'p10-56', 'p10-0', 'p10-2', 'p10-4', 'p10-6'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups.map((g) => g.type).sort()).toEqual(['run', 'set'])
+    expect(groups.map((g) => g.phaseNumber)).toEqual([2, 2])
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — phase 2 rejected when the run is broken with no wild to fill it', () => {
+    const p1Cards = ['p10-8', 'p10-32', 'p10-56', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-42', 'p10-44', 'p10-46']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 1, p2: 0 },
+    })
+
+    // {8,32,56} is the only valid 3-set here; the remaining 4 (1,2,3,10) isn't a valid run.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-8', 'p10-32', 'p10-56', 'p10-0', 'p10-2', 'p10-4', 'p10-42'],
+    })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('does not complete your phase')
+  })
+
+  it('LAY_PHASE — phase 3 (1 set of 4 + 1 run of 4) valid selection', () => {
+    const p1Cards = ['p10-12', 'p10-36', 'p10-60', 'p10-84', 'p10-16', 'p10-18', 'p10-20', 'p10-22', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 2, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-12', 'p10-36', 'p10-60', 'p10-84', 'p10-16', 'p10-18', 'p10-20', 'p10-22'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups.map((g) => g.type).sort()).toEqual(['run', 'set'])
+    expect(groups.map((g) => g.phaseNumber)).toEqual([3, 3])
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — phase 3 rejected when the run has a duplicate rank', () => {
+    const p1Cards = ['p10-12', 'p10-36', 'p10-60', 'p10-84', 'p10-16', 'p10-18', 'p10-20', 'p10-22', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 2, p2: 0 },
+    })
+
+    // {16,18,20,42} = red9,red10,red11,blue10 — duplicate rank 10 breaks the run.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-12', 'p10-36', 'p10-60', 'p10-84', 'p10-16', 'p10-18', 'p10-20', 'p10-42'],
+    })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('does not complete your phase')
+  })
+
+  it('LAY_PHASE — phase 5 (1 run of 8) valid selection', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 4, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups).toHaveLength(1)
+    expect(groups[0].type).toBe('run')
+    expect(groups[0].phaseNumber).toBe(5)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — phase 5 rejected when the run is one card short (7, not 8)', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 4, p2: 0 },
+    })
+
+    // 8 cards selected, but the 8th (blue10) breaks the run into a 7-card span with a gap at 9.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-42'],
+    })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('does not complete your phase')
+  })
+
+  it('LAY_PHASE — phase 6 (1 run of 9) valid selection', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-42']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 5, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups).toHaveLength(1)
+    expect(groups[0].type).toBe('run')
+    expect(groups[0].phaseNumber).toBe(6)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — phase 6 rejected when a gap has no wild to fill it', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-42']
+    const p2Cards = ['p10-48', 'p10-49', 'p10-50', 'p10-51', 'p10-52', 'p10-53', 'p10-54', 'p10-55', 'p10-56', 'p10-57']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 5, p2: 0 },
+    })
+
+    // 9,10-swap: naturals 1-8 + blue10 leaves a gap at 9 with no wild to cover it.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-42'],
+    })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('does not complete your phase')
+  })
+
+  it('LAY_PHASE — phase 7 (2 sets of 4) valid selection', () => {
+    const p1Cards = ['p10-4', 'p10-28', 'p10-52', 'p10-76', 'p10-14', 'p10-38', 'p10-62', 'p10-86', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-0', 'p10-2', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-24', 'p10-26', 'p10-30', 'p10-32']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 6, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-4', 'p10-28', 'p10-52', 'p10-76', 'p10-14', 'p10-38', 'p10-62', 'p10-86'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups).toHaveLength(2)
+    expect(groups.every((g) => g.type === 'set')).toBe(true)
+    expect(groups.map((g) => g.phaseNumber)).toEqual([7, 7])
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — phase 7 rejected when one set is missing a matching rank', () => {
+    const p1Cards = ['p10-4', 'p10-28', 'p10-52', 'p10-76', 'p10-14', 'p10-38', 'p10-62', 'p10-86', 'p10-42', 'p10-44']
+    const p2Cards = ['p10-0', 'p10-2', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-24', 'p10-26', 'p10-30', 'p10-32']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 6, p2: 0 },
+    })
+
+    // Swap the 4th 8 (yellow8) for an unrelated blue10 — only one valid 4-set remains.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-4', 'p10-28', 'p10-52', 'p10-76', 'p10-14', 'p10-38', 'p10-62', 'p10-42'],
+    })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('does not complete your phase')
+  })
+
+  // Wild-completing-a-group end-to-end, one per relevant group type (set/run/color) — through
+  // the actual host action boundary, not just the classify.ts unit tests.
+  it('LAY_PHASE — a Wild completes the "set" part of phase 1', () => {
+    const p1Cards = ['p10-8', 'p10-32', 'p10-100', 'p10-16', 'p10-40', 'p10-64', 'p10-0', 'p10-2', 'p10-4', 'p10-6']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+    })
+
+    // Two 5s (red, blue) + a Wild stand in for the third 5.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-8', 'p10-32', 'p10-100', 'p10-16', 'p10-40', 'p10-64'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups.map((g) => g.type)).toEqual(['set', 'set'])
+    expect(groups.some((g) => g.zone.cards.some((c) => c.id === 'p10-100'))).toBe(true)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — a Wild fills the gap in the "run" part of phase 4', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-8', 'p10-10', 'p10-12', 'p10-100', 'p10-42', 'p10-44', 'p10-46']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 3, p2: 0 },
+    })
+
+    // Naturals red 1,2,3,5,6,7 + a Wild filling the gap at 4 → run of 7 (1 through 7).
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-8', 'p10-10', 'p10-12', 'p10-100'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups).toHaveLength(1)
+    expect(groups[0].type).toBe('run')
+    expect(groups[0].zone.cards.some((c) => c.id === 'p10-100')).toBe(true)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('LAY_PHASE — a Wild rounds out the "color" group of phase 8', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-100', 'p10-42', 'p10-44', 'p10-46']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 7, p2: 0 },
+    })
+
+    // Six red naturals (ranks 1-6) + a Wild → 7 cards of one color.
+    const result = applyPhase10Action(game, 'p1', {
+      type: 'LAY_PHASE',
+      cardIds: ['p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-100'],
+    })
+    expect(result.outcome.ok).toBe(true)
+    const groups = result.game.session.publicState.groups['p1']
+    expect(groups).toHaveLength(1)
+    expect(groups[0].type).toBe('color')
+    expect(groups[0].zone.cards.some((c) => c.id === 'p10-100')).toBe(true)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
   it('going out via LAY_PHASE — laying the entire hand triggers finishRoundByGoingOut', () => {
     const p1Cards = ['p10-8', 'p10-32', 'p10-56', 'p10-16', 'p10-40', 'p10-64']   // exactly Phase 1
     const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
