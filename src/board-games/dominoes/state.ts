@@ -7,6 +7,15 @@ import type { Zone } from '../../card-engine/zones.ts'
 import { addCards, cardCount, createHand, createPublicZone } from '../../card-engine/zones.ts'
 import { dealCards, shuffleDeck } from '../../card-engine/deck.ts'
 
+export const DOMINOES_MIN_SEATS = 2
+export const DOMINOES_MAX_SEATS = 4   // double-six set is 28 tiles; standard block/draw dominoes
+                                        // rules cap at 4 players (7 tiles each at 2p, 5 tiles each
+                                        // at 3-4p) — going further needs a bigger tile set (see
+                                        // Mexican Train's double-12 set), not this game.
+
+// Standard block/draw dominoes hand sizes: 7 tiles at 2 players, 5 tiles at 3 or 4 players.
+export const DOMINOES_HAND_SIZES: Record<number, number> = { 2: 7, 3: 5, 4: 5 }
+
 export interface DominoTile {
   id: string   // `${a}-${b}`, a <= b
   a: number
@@ -49,6 +58,8 @@ export interface LastDominoAction {
 
 export interface DominoesPublicState {
   stage: DominoesStage
+  // Fixed for the whole match — never reordered. turn.playerOrder mirrors this at round start but seatOrder is the stable reference for round-starter rotation.
+  seatOrder: string[]
   turn: TurnState<'play'>
   center: { a: number; b: number } | null
   isSpinner: boolean
@@ -85,44 +96,53 @@ const TARGET_SCORE = 150
 
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
 export function dealRound(
-  playerIds: [string, string],
+  playerIds: string[],
   rng: () => number,
-): { p0Hand: Zone<DominoTile>; p1Hand: Zone<DominoTile>; boneyard: Zone<DominoTile> } {
+): { hands: Record<string, Zone<DominoTile>>; boneyard: Zone<DominoTile> } {
   const shuffled = shuffleDeck(createDominoSet(), rng)
-  const { dealt: p0Dealt, remaining: afterP0 } = dealCards(shuffled, 7)
-  const { dealt: p1Dealt, remaining: afterP1 } = dealCards(afterP0, 7)
-  const p0Hand = addCards(createHand<DominoTile>(playerIds[0]), p0Dealt)
-  const p1Hand = addCards(createHand<DominoTile>(playerIds[1]), p1Dealt)
-  const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), afterP1)
-  return { p0Hand, p1Hand, boneyard }
+  const handSize = DOMINOES_HAND_SIZES[playerIds.length]
+  let remaining = shuffled
+  const hands: Record<string, Zone<DominoTile>> = {}
+  for (const playerId of playerIds) {
+    const { dealt, remaining: rest } = dealCards(remaining, handSize)
+    hands[playerId] = addCards(createHand<DominoTile>(playerId), dealt)
+    remaining = rest
+  }
+  const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), remaining)
+  return { hands, boneyard }
 }
 
-export function createDominoesGame(playerIds: [string, string], seed: number): DominoesSession {
+export function createDominoesGame(playerIds: string[], seed: number): DominoesSession {
   const rng = createRng(seed)
-  const { p0Hand, p1Hand, boneyard } = dealRound(playerIds, rng)
+  const { hands, boneyard } = dealRound(playerIds, rng)
   const turn = createTurnState<'play'>(playerIds, 'play')
+
+  const handCounts: Record<string, number> = {}
+  const scores: Record<string, number> = {}
+  const privateStates: Record<string, DominoesPrivateState> = {}
+  for (const playerId of playerIds) {
+    handCounts[playerId] = cardCount(hands[playerId])
+    scores[playerId] = 0
+    privateStates[playerId] = { hand: hands[playerId] }
+  }
 
   const publicState: DominoesPublicState = {
     stage: 'play',
+    seatOrder: playerIds,
     turn,
     center: null,
     isSpinner: false,
     arms: { right: [], left: [], up: [], down: [] },
     boneyardCount: cardCount(boneyard),
-    handCounts: { [playerIds[0]]: cardCount(p0Hand), [playerIds[1]]: cardCount(p1Hand) },
+    handCounts,
     passStreak: 0,
-    scores: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
+    scores,
     target: TARGET_SCORE,
     roundNumber: 1,
     roundStarterId: playerIds[0],
     roundResult: null,
     lastAction: null,
     matchWinnerId: null,
-  }
-
-  const privateStates: Record<string, DominoesPrivateState> = {
-    [playerIds[0]]: { hand: p0Hand },
-    [playerIds[1]]: { hand: p1Hand },
   }
 
   return { session: createHostSession(publicState, privateStates), boneyard, rng }
