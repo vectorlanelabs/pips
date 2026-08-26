@@ -56,7 +56,7 @@ import { BattleshipResults } from './screens/BattleshipResults'
 import { BattleshipRoom } from './screens/BattleshipRoom'
 
 // ---- Dominoes (separate parallel session, per CHARTER.md resolution #7) ----
-import { createDominoesGame, type DominoesSession, type DominoesPublicState, type DominoesPrivateState, type DominoesAction, type DominoTile, type DominoArm } from './board-games/dominoes/state'
+import { createDominoesGame, DOMINOES_MIN_SEATS, DOMINOES_MAX_SEATS, type DominoesSession, type DominoesPublicState, type DominoesPrivateState, type DominoesAction, type DominoTile, type DominoArm } from './board-games/dominoes/state'
 import { applyDominoesAction, runDominoesBotTurn } from './board-games/dominoes/rules'
 import { dominoesBotStrategy } from './board-games/dominoes/bot'
 import { DominoesTable } from './screens/DominoesTable'
@@ -164,7 +164,8 @@ type BattleshipView =
   // instead of the action just silently doing nothing. Never stored as the guest's current view.
   | { kind: 'notice'; message: string }
 type DominoesView =
-  | { kind: 'game'; revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; names: Record<string, string> }
   // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
   // action is rejected — carries the validator's reason so the table can show WHY nothing happened
   // instead of the action just silently doing nothing. Never stored as the guest's current view.
@@ -491,12 +492,11 @@ export default function App() {
   const [dominoesRole, setDominoesRole] = useState<'host' | 'guest' | null>(null)
   const [dominoesCode, setDominoesCode] = useState('')
   const [dominoesLocalPlayerId, setDominoesLocalPlayerId] = useState<string | null>(null)
-  const [dominoesOpponentId, setDominoesOpponentId] = useState<string | null>(null)
-  const [dominoesOpponentName, setDominoesOpponentName] = useState('')
   const [dominoesView, setDominoesView] = useState<DominoesView | null>(null)
   const [dominoesConnection, setDominoesConnection] = useState<'connected' | 'disconnected'>('connected')
-  const [dominoesWaiting, setDominoesWaiting] = useState(false)
   const [dominoesNotice, setDominoesNotice] = useState<string | null>(null)
+  const [dominoesStarted, setDominoesStarted] = useState(false)
+  const [dominoesSeats, setDominoesSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
   // ---- Wahoo ----
   const [wahooRole, setWahooRole] = useState<'host' | 'guest' | null>(null)
@@ -651,8 +651,11 @@ export default function App() {
   const dominoesGuestRef = useRef<GuestHandle<DominoesAction> | null>(null)
   const dominoesBotBusyRef = useRef(false)
   const dominoesLocalPlayerIdRef = useRef<string | null>(null)
-  const dominoesOpponentIdRef = useRef<string | null>(null)
-  const dominoesOpponentNameRef = useRef('')
+  const dominoesSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const dominoesStartedRef = useRef(false)
+  const dominoesNamesRef = useRef<Record<string, string>>({})
+  const dominoesBotSeatsRef = useRef<Set<string>>(new Set())
+  const dominoesBotCounterRef = useRef(0)
   const dominoesBotsHeldUntilRef = useRef(0)
   const dominoesLastRoundRef = useRef<number | null>(null)
   const dominoesRejectionNoticeRef = useRef<string | null>(null)
@@ -1096,14 +1099,17 @@ export default function App() {
     setDominoesCode('')
     setDominoesLocalPlayerId(null)
     dominoesLocalPlayerIdRef.current = null
-    setDominoesOpponentId(null)
-    dominoesOpponentIdRef.current = null
-    setDominoesOpponentName('')
-    dominoesOpponentNameRef.current = ''
     setDominoesView(null)
     setDominoesConnection('connected')
-    setDominoesWaiting(false)
     setDominoesNotice(null)
+    setDominoesStarted(false)
+    dominoesStartedRef.current = false
+    setDominoesSeats([])
+    dominoesSeatsRef.current = []
+    dominoesBotBusyRef.current = false
+    dominoesBotSeatsRef.current.clear()
+    dominoesBotCounterRef.current = 0
+    dominoesNamesRef.current = {}
     dominoesBotsHeldUntilRef.current = 0
     dominoesLastRoundRef.current = null
     dominoesRejectionNoticeRef.current = null
@@ -2747,22 +2753,37 @@ export default function App() {
     return !dominoesSessionRef.current || dominoesActorKey(dominoesSessionRef.current) !== key
   }
 
-  function dominoesUpdateViews() {
+  // Hands are PRIVATE and up to 3 guests can be seated, so a single broadcast cannot carry every
+  // hand (any guest would see the others'). Lobby phase → broadcast the roster view; game phase →
+  // per-guest sendTo with only that guest's own hand. The host's own view comes from its local
+  // snapshot. Mirrors rummyBroadcast() exactly.
+  function dominoesBroadcast() {
+    if (!dominoesStartedRef.current) {
+      const view: DominoesView = {
+        kind: 'lobby',
+        roster: dominoesSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === dominoesLocalPlayerIdRef.current })),
+      }
+      setDominoesView(view)
+      dominoesHostRef.current?.broadcast(view)
+      return
+    }
     const session = dominoesSessionRef.current!
     const currentRound = session.session.publicState.roundNumber
     if (currentRound !== dominoesLastRoundRef.current) {
       dominoesLastRoundRef.current = currentRound
-      // Every fresh round deals the full double-six set (7 tiles to each of the 2 players, 14
-      // total) — hold bots until each client's local DealIntro (see DominoesTable's maxFlights)
-      // has had time to actually finish, not just estimateDealIntroMs's pure animation window.
+      // Every fresh round's hand sizes vary by seat count (see DOMINOES_HAND_SIZES) — hold bots
+      // until each client's local DealIntro (see DominoesTable's maxFlights) has had time to
+      // actually finish, not just estimateDealIntroMs's pure animation window.
       dominoesBotsHeldUntilRef.current = Date.now() + dominoesDealHoldMs(session.session.publicState.handCounts)
     }
     const hostSnap = deriveSnapshot(session.session, dominoesLocalPlayerIdRef.current!)
-    setDominoesView({ kind: 'game', revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: dominoesOpponentNameRef.current })
-    const opponentId = dominoesOpponentIdRef.current
-    if (opponentId && opponentId !== 'bot') {
-      const guestSnap = deriveSnapshot(session.session, opponentId)
-      dominoesHostRef.current?.sendTo(opponentId, { kind: 'game', revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+    setDominoesView({ kind: 'game', revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, names: { ...dominoesNamesRef.current } })
+    const names = { ...dominoesNamesRef.current }
+    for (const seat of dominoesSeatsRef.current) {
+      if (seat.playerId === dominoesLocalPlayerIdRef.current) continue
+      if (dominoesBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      dominoesHostRef.current?.sendTo(seat.playerId, { kind: 'game', revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, names })
     }
   }
 
@@ -2777,25 +2798,32 @@ export default function App() {
         setDominoesCode(code)
         setDominoesLocalPlayerId(hostId)
         dominoesLocalPlayerIdRef.current = hostId
-        setDominoesWaiting(true)
+        setDominoesStarted(false)
+        dominoesStartedRef.current = false
+        setDominoesSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+        dominoesSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setDominoesNotice(null)
+        dominoesBroadcast()
       },
       onJoin(guestId, guestName) {
-        if (dominoesSessionRef.current) {
-          dominoesHostRef.current?.reject(guestId, 'That Dominoes table is already full.')
+        if (dominoesStartedRef.current) {
+          dominoesHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
           return
         }
-        const seed = Math.floor(Math.random() * 2147483647)
-        dominoesSessionRef.current = createDominoesGame([dominoesLocalPlayerIdRef.current!, guestId], seed)
-        setDominoesOpponentId(guestId)
-        dominoesOpponentIdRef.current = guestId
-        setDominoesOpponentName(guestName)
-        dominoesOpponentNameRef.current = guestName
-        setDominoesWaiting(false)
-        dominoesUpdateViews()
+        if (dominoesSeatsRef.current.length >= DOMINOES_MAX_SEATS) {
+          dominoesHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        dominoesSeatsRef.current = [...dominoesSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setDominoesSeats(dominoesSeatsRef.current)
+        dominoesBroadcast()
       },
       onAction(guestId, action) {
-        if (!dominoesSessionRef.current || guestId !== dominoesOpponentIdRef.current) return
-        const result = applyDominoesAction(dominoesSessionRef.current!, guestId, action)
+        if (!dominoesStartedRef.current) return
+        const session = dominoesSessionRef.current
+        if (!session) return
+        if (!dominoesSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyDominoesAction(session, guestId, action)
         if (!result.outcome.ok) {
           // Sent one-off (not a broadcast, not gated by revision) so this guest sees WHY
           // their action did nothing, even though canonical state didn't change.
@@ -2803,12 +2831,18 @@ export default function App() {
           return
         }
         dominoesSessionRef.current = result.dm
-        dominoesUpdateViews()
+        dominoesBroadcast()
       },
       onLeave(guestId) {
-        // Guest left mid-match: match cannot continue with only 1 player.
-        if (guestId !== dominoesOpponentIdRef.current) return
-        setError('Opponent left the room.')
+        if (!dominoesStartedRef.current) {
+          dominoesSeatsRef.current = dominoesSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setDominoesSeats(dominoesSeatsRef.current)
+          dominoesBroadcast()
+          return
+        }
+        const seat = dominoesSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setDominoesNotice(`${seat.name} disconnected.`)
       },
       onError(message) {
         setError(message)
@@ -2817,17 +2851,30 @@ export default function App() {
   }
 
   function addDominoesHouseBot() {
-    if (dominoesRole !== 'host' || !dominoesLocalPlayerId || !dominoesWaiting) return
-    const botId = 'bot'
-    const botName = randomBotName([name.trim()])
+    if (dominoesRole !== 'host' || dominoesStartedRef.current) return
+    if (dominoesSeatsRef.current.length >= DOMINOES_MAX_SEATS) return
+    dominoesBotCounterRef.current += 1
+    const botId = `bot-${dominoesBotCounterRef.current}`
+    const botName = randomBotName(dominoesSeatsRef.current.map((s) => s.name))
+    dominoesSeatsRef.current = [...dominoesSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setDominoesSeats(dominoesSeatsRef.current)
+    dominoesBotSeatsRef.current.add(botId)
+    dominoesBroadcast()
+  }
+
+  function dominoesStart() {
+    if (dominoesRole !== 'host' || dominoesStartedRef.current) return
+    const seats = dominoesSeatsRef.current
+    // Variable seat count: at least DOMINOES_MIN_SEATS, at most DOMINOES_MAX_SEATS —
+    // whatever is seated when the host presses Start, NOT a fixed-count gate.
+    if (seats.length < DOMINOES_MIN_SEATS || seats.length > DOMINOES_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    dominoesSessionRef.current = createDominoesGame([dominoesLocalPlayerId, botId], seed)
-    setDominoesOpponentId(botId)
-    dominoesOpponentIdRef.current = botId
-    setDominoesOpponentName(botName)
-    dominoesOpponentNameRef.current = botName
-    setDominoesWaiting(false)
-    dominoesUpdateViews()
+    dominoesSessionRef.current = createDominoesGame(playerIds, seed)
+    dominoesNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    dominoesStartedRef.current = true
+    setDominoesStarted(true)
+    dominoesBroadcast()
   }
 
   async function runDominoesBot(botId: string, key: string) {
@@ -2839,10 +2886,11 @@ export default function App() {
       const session = dominoesSessionRef.current!
       const ps = session.session.publicState
       if (ps.stage !== 'play' || currentPlayer(ps.turn) !== botId) return
+      if (!dominoesBotSeatsRef.current.has(botId)) return
       const result = runDominoesBotTurn(session, botId, dominoesBotStrategy)
       if (!result.outcome.ok) return
       dominoesSessionRef.current = result.dm
-      dominoesUpdateViews()
+      dominoesBroadcast()
     }
   }
 
@@ -2852,12 +2900,12 @@ export default function App() {
     if (!session) return
     const ps = session.session.publicState
     if (ps.stage !== 'play') return
-    if (dominoesOpponentId !== 'bot') return
-    if (currentPlayer(ps.turn) !== 'bot') return
+    const currentId = currentPlayer(ps.turn)
+    if (!dominoesBotSeatsRef.current.has(currentId)) return
     dominoesBotBusyRef.current = true
     const key = dominoesActorKey(session)
     try {
-      await runDominoesBot('bot', key)
+      await runDominoesBot(currentId, key)
     } finally {
       dominoesBotBusyRef.current = false
       setTimeout(() => runDominoesBotsIfNeeded(), 50)
@@ -2870,6 +2918,11 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<DominoesView, DominoesAction>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'lobby') {
+          setDominoesView(view)
+          setDominoesStarted(false)
+          return
+        }
         if (view.kind === 'notice') {
           // Out-of-band rejection feedback for MY OWN last action — never touches
           // dominoesView/localRevision, so it can't be mistaken for (or block) a real state update.
@@ -2884,7 +2937,7 @@ export default function App() {
         setDominoesNotice((prev) => (prev !== null && prev === dominoesRejectionNoticeRef.current ? null : prev))
         dominoesRejectionNoticeRef.current = null
         setDominoesView(view)
-        setDominoesOpponentName(view.opponentName)
+        setDominoesStarted(true)
       },
       onError() {
         resetToEntry()
@@ -2911,7 +2964,9 @@ export default function App() {
 
   function dominoesDispatch(action: DominoesAction) {
     if (dominoesRole === 'host' && dominoesLocalPlayerId) {
-      const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId, action)
+      const session = dominoesSessionRef.current
+      if (!session) return
+      const result = applyDominoesAction(session, dominoesLocalPlayerId, action)
       if (!result.outcome.ok) {
         const reason = result.outcome.reason ?? 'that move is not allowed'
         dominoesRejectionNoticeRef.current = reason
@@ -2925,24 +2980,26 @@ export default function App() {
       }
       dominoesRejectionNoticeRef.current = null
       dominoesSessionRef.current = result.dm
-      dominoesUpdateViews()
+      dominoesBroadcast()
     } else if (dominoesRole === 'guest') {
       dominoesGuestRef.current?.sendAction(action)
     }
   }
 
   function dominoesRematch() {
-    if (dominoesRole !== 'host' || !dominoesSessionRef.current || !dominoesLocalPlayerId) return
+    if (dominoesRole !== 'host' || !dominoesSessionRef.current) return
+    const ps = dominoesSessionRef.current.session.publicState
+    if (ps.matchWinnerId === null) return
     const prevRevision = dominoesSessionRef.current.session.revision
-    const playerIds = dominoesSessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
     const next = createDominoesGame(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
     dominoesSessionRef.current = next
     // Force the deal-intro hold to recompute even if the finished match's last round happened
-    // to also be round 1 (single-round match) — a rematch always deals a fresh 14-tile hand.
+    // to also be round 1 (single-round match) — a rematch always deals a fresh hand.
     dominoesLastRoundRef.current = null
-    dominoesUpdateViews()
+    dominoesBroadcast()
   }
 
   // ---- End Dominoes helpers ----
@@ -5274,7 +5331,7 @@ export default function App() {
         const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId!, { type: 'START_NEXT_ROUND' })
         if (result.outcome.ok) {
           dominoesSessionRef.current = result.dm
-          dominoesUpdateViews()
+          dominoesBroadcast()
         }
       }, ROUND_PAUSE_MS)
       return () => clearTimeout(t)
@@ -5763,16 +5820,23 @@ export default function App() {
   }
 
   // ---- Dominoes session active ----
-  // Dominoes waiting screen (host waiting for opponent) — mirrors the shared Room.tsx /
-  // RummyRoom.tsx / Phase10Room.tsx / BattleshipRoom.tsx layout so the start flow doesn't
-  // feel like a different app.
-  if (dominoesRole === 'host' && dominoesWaiting) {
+  const DOMINOES_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+
+  // Dominoes lobby — 2 to 4 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way).
+  if (dominoesRole && !dominoesStarted) {
+    const roster = dominoesRole === 'host'
+      ? dominoesSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === dominoesLocalPlayerId }))
+      : (dominoesView?.kind === 'lobby' ? dominoesView.roster : [])
     return (
       <DominoesRoom
         code={dominoesCode}
         localName={name}
-        notice={error}
+        isHost={dominoesRole === 'host'}
+        seats={roster}
+        notice={dominoesNotice ?? error}
         onAddHouseBot={addDominoesHouseBot}
+        onStartGame={dominoesStart}
         onLeave={resetToEntry}
       />
     )
@@ -5780,11 +5844,13 @@ export default function App() {
 
   // Dominoes match results
   if (dominoesView?.kind === 'game' && dominoesView.publicState.stage === 'over' && dominoesView.publicState.matchWinnerId) {
+    const dominoesColors = Object.fromEntries(dominoesView.publicState.seatOrder.map((id, i) => [id, DOMINOES_SEAT_INKS[i]]))
     return (
       <DominoesResults
         localPlayerId={dominoesLocalPlayerId ?? ''}
         localName={name}
-        opponentName={dominoesOpponentName}
+        names={dominoesView.names}
+        colors={dominoesColors}
         publicState={dominoesView.publicState}
         isHost={dominoesRole === 'host'}
         notice={dominoesNotice ?? error}
@@ -5796,12 +5862,13 @@ export default function App() {
 
   // Dominoes table (active match)
   if (dominoesView?.kind === 'game' && dominoesLocalPlayerId) {
+    const dominoesColors = Object.fromEntries(dominoesView.publicState.seatOrder.map((id, i) => [id, DOMINOES_SEAT_INKS[i]]))
     return (
       <DominoesTable
         code={dominoesCode}
         localPlayerId={dominoesLocalPlayerId}
-        opponentName={dominoesOpponentName}
-        opponentColor="#5b5bd6"
+        names={dominoesView.names}
+        colors={dominoesColors}
         connection={dominoesConnection}
         notice={dominoesNotice ?? error}
         publicState={dominoesView.publicState}
