@@ -1,10 +1,10 @@
 export function DominoesRulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
-    'Double-six set, seven tiles each. The starter may lead any tile — leading a double makes it a spinner with all four sides open.',
+    'Double-six set — seven tiles each at 2 players, five each at 3 or 4. The starter may lead any tile — leading a double makes it a spinner with all four sides open.',
     'Each tile must match the open end it extends. Doubles sit crosswise.',
     'Score whenever your play makes the open ends total a multiple of five — a double counts both its halves, and an untouched spinner counts once.',
     'No play? Draw from the boneyard until you can play — a playable draw must be played. Knock (pass) only when the boneyard is empty.',
-    'Two knocks in a row block the round: the player with fewer remaining pips banks both hands\u2019 pips, rounded down to fives. Going out banks your opponent\u2019s pips the same way.',
+    'Once every seated player has knocked in a row, the round blocks: whoever has the fewest remaining pips banks everyone\u2019s combined pips, rounded down to fives. Going out banks everyone else\u2019s pips the same way.',
     'First to 150 wins the match.',
   ]
 
@@ -18,7 +18,7 @@ export function DominoesRulesOverlay({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
         <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginTop: 14 }}>
-          Match the open ends, score multiples of five, go out or block the round. Two players, double-six set.
+          Match the open ends, score multiples of five, go out or block the round. 2–4 players, double-six set.
         </p>
         <ul style={{ marginTop: 16, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {bullets.map((b) => (

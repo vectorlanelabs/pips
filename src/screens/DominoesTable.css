@@ -20,6 +20,42 @@
   margin-bottom: clamp(16px, 2.4vw, 26px);
 }
 
+/* ---- Header scoreboard: one pill per seated player, always visible ---- */
+
+.dm-scoreboard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dm-score-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 5px 14px;
+  box-shadow: 0 3px 0 #c9c9e0;
+}
+
+.dm-score-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+  flex: none;
+}
+
+.dm-score-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
 .dm-header-left {
   display: flex;
   align-items: baseline;
@@ -201,39 +237,92 @@
   }
 }
 
-/* ---- Their side (top band) ---- */
+/* ---- Opponent tiles: a wrapping grid of content-driven seat tiles ---- */
 
-.dm-their-side {
+.dm-opp-rail {
+  --dm-opp-gap: clamp(10px, 1.6vw, 14px);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--dm-opp-gap);
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
-.dm-their-side-left {
+.dm-opp-tile {
+  flex: 1 1 260px;
+  max-width: calc((100% - 3 * var(--dm-opp-gap)) / 4);
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: border-color 0.2s;
 }
 
-.dm-their-name {
-  font-size: 16px;
-  font-weight: 700;
+.dm-opp-tile--wide {
+  max-width: calc((100% - var(--dm-opp-gap)) / 2);
 }
 
-.dm-their-count {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted-text);
-}
-
-.dm-their-backs {
+.dm-opp-tile-top {
   display: flex;
-  gap: 5px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dm-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.dm-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.dm-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dm-opp-tile--turn {
+  border-width: 4px;
+}
+
+.dm-opp-tile-hand {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  margin-top: 6px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dm-opp-tile-fan {
+  display: flex;
+  flex: none;
+}
+
+.dm-opp-tile-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
 }
 
 /* ---- Hand + boneyard rail ---- */
