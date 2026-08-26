@@ -365,10 +365,10 @@ export const DOMINOES_ACTION_MS = 1300
 // render/paint time on top of estimateDealIntroMs's pure animation estimate.
 const DOMINOES_DEAL_HOLD_BUFFER_MS = 700
 
-// Pure so a regression test can pin the round-start bot hold against the actual 14-tile
-// double-six deal without mounting the app. `handCounts` is the fresh-round DominoesPublicState
-// field — both players' hand sizes sum to the total DealIntro flight count (see DominoesTable's
-// `maxFlights={hand.length + opponentHandCount}`).
+// Pure so a regression test can pin the round-start bot hold against the actual double-six
+// deal without mounting the app. `handCounts` is the fresh-round DominoesPublicState field —
+// every seated player's hand size (5 or 7 tiles, depending on seat count) sums to the total
+// DealIntro flight count (see DominoesTable's `maxFlights`, which sums the same way).
 export function dominoesDealHoldMs(handCounts: Record<string, number>): number {
   const totalFlights = Object.values(handCounts).reduce((a, b) => a + b, 0)
   return estimateDealIntroMs(totalFlights) + DOMINOES_DEAL_HOLD_BUFFER_MS
