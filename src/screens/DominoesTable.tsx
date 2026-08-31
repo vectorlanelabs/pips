@@ -520,8 +520,6 @@ export function DominoesTable({
         )}
       </div>
 
-      {/* Footnote */}
-      <p className="dm-footnote">Your hand never leaves this device — only the play does.</p>
 
       {rulesOpen && <DominoesRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

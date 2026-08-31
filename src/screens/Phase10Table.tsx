@@ -919,8 +919,6 @@ export function Phase10Table({
       </aside>
       </div>
 
-      {/* Footnote */}
-      <p className="p10-footnote">Your hand never leaves this device — only the play does.</p>
 
       {rulesOpen && <Phase10RulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

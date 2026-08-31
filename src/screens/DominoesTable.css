@@ -477,12 +477,3 @@
   border-radius: 4px;
 }
 
-/* ---- Footnote ---- */
-
-.dm-footnote {
-  margin-top: clamp(14px, 2.2vw, 22px);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--faint-text);
-  text-align: center;
-}

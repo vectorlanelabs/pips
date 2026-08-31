@@ -6,7 +6,7 @@
 
 /* ---- Outer container ---- */
 
-/* Vertical chrome (paddings/margins between header, card, and footnote) is
+/* Vertical chrome (paddings/margins between header and card) is
    deliberately tighter than the other games' tables: the goal is a 2-player
    game fitting a desktop viewport with zero scroll.
 
@@ -785,13 +785,3 @@
   color: var(--muted-text);
 }
 
-/* ---- Footnote ---- */
-
-.p10-footnote {
-  margin-top: 14px;
-  margin-bottom: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--faint-text);
-  text-align: center;
-}

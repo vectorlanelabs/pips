@@ -904,8 +904,6 @@ export function RummyTable({
         )}
       </div>
 
-      {/* Footnote */}
-      <p className="rummy-footnote">Your hand never leaves this device — only the play does.</p>
 
       {rulesOpen && <RummyRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

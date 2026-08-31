@@ -390,16 +390,6 @@
   color: var(--muted-text);
 }
 
-/* ---- Footnote ---- */
-
-.bs-footnote {
-  margin-top: clamp(14px, 2.2vw, 22px);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--faint-text);
-  text-align: center;
-}
-
 /* ---- Responsive: boards stack below 900px ---- */
 
 @media (max-width: 899px) {

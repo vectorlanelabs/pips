@@ -487,8 +487,6 @@ export function BattleshipTable({
         )}
       </div>
 
-      {/* Footnote */}
-      <p className="bs-footnote">Your fleet never leaves this device — only your shots do.</p>
 
       {rulesOpen && <BattleshipRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

@@ -571,8 +571,6 @@ export function SkipBoTable({
         )}
       </div>
 
-      {/* Footnote */}
-      <p className="sb-footnote">Your hand never leaves this device — only the play does.</p>
 
       {rulesOpen && <SkipBoRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

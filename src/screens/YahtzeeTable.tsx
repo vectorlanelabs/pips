@@ -138,7 +138,7 @@ export function YahtzeeTable({
             )}
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: y.dice.length === 0 && y.lastTurn !== null ? 12 : 24, minHeight: 96 }}>
-              {y.dice.length === 0 && <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>Five dice, ready.</span>}
+              {y.dice.length === 0 && <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>No dice rolled yet.</span>}
               {y.dice.length > 0 && (() => {
                 const displayMap = new Map(y.dice.map((d, i) => [d.id, displayVals[i] ?? d.val]))
                 const byId = new Map(y.dice.map((d) => [d.id, d]))

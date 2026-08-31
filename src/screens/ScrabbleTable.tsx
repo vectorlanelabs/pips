@@ -547,7 +547,6 @@ export function ScrabbleTable({
         )}
       </div>
 
-      <p className="scr-footnote">Your hand never leaves this device — only the play does.</p>
 
       {/* Blank assignment overlay */}
       {blankPrompt && (
