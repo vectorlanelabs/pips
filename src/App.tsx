@@ -42,7 +42,7 @@ function savedCardBack(): string {
 // ---- Phase 10 (separate parallel session, per CHARTER.md resolution #7) ----
 import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, PHASE10_HAND_SIZE, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
 import { applyPhase10Action, runPhase10BotTurn } from './card-games/phase10/rules'
-import { phase10BotStrategy } from './card-games/phase10/bot'
+import { phase10BotStrategy, selectDiscard } from './card-games/phase10/bot'
 import { Phase10Table } from './screens/Phase10Table'
 import { Phase10Results } from './screens/Phase10Results'
 import { Phase10Room } from './screens/Phase10Room'
@@ -628,6 +628,7 @@ export default function App() {
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
   const phase10GuestRef = useRef<GuestHandle<Phase10Action> | null>(null)
   const phase10BotBusyRef = useRef(false)
+  const phase10BotStuckRef = useRef(false)
   const phase10LocalPlayerIdRef = useRef<string | null>(null)
   const phase10SeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
   const phase10StartedRef = useRef(false)
@@ -1062,6 +1063,7 @@ export default function App() {
     setPhase10Seats([])
     phase10SeatsRef.current = []
     phase10BotBusyRef.current = false
+    phase10BotStuckRef.current = false
     phase10BotSeatsRef.current.clear()
     phase10BotCounterRef.current = 0
     phase10NamesRef.current = {}
@@ -2412,14 +2414,35 @@ export default function App() {
       if (currentPlayer(ps.turn) !== botId) return
       if (!phase10BotSeatsRef.current.has(botId)) return
       const result = runPhase10BotTurn(session, botId, phase10BotStrategy)
-      if (!result.outcome.ok) return
+      if (!result.outcome.ok) {
+        // A rejected bot action is always a bot bug (the strategy and validator
+        // disagreed), and the strategy is deterministic — silently returning here
+        // once froze the game forever, with the loop re-proposing the same doomed
+        // action every 50ms. Log it, then recover with a plain discard, which is
+        // always legal in the discard phase with a non-empty hand.
+        console.error(`Phase 10 bot ${botId} action rejected: ${result.outcome.reason ?? 'unknown'}`)
+        const botHand = session.session.privateStates[botId]?.hand.cards ?? []
+        if (ps.turn.phase === 'discard' && botHand.length > 0) {
+          const fallback = applyPhase10Action(session, botId, { type: 'DISCARD_CARD', cardId: selectDiscard(botHand) })
+          if (fallback.outcome.ok) {
+            phase10SessionRef.current = fallback.game
+            phase10Broadcast()
+            continue
+          }
+        }
+        // One-way flag: without it the 50ms re-arm in runPhase10BotsIfNeeded would
+        // re-enter here and re-log the same rejection forever.
+        phase10BotStuckRef.current = true
+        setPhase10Notice(`${phase10NamesRef.current[botId] ?? botId} got stuck — please report this bug.`)
+        return
+      }
       phase10SessionRef.current = result.game
       phase10Broadcast()
     }
   }
 
   async function runPhase10BotsIfNeeded() {
-    if (phase10BotBusyRef.current) return
+    if (phase10BotBusyRef.current || phase10BotStuckRef.current) return
     const session = phase10SessionRef.current
     if (!session) return
     const ps = session.session.publicState

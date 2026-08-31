@@ -3,7 +3,7 @@ import type { Card } from '../card-engine/cards'
 import type { Phase10Hit, Phase10PublicState } from '../card-games/phase10/state'
 import { fullGroupCards } from '../card-games/phase10/state'
 import { currentPlayer } from '../engine/turn-engine'
-import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, orderColorGroupForDisplay, orderRunForDisplay, type GroupType } from '../card-games/phase10/classify'
+import { classifyPhaseHand, validateGroupExtension, orderColorGroupForDisplay, orderRunForDisplay, type GroupType } from '../card-games/phase10/classify'
 import { PHASES, type PhaseRequirement } from '../card-games/phase10/phases'
 import { DealIntro } from '../components/DealIntro'
 import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phase10Card'
@@ -134,11 +134,11 @@ function layPhaseEnabled(selectedIds: string[], hand: Card[], requirement: Phase
   return classifyPhaseHand(cards, requirement).valid
 }
 
+// validateGroupExtension is the same predicate the host validator runs, so an
+// enabled hit target can never be rejected server-side (the bare isValid* checks
+// used before missed the runLockedRange rule and offered doomed hits).
 function canHitGroup(groupCards: Card[], groupType: GroupType, selectedCards: Card[]): boolean {
-  const combined = [...groupCards, ...selectedCards]
-  return groupType === 'set' ? isValidSet(combined)
-       : groupType === 'run' ? isValidRun(combined)
-       : isValidColorGroup(combined)
+  return validateGroupExtension(groupCards, groupType, selectedCards).ok
 }
 
 function layPhaseHint(

@@ -132,6 +132,41 @@ export function isValidColorGroup(cards: Card[]): boolean {
   return naturals.every((c) => c.suit === firstSuit)
 }
 
+// The single source of truth for "may these hand cards extend this laid group?"
+// Used by the rules' HIT validator, the bot's hit search, AND the table UI's
+// hit-eligibility check — all three previously re-derived legality from the bare
+// isValid* predicates and missed the runLockedRange rule, which let the bot
+// propose (and the UI offer) hits the validator then rejected. A bot whose
+// proposal is rejected re-proposes the identical move forever and freezes, so
+// legality must come from exactly one place.
+export function validateGroupExtension(
+  currentFull: Card[],
+  type: GroupType,
+  cards: Card[],
+): { ok: true } | { ok: false; reason: string } {
+  if (cards.some((c) => c.meta?.kind === 'skip')) {
+    return { ok: false, reason: 'a Skip card cannot be used in a phase' }
+  }
+  // A run's already-established range is off-limits to new naturals: every rank
+  // in it is already covered (by a natural, or by a Wild filling that gap), so a
+  // new natural landing in-range would silently evict a Wild from the slot it
+  // was locked into — see runLockedRange.
+  if (type === 'run') {
+    const locked = runLockedRange(currentFull)
+    if (locked) {
+      const intruder = cards.find((c) => c.meta?.kind === 'number' && Number(c.rank) >= locked.min && Number(c.rank) <= locked.max)
+      if (intruder) return { ok: false, reason: 'that number is already covered by a Wild in this run' }
+    }
+  }
+  const combined = [...currentFull, ...cards]
+  const valid =
+    type === 'set' ? isValidSet(combined)
+    : type === 'run' ? isValidRun(combined)
+    : isValidColorGroup(combined)
+  if (!valid) return { ok: false, reason: 'those cards cannot be added to that group' }
+  return { ok: true }
+}
+
 // Exact-count wrapper: the group must have exactly `exactCount` cards AND pass
 // the matching isValid* predicate.
 export function classifyGroup(cards: Card[], type: GroupType, exactCount: number): boolean {
