@@ -585,6 +585,10 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
+  /* A flex item defaults to max-content width — without this cap an oversized
+     cluster inside would never be squeezed into wrapping. */
+  max-width: 100%;
+  min-width: 0;
 }
 
 .p10-group-caption {
@@ -593,9 +597,18 @@
   white-space: nowrap;
 }
 
+/* A cluster wider than its tile (a hit-fattened run of 12, or a color group,
+   which has no size cap at all) wraps onto further rows inside the box
+   instead of poking through the tile border. Every card carries a -8px
+   overlap margin — including each wrapped row's first — and the cluster's
+   8px left padding cancels it, so all rows align at the same left edge. */
 .p10-group {
   display: flex;
-  flex: none;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  padding-left: 8px;
 }
 
 /* A group the currently selected card(s) can validly be hit onto — matches the yellow
@@ -614,6 +627,9 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
+  /* Same width cap as .p10-group-wrap, so the cluster inside can wrap. */
+  max-width: 100%;
+  min-width: 0;
 }
 
 .p10-group-extension-caption {

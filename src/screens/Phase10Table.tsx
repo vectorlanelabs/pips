@@ -256,14 +256,14 @@ function GroupCluster({ cards, type, ownerColor, ownerShadow, caption, onHit }: 
         role={onHit ? 'button' : undefined}
         tabIndex={onHit ? 0 : undefined}
       >
-        {sorted.map((card, i) => (
+        {sorted.map((card) => (
           <Phase10Card
             key={card.id}
             card={card}
             size="group"
             ownerColor={ownerColor}
             ownerShadow={ownerShadow}
-            style={{ marginLeft: i === 0 ? 0 : -8 }}
+            style={{ marginLeft: -8 }}
           />
         ))}
       </div>

@@ -314,7 +314,7 @@ function MeldCluster({ cards, ownerColor, ownerShadow, onLayOff }: {
       role={onLayOff ? 'button' : undefined}
       tabIndex={onLayOff ? 0 : undefined}
     >
-      {sorted.map((card, i) => (
+      {sorted.map((card) => (
         <PlayingCard
           key={card.id}
           rank={card.rank as Exclude<Rank, 'JOKER'>}
@@ -322,7 +322,7 @@ function MeldCluster({ cards, ownerColor, ownerShadow, onLayOff }: {
           size="meld"
           ownerColor={ownerColor}
           ownerShadow={ownerShadow}
-          style={{ marginLeft: i === 0 ? 0 : -8 }}
+          style={{ marginLeft: -8 }}
         />
       ))}
     </div>
