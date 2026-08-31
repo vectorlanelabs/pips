@@ -6,13 +6,20 @@
 
 /* ---- Outer container ---- */
 
-/* Vertical chrome (paddings/margins between header, code chip, card, and
-   footnote) is deliberately tighter than the other games' tables: the goal
-   is a 2-player game fitting a desktop viewport with zero scroll. */
+/* Vertical chrome (paddings/margins between header, card, and footnote) is
+   deliberately tighter than the other games' tables: the goal is a 2-player
+   game fitting a desktop viewport with zero scroll.
+
+   Horizontal budget: max-width is the siblings' 1260px PLUS the ladder rail
+   (228px + row gap), and the side padding is trimmed below the siblings'
+   4vw/44px — moving the ladder off the play field must not shrink the table
+   card itself. The wider cap is safe to apply unconditionally: below the
+   rail's 1024px breakpoint the viewport is already narrower than even
+   1260px, so the extra width only ever takes effect while the rail shows. */
 .p10-table {
-  max-width: 1260px;
+  max-width: 1510px;
   margin: 0 auto;
-  padding: clamp(20px, 2.5vw, 32px) clamp(16px, 4vw, 44px) 24px;
+  padding: clamp(20px, 2.5vw, 32px) clamp(16px, 2vw, 32px) 24px;
 }
 
 /* ---- Header ---- */
@@ -221,15 +228,19 @@
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
-/* Tile grows to fill its row but is capped at exactly one quarter of the row
-   width (matches Uno's identical fix for its own opponent tile grid): 4 tiles
-   fill a row cleanly at this container width, while a lone tile wrapping onto
-   its own row — e.g. the 5th of 5 opponents at Phase 10's max seat count —
-   stays the same size as its row-mates instead of stretching across the
-   entire row. */
+/* Tile grows to fill its row but is capped at exactly one third of the row
+   width: at most 3 tiles per row, and a tile wrapping onto a later row stays
+   the same size as its row-mates instead of stretching across the entire
+   row. Uno's grid caps at a quarter, but Uno tiles only hold a compact
+   card-back stack — these tiles hold real laid-down groups (a run can be 9
+   cards), and the quarter cap left 4-across tiles too narrow for them in a
+   5-player game once the ladder rail took its share of the page. */
 .p10-opp-tile {
-  flex: 1 1 260px;
-  max-width: calc((100% - 3 * var(--p10-opp-gap)) / 4);
+  /* flex-basis at a third (not a fixed px basis) is what actually forces the
+     wrap after 3 tiles; max-width then stops a wrapped tile from growing
+     wider than its row-mates. */
+  flex: 1 1 calc((100% - 2 * var(--p10-opp-gap)) / 3);
+  max-width: calc((100% - 2 * var(--p10-opp-gap)) / 3);
   min-width: 0;
   display: flex;
   flex-direction: column;
