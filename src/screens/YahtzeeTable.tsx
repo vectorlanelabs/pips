@@ -80,7 +80,7 @@ export function YahtzeeTable({
       <TableHeader
         gameLabel="Yahtzee"
         gameColor="var(--teal)"
-        meta={`${room.code} · Turn ${y.round} of 13`}
+        meta={`Turn ${y.round} of 13`}
         onRules={onOpenRules}
         onLeave={onLeave}
         enabled={enabled}

@@ -30,7 +30,6 @@ export interface HoldemTableProps {
 }
 
 export function HoldemTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -320,10 +319,6 @@ export function HoldemTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Hold'em · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && (

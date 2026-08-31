@@ -119,7 +119,6 @@ function ShipOverlays({ board, hits, alwaysDim }: {
 // ---- BattleshipTable ----
 
 export function BattleshipTable({
-  code,
   localPlayerId,
   opponentName,
   opponentColor,
@@ -312,10 +311,6 @@ export function BattleshipTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Battleship · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="bs-error-banner">{notice}</div>}

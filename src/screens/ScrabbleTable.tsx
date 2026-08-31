@@ -86,7 +86,6 @@ function computePromptLine(
 }
 
 export function ScrabbleTable({
-  code,
   localPlayerId,
   localName,
   publicState,
@@ -331,7 +330,7 @@ export function ScrabbleTable({
       <TableHeader
         gameLabel="Scrabble"
         gameColor={BRAND}
-        meta={connection === 'connected' ? `${code} · ${publicState.turn.playerOrder.length} players` : 'connection lost'}
+        meta={connection === 'connected' ? `${publicState.turn.playerOrder.length} players` : 'connection lost'}
         onRules={() => setRulesOpen(true)}
         onLeave={onLeave}
         enabled={enabled}

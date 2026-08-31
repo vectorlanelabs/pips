@@ -103,7 +103,7 @@ export function HangmanTable({
       <TableHeader
         gameLabel="Hangman"
         gameColor="var(--coral)"
-        meta={`${room.code} · first to two`}
+        meta="first to two"
         onRules={onOpenRules}
         onLeave={onLeave}
         enabled={enabled}

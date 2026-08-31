@@ -67,7 +67,7 @@ export function Connect4Table({
       <TableHeader
         gameLabel="Connect 4"
         gameColor="var(--connect4-color)"
-        meta={`${room.code} · first to three`}
+        meta="first to three"
         onRules={onOpenRules}
         onLeave={onLeave}
         enabled={enabled}

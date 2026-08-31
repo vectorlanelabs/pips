@@ -146,7 +146,6 @@ function StatusDisplay({ status }: { status: StatusLine }) {
 // ---- SkipBoTable ----
 
 export function SkipBoTable({
-  code,
   localPlayerId,
   localName,
   names,
@@ -316,9 +315,8 @@ export function SkipBoTable({
         setTurnSoundEnabled={setTurnSoundEnabled}
       />
 
-      {/* Code + cards-left chips */}
+      {/* Cards-left chips */}
       <div className="sb-subheader">
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Skip-Bo · {code}</span>
         <div className="sb-stock-row">
           {publicState.seatOrder.map((pid) => (
             <span key={pid} className="sb-stock-pill">

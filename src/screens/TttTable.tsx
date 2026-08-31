@@ -68,7 +68,7 @@ export function TttTable({
       <TableHeader
         gameLabel="Tic Tac Toe"
         gameColor="var(--amber)"
-        meta={`${room.code} · first to three`}
+        meta="first to three"
         onRules={onOpenRules}
         onLeave={onLeave}
         enabled={enabled}

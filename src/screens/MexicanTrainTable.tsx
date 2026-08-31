@@ -131,7 +131,6 @@ function computeRailStatus(
 // ---- MexicanTrainTable ----
 
 export function MexicanTrainTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -343,7 +342,6 @@ export function MexicanTrainTable({
 
       {/* Chips */}
       <div className="mt-chips">
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Mexican Train · {code}</span>
         <span className="chip" style={{ background: 'transparent', color: 'var(--muted-text)' }}>
           Round {publicState.round + 1} of 13 · double-{publicState.engine}
         </span>

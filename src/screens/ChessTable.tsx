@@ -32,7 +32,6 @@ export interface ChessTableProps {
 
 // ---- Constants ----
 
-const BRAND = '#0891b2'
 const LIGHT_SQUARE = 'var(--surface)'
 const DARK_SQUARE = 'var(--grey-fill)'
 
@@ -52,7 +51,6 @@ function squareToRowCol(square: string): { row: number; col: number } {
 // ---- ChessTable ----
 
 export function ChessTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -204,10 +202,6 @@ export function ChessTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: BRAND, color: '#fff' }}>Chess · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="ch-error-banner">{notice}</div>}

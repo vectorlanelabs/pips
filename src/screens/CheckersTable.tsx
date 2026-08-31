@@ -26,7 +26,6 @@ export interface CheckersTableProps {
 
 // ---- Constants ----
 
-const BRAND = '#b45309'
 const BOARD_CELLS = 64
 const DARK_SQUARE = '#8a6045'
 const LIGHT_SQUARE = '#f4ecdd'
@@ -34,7 +33,6 @@ const LIGHT_SQUARE = '#f4ecdd'
 // ---- CheckersTable ----
 
 export function CheckersTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -179,10 +177,6 @@ export function CheckersTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: BRAND, color: '#fff' }}>Checkers · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="ck-error-banner">{notice}</div>}

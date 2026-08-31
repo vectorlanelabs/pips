@@ -387,7 +387,6 @@ function StatusDisplay({ status }: { status: StatusLine }) {
 // ---- Phase10Table ----
 
 export function Phase10Table({
-  code,
   localPlayerId,
   localName,
   names,
@@ -646,10 +645,6 @@ export function Phase10Table({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 14 }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Phase 10 · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="p10-error-banner">{notice}</div>}

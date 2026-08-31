@@ -180,7 +180,6 @@ function computeStatusLine(publicState: WahooPublicState, localPlayerId: string,
 // ---- WahooTable ----
 
 export function WahooTable({
-  code,
   localPlayerId,
   localName,
   names,
@@ -399,10 +398,6 @@ export function WahooTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Wahoo · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="wh-error-banner">{notice}</div>}

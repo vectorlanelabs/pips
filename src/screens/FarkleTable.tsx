@@ -120,7 +120,7 @@ export function FarkleTable({
       <TableHeader
         gameLabel="Farkle"
         gameColor="var(--violet)"
-        meta={`${room.code} · Round ${f.round} · to ${f.winningScore.toLocaleString()}`}
+        meta={`Round ${f.round} · to ${f.winningScore.toLocaleString()}`}
         onRules={onOpenRules}
         onLeave={onLeave}
         enabled={enabled}

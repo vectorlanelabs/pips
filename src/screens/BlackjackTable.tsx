@@ -33,7 +33,6 @@ export interface BlackjackTableProps {
 }
 
 export function BlackjackTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -280,10 +279,6 @@ export function BlackjackTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Blackjack · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && (

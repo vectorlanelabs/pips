@@ -175,7 +175,6 @@ function computePromptLine(
 // ---- DominoesTable ----
 
 export function DominoesTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -371,10 +370,6 @@ export function DominoesTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Dominoes · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="dm-error-banner">{notice}</div>}

@@ -348,7 +348,6 @@ function StatusDisplay({ status }: { status: StatusLine }) {
 // ---- RummyTable ----
 
 export function RummyTable({
-  code,
   localPlayerId,
   names,
   colors,
@@ -617,10 +616,6 @@ export function RummyTable({
         </div>
       </div>
 
-      {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Rummy · {code}</span>
-      </div>
 
       {/* Error banner */}
       {notice && <div className="rummy-error-banner">{notice}</div>}
