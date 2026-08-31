@@ -6,10 +6,13 @@
 
 /* ---- Outer container ---- */
 
+/* Vertical chrome (paddings/margins between header, code chip, card, and
+   footnote) is deliberately tighter than the other games' tables: the goal
+   is a 2-player game fitting a desktop viewport with zero scroll. */
 .p10-table {
   max-width: 1260px;
   margin: 0 auto;
-  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+  padding: clamp(20px, 2.5vw, 32px) clamp(16px, 4vw, 44px) 24px;
 }
 
 /* ---- Header ---- */
@@ -20,7 +23,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: clamp(16px, 2.4vw, 26px);
+  margin-bottom: 14px;
 }
 
 .p10-header-left {
@@ -100,9 +103,19 @@
   color: var(--muted-text);
 }
 
+/* ---- Play row: table card + desktop ladder rail ---- */
+
+.p10-play-row {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(14px, 1.8vw, 22px);
+}
+
 /* ---- Main table card ---- */
 
 .p10-table-card {
+  flex: 1 1 auto;
+  min-width: 0;
   background: var(--surface);
   border: 4px solid var(--ink);
   border-radius: 28px;
@@ -110,6 +123,87 @@
   padding: clamp(16px, 2.4vw, 26px);
   display: flex;
   flex-direction: column;
+}
+
+/* ---- Desktop ladder rail ---- */
+/* The phase ladder sits OFF the play field on desktop, in its own slim card
+   to the right of the table — the in-card horizontal band cost ~100px of
+   vertical space and made even a 2-player game scroll. Sticky so the ladder
+   stays in view when a bigger table does scroll. Below the breakpoint the
+   rail hides and the original horizontal band inside the card comes back. */
+
+.p10-ladder-rail {
+  flex: none;
+  width: 228px;
+  position: sticky;
+  top: 16px;
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: 18px 20px;
+}
+
+@media (max-width: 1023px) {
+  .p10-ladder-rail {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .p10-ladder-band {
+    display: none;
+  }
+}
+
+/* ---- Vertical ladder (rail variant) ---- */
+
+.p10-ladder-v {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.p10-ladder-v-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Smaller chips than the horizontal band's 40px — ten rows plus labels have
+   to fit comfortably inside the table card's height. */
+.p10-ladder-v .p10-ladder-chip {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 15px;
+  flex: none;
+}
+
+.p10-ladder-v-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Every phase's requirement is labeled permanently — the horizontal band
+   only showed this on hover, which is undiscoverable. */
+.p10-ladder-v-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-text);
+  line-height: 1.25;
+}
+
+.p10-ladder-v-label--current {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.p10-ladder-v .p10-ladder-dots {
+  justify-content: flex-start;
+  min-height: 0;
 }
 
 /* ---- Opponent tiles: a wrapping grid of content-driven seat tiles ---- */
@@ -667,7 +761,8 @@
 /* ---- Footnote ---- */
 
 .p10-footnote {
-  margin-top: clamp(14px, 2.2vw, 22px);
+  margin-top: 14px;
+  margin-bottom: 0;
   font-size: 13px;
   font-weight: 500;
   color: var(--faint-text);

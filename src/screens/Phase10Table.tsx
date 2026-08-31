@@ -277,27 +277,63 @@ function PhaseLadder({
   localPhaseIdx,
   localColor,
   opponents,
+  vertical,
 }: {
   localPhaseIdx: number
   localColor: string
   opponents: { seatId: string; phaseIdx: number; color: string }[]
+  vertical?: boolean
 }) {
   const [hovered, setHovered] = useState<number | null>(null)
+  const chipFor = (i: number) => {
+    const fill = i < localPhaseIdx ? 'done' : i === localPhaseIdx ? 'current' : 'ahead'
+    const atStep = opponents.filter((o) => o.phaseIdx === i)
+    const chipStyle: CSSProperties = {}
+    if (atStep.length > 0) {
+      chipStyle.boxShadow = `0 0 0 3px var(--surface), 0 0 0 6px ${atStep[0].color}`
+    }
+    if (i === localPhaseIdx) {
+      chipStyle.background = localColor
+      chipStyle.borderColor = localColor
+    }
+    return { fill, atStep, chipStyle }
+  }
+  if (vertical) {
+    return (
+      <div className="p10-ladder-v">
+        {PHASES.map((p, i) => {
+          const { fill, atStep, chipStyle } = chipFor(i)
+          return (
+            <div key={p.phase} className="p10-ladder-v-row">
+              <div
+                className={`p10-ladder-chip p10-ladder-chip--${fill}${atStep.length > 0 ? ' p10-ladder-chip--opponent-here' : ''}`}
+                style={chipStyle}
+              >
+                {p.phase}
+              </div>
+              <div className="p10-ladder-v-info">
+                <div className={`p10-ladder-v-label${i === localPhaseIdx ? ' p10-ladder-v-label--current' : ''}`}>{p.label}</div>
+                {(i === localPhaseIdx || atStep.length > 0) && (
+                  <div className="p10-ladder-dots">
+                    {i === localPhaseIdx && <span className="p10-ladder-dot" style={{ background: localColor }} />}
+                    {atStep.map((o) => (
+                      <span key={o.seatId} className="p10-ladder-dot" style={{ background: o.color }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
   return (
     <div className="p10-ladder">
       <div className="p10-ladder-chips">
         {PHASES.map((p, i) => {
-          const fill = i < localPhaseIdx ? 'done' : i === localPhaseIdx ? 'current' : 'ahead'
-          const atStep = opponents.filter((o) => o.phaseIdx === i)
+          const { fill, atStep, chipStyle } = chipFor(i)
           const opponentHere = atStep.length > 0
-          const chipStyle: CSSProperties = {}
-          if (opponentHere) {
-            chipStyle.boxShadow = `0 0 0 3px var(--surface), 0 0 0 6px ${atStep[0].color}`
-          }
-          if (i === localPhaseIdx) {
-            chipStyle.background = localColor
-            chipStyle.borderColor = localColor
-          }
           return (
             <div
               key={p.phase}
@@ -570,6 +606,12 @@ export function Phase10Table({
     handSize: publicState.handCounts[seatId] ?? 0,
   }))
 
+  const ladderOpponents = opponentIds.map((seatId) => ({
+    seatId,
+    phaseIdx: publicState.phaseIdx[seatId] ?? 0,
+    color: colors[seatId] ?? 'var(--slate-pip)',
+  }))
+
   return (
     <div className="p10-table">
       {/* Header */}
@@ -605,14 +647,15 @@ export function Phase10Table({
       </div>
 
       {/* Code chip */}
-      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+      <div style={{ marginBottom: 14 }}>
         <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Phase 10 · {code}</span>
       </div>
 
       {/* Error banner */}
       {notice && <div className="p10-error-banner">{notice}</div>}
 
-      {/* Main table card */}
+      {/* Main table card + desktop ladder rail beside it */}
+      <div className="p10-play-row">
       <div className="p10-table-card">
         {showIntro ? (
           <DealIntro
@@ -702,17 +745,9 @@ export function Phase10Table({
           })}
         </div>
 
-        {/* Ladder band */}
+        {/* Ladder band — narrow-window fallback; desktop shows the rail instead */}
         <div className="p10-ladder-band">
-          <PhaseLadder
-            localPhaseIdx={myPhaseIdx}
-            localColor={myColor}
-            opponents={opponentIds.map((seatId) => ({
-              seatId,
-              phaseIdx: publicState.phaseIdx[seatId] ?? 0,
-              color: colors[seatId] ?? 'var(--slate-pip)',
-            }))}
-          />
+          <PhaseLadder localPhaseIdx={myPhaseIdx} localColor={myColor} opponents={ladderOpponents} />
         </div>
 
         {/* Centre band */}
@@ -881,6 +916,12 @@ export function Phase10Table({
         </div>
         </>
         )}
+      </div>
+
+      {/* Desktop rail: the ladder lives beside the table, off the play field */}
+      <aside className="p10-ladder-rail">
+        <PhaseLadder vertical localPhaseIdx={myPhaseIdx} localColor={myColor} opponents={ladderOpponents} />
+      </aside>
       </div>
 
       {/* Footnote */}
