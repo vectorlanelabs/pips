@@ -165,11 +165,11 @@ function formatLastAction(
       }
       // Check for 0-rotation (only when sevenZero rule is enabled)
       if (sevenZero && lastAction.card.value === 0) {
-        return `${who} played a 0 — hands rotated`
+        return `${who} played a 0. Hands rotated`
       }
       const base = `${who} played ${describeCard(lastAction.card)}`
       // drewCount records how many the NEXT player drew after a draw2/wild4.
-      return lastAction.drewCount > 0 ? `${base} — ${lastAction.drewCount} cards drawn` : base
+      return lastAction.drewCount > 0 ? `${base}. ${lastAction.drewCount} cards drawn` : base
     }
     case 'draw': {
       const n = lastAction.drewCount
@@ -198,10 +198,10 @@ function computeStatus(
   hasPlayable: boolean,
 ): string {
   if (publicState.stage === 'roundOver') {
-    if (publicState.roundResult === null) return 'Round blocked — no cards left to draw.'
+    if (publicState.roundResult === null) return 'Round blocked. No cards left to draw.'
     const outId = publicState.roundResult.outPlayerId
     const outName = outId === localPlayerId ? 'You' : (names[outId] ?? outId)
-    return `${outName} went out — round over.`
+    return `${outName} went out. Round over.`
   }
   if (publicState.stage === 'over') {
     const winnerId = publicState.matchWinnerId
@@ -223,7 +223,7 @@ function computeStatus(
   }
   if (!isMyTurn) return `${names[currentId] ?? currentId} is thinking…`
   if (publicState.hasDrawnThisTurn) return 'Play the card you drew, or pass.'
-  return hasPlayable ? 'Play a card, or draw if you can’t.' : 'No playable cards — click the deck to draw.'
+  return hasPlayable ? 'Play a card, or draw if you can’t.' : 'No playable cards. Click the deck to draw.'
 }
 
 function computeRoundBanner(
@@ -237,7 +237,7 @@ function computeRoundBanner(
     const winnerName = winnerId === localPlayerId ? 'You' : (names[winnerId] ?? winnerId)
     return `${winnerName} won the match with ${publicState.scores[winnerId] ?? 0} points!`
   }
-  if (publicState.roundResult === null) return 'Round blocked — no cards left to draw.'
+  if (publicState.roundResult === null) return 'Round blocked. No cards left to draw.'
   const outId = publicState.roundResult.outPlayerId
   const outName = outId === localPlayerId ? 'You' : (names[outId] ?? outId)
   // pointsAdded[outPlayerId] is ALWAYS 0 by contract (it records each OTHER
@@ -488,7 +488,7 @@ export function UnoTable({
     if (publicState.pendingWild !== null) return 'Choose a color to finish your play.'
     if (publicState.hasDrawnThisTurn) return 'Play the card you drew, or pass.'
     if (unrevealedIds.length > 0) return 'Reveal the drawn cards first.'
-    return hasPlayable ? 'Select a card to play.' : 'No playable cards — click the deck to draw.'
+    return hasPlayable ? 'Select a card to play.' : 'No playable cards. Click the deck to draw.'
   })()
 
   // Client-side legality prediction only — the host is still the authority

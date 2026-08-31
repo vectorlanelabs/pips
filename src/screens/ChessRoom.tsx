@@ -7,7 +7,7 @@ import './ChessTable.css'
 const DIFFICULTIES: { id: ChessDifficulty; name: string; desc: string; disabled?: boolean }[] = [
   { id: 'easy', name: 'Easy', desc: 'Forgiving and a little random.' },
   { id: 'normal', name: 'Normal', desc: 'Thinks two moves ahead.' },
-  { id: 'hard', name: 'Hard', desc: 'A real engine. (Coming soon — plays Normal for now.)', disabled: true },
+  { id: 'hard', name: 'Hard', desc: 'A real engine. (Coming soon. Plays Normal for now.)', disabled: true },
 ]
 
 export function ChessRoom({

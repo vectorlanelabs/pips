@@ -122,7 +122,7 @@ function computeStatus(
   }
 
   if (!selection) {
-    return { pre: 'Select a card, then tap a highlighted pile — or select a hand card and tap a discard pile to end your turn.', post: '' }
+    return { pre: 'Select a card, then tap a highlighted pile. To end your turn, select a hand card and tap a discard pile.', post: '' }
   }
 
   if (selection.kind === 'hand') {

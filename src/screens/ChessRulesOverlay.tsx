@@ -12,12 +12,12 @@ export function ChessRulesOverlay({ onClose }: { onClose: () => void }) {
       <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: BRAND }}>
-            How Chess works
+            Chess rules
           </h2>
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
         <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginTop: 14 }}>
-          Full standard rules — every piece moves the normal way, including castling, en passant,
+          Full standard rules: every piece moves the normal way, including castling, en passant,
           and pawn promotion. Check, checkmate, stalemate, and draws all apply. Resign or offer a
           draw any time it's your move.
         </p>
@@ -26,7 +26,7 @@ export function ChessRulesOverlay({ onClose }: { onClose: () => void }) {
             <li key={row.label} style={{ display: 'flex', gap: 10, fontSize: 15, lineHeight: 1.5, color: 'var(--body-text)' }}>
               <span style={{ color: BRAND }}>●</span>
               <span>
-                <strong>{row.label}</strong> — {row.text}
+                <strong>{row.label}:</strong> {row.text}
               </span>
             </li>
           ))}

@@ -5,7 +5,7 @@ export function ScrabbleRulesOverlay({ onClose }: { onClose: () => void }) {
     'Each word played must connect to existing tiles (except the first move). Premium squares multiply letter or word scores: double/triple letter (DL/TL) and double/triple word (DW/TW).',
     'When you place seven tiles in one turn, you earn a 50-point bonus.',
     "A played word is NOT automatically checked. Any other player can challenge it before the next player takes a non-challenge action. If challenged and found invalid, the tiles return to the player's rack and they lose their turn. If valid, the challenger's next turn is skipped.",
-    'Exchange tiles instead of playing: select any number from your rack — as long as the bag holds at least that many — and they are replaced with random tiles from the bag.',
+    'Exchange tiles instead of playing: select any number from your rack (as long as the bag holds at least that many) and they are replaced with random tiles from the bag.',
     'Pass your turn without playing or exchanging.',
     'The game ends when either (1) the bag is empty and one player has no tiles, or (2) all players have passed or exchanged tiles twice in a row (in any combination). Final scores adjust: unplayed tiles in other racks are deducted from them and awarded to the player who went out.',
   ]
@@ -15,7 +15,7 @@ export function ScrabbleRulesOverlay({ onClose }: { onClose: () => void }) {
       <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#8b6e47' }}>
-            Scrabble — how to play
+            Scrabble rules
           </h2>
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>

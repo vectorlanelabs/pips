@@ -152,13 +152,13 @@ function computeStatusLine(publicState: WahooPublicState, localPlayerId: string,
   if (ev === null) {
     const cur = currentPlayer(publicState.turn)
     return cur === localPlayerId
-      ? 'Your roll — bring a marble out on a 1 or 6.'
+      ? 'Your roll. A 1 or 6 brings a marble out.'
       : `${names[cur] ?? cur} rolls first.`
   }
   const actor = ev.by === localPlayerId ? 'You' : (names[ev.by] ?? ev.by)
   switch (ev.kind) {
     case 'roll':
-      return `${actor} rolled a ${ev.die} — move a marble.`
+      return `${actor} rolled a ${ev.die}. Move a marble.`
     case 'move':
     case 'out':
     case 'shortcut':
@@ -169,9 +169,9 @@ function computeStatusLine(publicState: WahooPublicState, localPlayerId: string,
       if (ev.kind === 'shortcut') return `${actor} took the center shortcut!`
       return `${actor} left the center.`
     case 'bust':
-      return `Three sixes — ${actor === 'You' ? 'your' : `${actor}'s`} marble goes home!`
+      return `Three sixes: ${actor === 'You' ? 'your' : `${actor}'s`} marble goes home!`
     case 'pass':
-      return `${actor} rolled a ${ev.die} — no move, passes.`
+      return `${actor} rolled a ${ev.die}. No move, passes.`
     case 'win':
       return actor === 'You' ? 'You win!' : `${actor} wins!`
   }
@@ -628,7 +628,7 @@ export function WahooTable({
                           e.stopPropagation()
                           setSelectedMarbleIdx(t.moves[0].marbleIdx)
                         }}
-                        aria-label="Shared destination — choose a marble"
+                        aria-label="Shared destination: choose a marble"
                       />
                     ))}
                   </>

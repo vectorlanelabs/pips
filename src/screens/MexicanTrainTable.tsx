@@ -116,14 +116,14 @@ function computeRailStatus(
   if (publicState.stage === 'roundEnd') {
     const result = publicState.roundResult
     if (result === null) return ''
-    if (result.kind === 'blocked') return 'Nobody can play — round blocked.'
-    if (result.outPlayerId === localPlayerId) return 'You went out — round over.'
-    return `${names[result.outPlayerId!] ?? result.outPlayerId} went out — round over.`
+    if (result.kind === 'blocked') return 'Round blocked. Nobody can play.'
+    if (result.outPlayerId === localPlayerId) return 'You went out. Round over.'
+    return `${names[result.outPlayerId!] ?? result.outPlayerId} went out. Round over.`
   }
   if (publicState.doublePending) {
     return currentId === localPlayerId
       ? 'Double! Play again.'
-      : `${currentName} played a double — they play again.`
+      : `${currentName} played a double. They play again.`
   }
   return currentId === localPlayerId ? 'Your move.' : `${currentName} is thinking…`
 }
@@ -279,7 +279,7 @@ export function MexicanTrainTable({
   const autoPassing = canAct && noLegalPlay && publicState.boneyardCount === 0
   const hint = canAct
     ? (autoPassing
-        ? 'No move — passing…'
+        ? 'No move. Passing…'
         : selectedTile !== null ? 'Tap a glowing train to place it.' : 'Pick a tile from your hand.')
     : null
   const canDraw = canAct && noLegalPlay && publicState.boneyardCount > 0
@@ -309,9 +309,9 @@ export function MexicanTrainTable({
     if (result.kind === 'out') {
       const name =
         result.outPlayerId === localPlayerId ? 'You' : names[result.outPlayerId!] ?? result.outPlayerId
-      return `${name} went out — round over. Round ${nextRoundNumber} starts automatically.`
+      return `${name} went out. Round ${nextRoundNumber} starts automatically.`
     }
-    return `Nobody could play — round blocked. Round ${nextRoundNumber} starts automatically.`
+    return `Round blocked. Nobody could play. Round ${nextRoundNumber} starts automatically.`
   }, [publicState.stage, publicState.roundResult, publicState.round, localPlayerId, names])
 
   // ---- Render ----

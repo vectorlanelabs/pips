@@ -119,7 +119,7 @@ export const UNO_HOUSE_RULE_DEFS: UnoHouseRuleDef[] = [
   {
     key: 'stackDraw',
     label: 'Stack draw cards',
-    description: "Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing — it keeps growing until someone can’t or won’t continue it.",
+    description: "Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing. It keeps growing until someone can’t or won’t continue it.",
     default: false,
   },
   {

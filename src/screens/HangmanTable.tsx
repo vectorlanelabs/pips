@@ -202,7 +202,7 @@ export function HangmanTable({
                     const disabledReason = h.over
                       ? 'This round is already over.'
                       : used
-                        ? `Already guessed — ${correct ? 'correct' : 'wrong'}.`
+                        ? `Already guessed (${correct ? 'correct' : 'wrong'}).`
                         : !iAmGuesser
                           ? `Waiting on ${guesser?.name ?? 'the guesser'}.`
                           : undefined

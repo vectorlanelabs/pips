@@ -236,7 +236,7 @@ function makeValidator(
           privateStates,
         }
       }
-      return { ok: false, reason: 'stock is empty — draw from the discard pile instead' }
+      return { ok: false, reason: 'stock is empty, draw from the discard pile instead' }
     }
 
     if (action.type === 'DRAW_FROM_DISCARD') {
@@ -254,7 +254,7 @@ function makeValidator(
         const layoffableOnTable = allMeldGroups(publicState.melds, publicState.layoffs)
           .some((g) => classifyMeld([...g.cards, reachedCard]).valid)
         if (!meldableInHand && !layoffableOnTable) {
-          return { ok: false, reason: 'that card cannot be melded — reach for a different card, or draw just the top card instead' }
+          return { ok: false, reason: 'that card cannot be melded, pick a different card or draw just the top card instead' }
         }
       }
       const { from: newDiscard, to: newHand } = moveCards(publicState.discardPile, myHand, takenIds)

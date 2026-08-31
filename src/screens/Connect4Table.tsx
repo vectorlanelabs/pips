@@ -24,7 +24,7 @@ export function Connect4Table({
   const roundStatus = c.roundOver
     ? roundWinner
       ? roundWinner.id === localSeatId ? 'You connect four!' : `${roundWinner.name} connects four!`
-      : "It's a draw — playing again."
+      : "It's a draw. Playing again."
     : null
   const [hoverCol, setHoverCol] = useState<number | null>(null)
   const previewRow = hoverCol !== null && isMyTurn && !c.roundOver ? lowestOpenRow(c.board, hoverCol) : -1

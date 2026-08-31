@@ -1444,7 +1444,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (rummyStartedRef.current) {
-          rummyHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          rummyHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (rummySeatsRef.current.length >= RUMMY_MAX_SEATS) {
@@ -1737,7 +1737,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (blackjackStartedRef.current) {
-          blackjackHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          blackjackHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (blackjackSeatsRef.current.length >= BLACKJACK_MAX_SEATS) {
@@ -2048,7 +2048,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (holdemStartedRef.current) {
-          holdemHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          holdemHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (holdemSeatsRef.current.length >= HOLDEM_MAX_SEATS) {
@@ -2332,7 +2332,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (phase10StartedRef.current) {
-          phase10HostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          phase10HostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (phase10SeatsRef.current.length >= PHASE10_MAX_SEATS) {
@@ -2433,7 +2433,7 @@ export default function App() {
         // One-way flag: without it the 50ms re-arm in runPhase10BotsIfNeeded would
         // re-enter here and re-log the same rejection forever.
         phase10BotStuckRef.current = true
-        setPhase10Notice(`${phase10NamesRef.current[botId] ?? botId} got stuck — please report this bug.`)
+        setPhase10Notice(`${phase10NamesRef.current[botId] ?? botId} got stuck. Please report this bug.`)
         return
       }
       phase10SessionRef.current = result.game
@@ -2830,7 +2830,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (dominoesStartedRef.current) {
-          dominoesHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          dominoesHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (dominoesSeatsRef.current.length >= DOMINOES_MAX_SEATS) {
@@ -3094,7 +3094,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (wahooStartedRef.current) {
-          wahooHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          wahooHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (wahooSeatsRef.current.length >= 4) {
@@ -3366,7 +3366,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (checkersStartedRef.current) {
-          checkersHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          checkersHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (checkersSeatsRef.current.length >= 2) {
@@ -3641,7 +3641,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (mtStartedRef.current) {
-          mtHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          mtHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (mtSeatsRef.current.length >= MT_MAX_SEATS) {
@@ -4185,7 +4185,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (unoStartedRef.current) {
-          unoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          unoHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (unoSeatsRef.current.length >= UNO_MAX_SEATS) {
@@ -4599,7 +4599,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (skipBoStartedRef.current) {
-          skipBoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          skipBoHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (skipBoSeatsRef.current.length >= SKIPBO_MAX_SEATS) {
@@ -4876,7 +4876,7 @@ export default function App() {
       },
       onJoin(guestId, guestName) {
         if (scrabbleStartedRef.current) {
-          scrabbleHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          scrabbleHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
         if (scrabbleSeatsRef.current.length >= SCRABBLE_MAX_SEATS) {

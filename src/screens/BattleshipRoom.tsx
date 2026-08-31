@@ -7,7 +7,7 @@ import './BattleshipTable.css'
 const VARIANTS: { id: BattleshipVariant; name: string; desc: string }[] = [
   { id: 'standard', name: 'Standard turn-based', desc: 'One shot each, hit or miss.' },
   { id: 'streak', name: 'Make it, take it', desc: 'Keep firing as long as you hit.' },
-  { id: 'free', name: 'Free-for-all', desc: 'No turns — both fleets fire at will. First to sink five wins.' },
+  { id: 'free', name: 'Free-for-all', desc: 'No turns: both fleets fire at will. First to sink five wins.' },
 ]
 
 export function BattleshipRoom({

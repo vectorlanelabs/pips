@@ -55,7 +55,7 @@ function computeStatus(
   // Round over
   if (publicState.roundOver) {
     if (publicState.roundWinnerId === null) {
-      return { pre: 'Round blocked — no cards left to draw.', card: null, post: '' }
+      return { pre: 'Round blocked. No cards left to draw.', card: null, post: '' }
     }
     const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId] ?? publicState.roundWinnerId)
     return { pre: `${winnerName} went out!`, card: null, post: '' }
@@ -89,7 +89,7 @@ function computeRoundBanner(
   names: Record<string, string>,
 ): string {
   if (publicState.roundWinnerId === null) {
-    return 'Round blocked — no cards left to draw. Dealing a new round…'
+    return 'Round blocked. No cards left to draw. Dealing a new round…'
   }
   const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId] ?? publicState.roundWinnerId)
   const scoreLine = publicState.seatOrder
@@ -358,7 +358,7 @@ function PhaseLadder({
         })}
       </div>
       <div className="p10-ladder-caption">
-        {hovered !== null ? `Phase ${PHASES[hovered].phase} — ${PHASES[hovered].label}` : '\u00a0'}
+        {hovered !== null ? `Phase ${PHASES[hovered].phase}: ${PHASES[hovered].label}` : '\u00a0'}
       </div>
     </div>
   )

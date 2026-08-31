@@ -119,7 +119,7 @@ function computeEventLine(
   const action = publicState.lastAction
   if (action === null) {
     return publicState.roundStarterId === localPlayerId
-      ? 'Your lead — play any tile to open the board.'
+      ? 'Your lead. Play any tile to open the board.'
       : `${names[publicState.roundStarterId] ?? publicState.roundStarterId} opens the board…`
   }
   const name = actorName(action.by, localPlayerId, names)
@@ -144,8 +144,8 @@ function computePromptLine(
     if (currentPlayer(publicState.turn) === localPlayerId) {
       if (noLegalPlay) {
         return publicState.boneyardCount > 0
-          ? 'No match — draw from the boneyard.'
-          : "No match, boneyard's empty — knock."
+          ? 'No match. Draw from the boneyard.'
+          : "No match and the boneyard's empty. Knock."
       }
       return 'Your move.'
     }
@@ -158,13 +158,13 @@ function computePromptLine(
   let line: string
   if (result.kind === 'out') {
     const name = actorName(result.scorerId ?? '', localPlayerId, names)
-    line = `${name} went out — +${result.points}.`
+    line = `${name} went out: +${result.points}.`
   } else if (result.scorerId === null) {
-    line = 'Blocked — nobody scores.'
+    line = 'Blocked. Nobody scores.'
   } else {
     const name = actorName(result.scorerId, localPlayerId, names)
     const verb = result.scorerId === localPlayerId ? 'bank' : 'banks'
-    line = `Blocked — ${name} ${verb} +${result.points}.`
+    line = `Blocked. ${name} ${verb} +${result.points}.`
   }
   if (publicState.matchWinnerId === null) {
     line += ' Next round coming up…'

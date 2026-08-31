@@ -29,7 +29,7 @@ const DRAW_LEDE: Record<'agreement' | 'threefold' | 'fifty-move' | 'insufficient
   agreement: 'Both players agreed to a draw.',
   threefold: 'Draw by repetition.',
   'fifty-move': 'Draw by the fifty-move rule.',
-  'insufficient-material': 'Draw — neither side had enough material to mate.',
+  'insufficient-material': 'Neither side had enough material to mate.',
 }
 
 // ---- ChessResults ----
@@ -106,7 +106,7 @@ export function ChessResults({
     winnerId = null
     headline = "It's a draw."
     headlineColor = 'var(--ink)'
-    lede = 'Stalemate — nobody had a legal move.'
+    lede = 'Stalemate. Nobody had a legal move.'
     rows = drawRows()
   } else {
     winnerId = null

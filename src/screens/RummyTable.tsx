@@ -152,7 +152,7 @@ function computeStatus(
         return {
           pre: 'Lay down the ',
           card: { rank: card.rank, suit: card.suit as Exclude<Suit, 'joker'> },
-          post: ' \u2014 that card has to be used.',
+          post: '. You have to use it.',
         }
       }
     }
@@ -167,14 +167,14 @@ function computeStatus(
         return { pre: 'Take the ', card: reached, post: '.' }
       }
       return {
-        pre: `Take ${n} cards \u2014 `,
+        pre: `Take ${n} cards: `,
         card: reached,
         post: ` and the ${n - 1} on top.`,
       }
     }
 
     // Idle — reach-in prompt
-    return { pre: 'Reach in anywhere \u2014 you take that card and everything above it.', card: null, post: '' }
+    return { pre: 'Draw from the stock, or take any card in the discard pile plus every card above it.', card: null, post: '' }
   }
 
   // My turn — discard phase
@@ -712,7 +712,7 @@ export function RummyTable({
           {showRoundBanner && (
             <div className="rummy-round-banner">
               {publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId!] ?? publicState.roundWinnerId)}
-              {' won this round — '}
+              {' won this round with '}
               {publicState.scores[publicState.roundWinnerId!] ?? 0}
               {' points. Round '}
               {publicState.roundNumber + 1}
@@ -721,7 +721,7 @@ export function RummyTable({
           )}
           {showBlockedRoundBanner && (
             <div className="rummy-round-banner">
-              {'Stock and discard pile both ran out — round blocked, no score. Round '}
+              {'Stock and discard both ran out. Round blocked, no score. Round '}
               {publicState.roundNumber + 1}
               {' starts automatically.'}
             </div>

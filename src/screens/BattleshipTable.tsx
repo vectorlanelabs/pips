@@ -231,9 +231,9 @@ export function BattleshipTable({
   let statusIsBanner = false
   if (drafting) {
     if (selectedShip) {
-      statusText = `Placing: ${selectedShip.name} (${selectedShip.len}) — click your grid to drop it`
+      statusText = `Placing: ${selectedShip.name} (${selectedShip.len}). Click your grid to drop it.`
     } else if (placedIds.length === 5) {
-      statusText = 'Fleet placed — start the battle when ready.'
+      statusText = 'Fleet placed. Start the battle when ready.'
     } else {
       statusText = 'Pick a ship below to place it.'
     }
@@ -243,7 +243,7 @@ export function BattleshipTable({
   } else if (!lastShot) {
     statusText = variant === 'free'
       ? 'Fire at will!'
-      : isMyTurn ? 'Your move — fire at the enemy waters.' : `${opponentName} fires first.`
+      : isMyTurn ? 'Your move. Fire at the enemy waters.' : `${opponentName} fires first.`
   } else if (lastShot.result === 'sunk') {
     const shipName = SHIPS.find((s) => s.id === lastShot.shipId)?.name ?? ''
     statusText = publicState.stage === 'over'
@@ -273,7 +273,7 @@ export function BattleshipTable({
   const chipColor = placing || variant === 'free' ? BRAND : isMyTurn ? 'var(--green-text)' : opponentColor
   const hint = publicState.stage === 'battle'
     ? variant === 'free'
-      ? 'No turns — sink all five first.'
+      ? 'No turns. Sink all five first.'
       : isMyTurn ? 'Click enemy waters to fire.' : `${opponentName} is aiming…`
     : ''
 

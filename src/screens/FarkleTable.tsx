@@ -105,13 +105,13 @@ export function FarkleTable({
   const remaining = f.dice.length - selected.length
   let rollLabel = 'Roll six'
   if (f.farkle) rollLabel = 'End turn'
-  else if (f.dice.length > 0) rollLabel = remaining === 0 && selected.length > 0 ? 'Hot dice — roll six!' : `Roll ${remaining} again`
+  else if (f.dice.length > 0) rollLabel = remaining === 0 && selected.length > 0 ? 'Hot dice! Roll six again' : `Roll ${remaining} again`
 
   let hint = ''
   if (!isMyTurn) hint = f.farkle ? '' : `${activeSeat?.name} is thinking…`
   else if (f.farkle) hint = 'Hand the dice over.'
   else if (selected.length === 0) hint = f.dice.length > 0 ? 'Tap a die to set it aside.' : ''
-  else if (!sel.valid) hint = 'Deselect the dice outlined in red — they don’t score.'
+  else if (!sel.valid) hint = 'Deselect the dice outlined in red. They don’t score.'
   else if (activeSeat?.score === 0 && onTable < f.openingScore) hint = `${f.openingScore - onTable} more to get on the board.`
   else hint = `+${sel.score} selected`
 
@@ -168,7 +168,7 @@ export function FarkleTable({
                   }}
                   >
                     {lastLog.tone === 'farkle'
-                      ? `${lastLog.who} farkled — nothing banked.`
+                      ? `${lastLog.who} farkled. Nothing banked.`
                       : `${lastLog.who} banked ${lastLog.amount.toLocaleString()}.`}
                   </span>
                 ) : (

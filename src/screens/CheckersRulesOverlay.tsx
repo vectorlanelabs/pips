@@ -6,7 +6,7 @@ export function CheckersRulesOverlay({ onClose }: { onClose: () => void }) {
   ]
 
   const rules = [
-    'Captures are optional — but once you jump, that piece must keep jumping while it can.',
+    'Captures are optional, but once you jump, that piece must keep jumping while it can.',
     'Kings move and capture one square in any diagonal direction.',
     'The starter alternates between games.',
   ]
@@ -16,7 +16,7 @@ export function CheckersRulesOverlay({ onClose }: { onClose: () => void }) {
       <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#b45309' }}>
-            How Checkers works
+            Checkers rules
           </h2>
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
@@ -30,7 +30,7 @@ export function CheckersRulesOverlay({ onClose }: { onClose: () => void }) {
             <li key={row.label} style={{ display: 'flex', gap: 10, fontSize: 15, lineHeight: 1.5, color: 'var(--body-text)' }}>
               <span style={{ color: '#b45309' }}>●</span>
               <span>
-                <strong>{row.label}</strong> — {row.text}
+                <strong>{row.label}:</strong> {row.text}
               </span>
             </li>
           ))}

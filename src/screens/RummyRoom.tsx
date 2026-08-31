@@ -121,7 +121,7 @@ export function RummyRoom({
           )}
           {seats.length < RUMMY_MAX_SEATS && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Two to four seats — bots can fill any of them.
+              Two to four seats. Bots can fill any of them.
             </p>
           )}
         </div>

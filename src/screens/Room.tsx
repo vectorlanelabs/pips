@@ -137,7 +137,7 @@ export function Room({
           </div>
           <p style={{ marginTop: 16, fontSize: 15, color: 'var(--muted-text)' }}>
             {room.seats.length >= 2
-              ? "Everyone's here — the host throws first."
+              ? "Everyone's here. The host throws first."
               : 'Waiting for someone to type the code, or add a house player.'}
           </p>
         </div>

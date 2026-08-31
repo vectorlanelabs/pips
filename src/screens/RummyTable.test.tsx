@@ -115,7 +115,7 @@ describe('RummyTable', () => {
       },
     })
     render(<RummyTable {...props} />)
-    expect(screen.getByText(/round blocked, no score/)).toBeInTheDocument()
+    expect(screen.getByText(/Round blocked, no score/)).toBeInTheDocument()
   })
 
   it('hides the lay down/discard actions once the round is over', () => {

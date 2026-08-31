@@ -196,7 +196,7 @@ function makeValidator(
           privateStates,
         }
       }
-      return { ok: false, reason: 'stock is empty — draw from the discard pile instead' }
+      return { ok: false, reason: 'stock is empty, draw from the discard pile instead' }
     }
 
     if (action.type === 'DRAW_FROM_DISCARD') {
@@ -204,7 +204,7 @@ function makeValidator(
       if (cardCount(publicState.discardPile) === 0) return { ok: false, reason: 'discard pile is empty' }
       const top = topCard(publicState.discardPile)!
       if (top.meta?.kind === 'skip') {
-        return { ok: false, reason: 'a Skip card can never be picked up from the discard pile — draw from the stock instead' }
+        return { ok: false, reason: 'a Skip card can never be picked up from the discard pile, draw from the stock instead' }
       }
       // top card only, no reach-in — Phase 10 has no obligation to track afterwards
       const { from: newDiscard, to: newHand } = moveCards(publicState.discardPile, myHand, [top.id])

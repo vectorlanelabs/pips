@@ -16,11 +16,11 @@ export const SOLITAIRE_MODE_LABELS: Record<SolitaireMode, string> = {
 
 const MODE_DESCRIPTIONS: Record<SolitaireMode, string> = {
   klondike: 'Seven columns, draw one at a time from the stock, unlimited passes.',
-  klondike3: 'Seven columns, draw three at a time from the stock — only the last one drawn is playable.',
+  klondike3: 'Seven columns, draw three at a time from the stock. Only the last one drawn is playable.',
   freecell: 'Eight columns, every card face up, four free cells to park cards in.',
-  spider: 'Ten columns, two suits, no free cells or foundations — build full King-to-Ace runs to clear them.',
+  spider: 'Ten columns, two suits, no free cells or foundations. Build full King-to-Ace runs to clear them.',
   spider1: 'The easiest Spider: one suit only, so any descending run is always safe to move as a whole.',
-  pyramid: 'A 28-card triangle — pair exposed cards that add up to 13 to clear them. Kings clear alone.',
+  pyramid: 'A 28-card triangle. Pair exposed cards that add up to 13 to clear them. Kings clear alone.',
 }
 
 export interface SolitaireRoomProps {
@@ -111,7 +111,7 @@ export function SolitaireRoom({
             </div>
           </div>
           <p style={{ marginTop: 16, fontSize: 15, color: 'var(--muted-text)' }}>
-            Solitaire is just you and the deck — no code to share.
+            Solitaire is single player. No code to share.
           </p>
         </div>
       </div>

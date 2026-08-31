@@ -152,7 +152,7 @@ export function ChessTable({
     } else if (o.kind === 'resign') {
       const winnerId = publicState.seatOrder[o.winnerSeat]
       statusText = winnerId === localPlayerId
-        ? `You win — ${opponentName} resigned.`
+        ? `You win. ${opponentName} resigned.`
         : 'You resigned.'
     } else if (o.kind === 'stalemate') {
       statusText = 'Draw by stalemate.'
@@ -161,9 +161,9 @@ export function ChessTable({
     } else if (o.reason === 'threefold') {
       statusText = 'Draw by repetition.'
     } else if (o.reason === 'fifty-move') {
-      statusText = 'Draw — fifty-move rule.'
+      statusText = 'Draw by the fifty-move rule.'
     } else {
-      statusText = 'Draw — insufficient material.'
+      statusText = 'Draw by insufficient material.'
     }
     hint = ''
   } else if (myTurn) {

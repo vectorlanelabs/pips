@@ -117,7 +117,7 @@ export function HoldemRoom({
           )}
           {seats.length < HOLDEM_MAX_SEATS && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Two to eight seats — bots can fill any of them.
+              Two to eight seats. Bots can fill any of them.
             </p>
           )}
         </div>

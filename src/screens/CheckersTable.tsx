@@ -143,7 +143,7 @@ export function CheckersTable({
     hint = 'Keep jumping with the highlighted piece.'
   } else if (myTurn) {
     statusText = publicState.gameNumber === 1 && publicState.turn.turnNumber === 1
-      ? 'Your move — captures are optional, but a jump must keep jumping while it can.'
+      ? 'Your move. Captures are optional, but a jump must keep jumping while it can.'
       : 'Your move.'
     hint = 'Tap a piece, then tap a highlighted square.'
   } else {

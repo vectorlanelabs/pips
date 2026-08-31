@@ -341,7 +341,7 @@ export function HoldemTable({
               {(blindStage === 'sb' ? names[publicState.smallBlindSeat] : names[publicState.bigBlindSeat]) ?? 'A player'}
               {' posts the '}
               {blindStage === 'sb' ? 'small' : 'big'}
-              {' blind — '}
+              {' blind: '}
               {blindStage === 'sb'
                 ? publicState.hands[publicState.smallBlindSeat]?.betThisStreet ?? 0
                 : publicState.hands[publicState.bigBlindSeat]?.betThisStreet ?? 0}

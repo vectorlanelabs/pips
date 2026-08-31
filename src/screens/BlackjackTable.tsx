@@ -309,11 +309,11 @@ export function BlackjackTable({
 
             {sittingOut ? (
               <div className="blackjack-pre-deal-panel">
-                Sitting out this round — not enough chips to bet.
+                Sitting out this round. Not enough chips to bet.
               </div>
             ) : hasBet ? (
               <div className="blackjack-pre-deal-panel">
-                Bet placed: ${publicState.bets[localPlayerId]} — waiting on others
+                Bet placed: ${publicState.bets[localPlayerId]}. Waiting on others.
               </div>
             ) : (
               <div className="blackjack-pre-deal-panel">

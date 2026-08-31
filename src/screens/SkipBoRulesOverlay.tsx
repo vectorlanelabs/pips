@@ -4,10 +4,10 @@ export function SkipBoRulesOverlay({ onClose }: { onClose: () => void }) {
     'Four shared building piles run from 1 up to 12. A numbered card can only be played on the pile that needs exactly that number; a Skip-Bo wild card can be any number.',
     'A building pile that reaches 12 is cleared into the used pile and restarts at 1.',
     'Your turn: play as many legal cards as you can, from your stockpile top, your own discard-pile tops, and your hand, in any order.',
-    'After you are done playing, discard exactly one hand card onto one of your four discard piles — or pass only when your hand is empty.',
+    'After you are done playing, discard exactly one hand card onto one of your four discard piles, or pass only when your hand is empty.',
     'The next player then draws back up to 5 cards from the shared draw pile. When the draw pile empties, the used pile is shuffled and recycled into it.',
     'The first player to empty their stockpile wins immediately, even mid-turn.',
-    'No scores, no next round — a rematch is a completely fresh deal.',
+    'No scores, no next round. A rematch is a fresh deal.',
   ]
 
   return (

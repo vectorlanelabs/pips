@@ -1,7 +1,7 @@
 export function HoldemRulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
     'Starting chips: 1000. Small blind: 5, big blind: 10.',
-    'No-limit betting — wager any amount from 1 chip to your entire stack.',
+    'No-limit betting: wager any amount from 1 chip to your entire stack.',
     'A raise must be at least as large as the previous bet or raise.',
     'All-in players (out of chips) can win their own pot only; side pots split among remaining players.',
     'Showdown reveals only the non-folded hands competing for each pot.',

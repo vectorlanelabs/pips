@@ -28,7 +28,7 @@ export function TttTable({
   const roundStatus = t.roundOver
     ? roundWinner
       ? roundWinner.id === localSeatId ? 'You win this one!' : `${roundWinner.name} wins this one!`
-      : "It's a draw — playing again."
+      : "It's a draw. Playing again."
     : null
 
   // Sound effects — diff room state transitions, but only for my own actions

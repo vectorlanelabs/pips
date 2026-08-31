@@ -122,7 +122,7 @@ export function Landing({
               Join
             </button>
           </div>
-          {!ready && <p style={{ fontSize: 14, color: 'var(--faint-text)', margin: 0 }}>Just a name — no account, no password.</p>}
+          {!ready && <p style={{ fontSize: 14, color: 'var(--faint-text)', margin: 0 }}>Just a name. No account, no password.</p>}
           {error && <p style={{ fontSize: 14, color: 'var(--coral)', margin: 0, fontWeight: 600 }}>{error}</p>}
         </div>
       </div>

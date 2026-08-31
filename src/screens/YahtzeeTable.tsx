@@ -166,7 +166,7 @@ export function YahtzeeTable({
             </div>
             {y.dice.length > 0 && (
               <p style={{ fontSize: 14, color: 'var(--muted-text)', marginTop: 12 }}>
-                {y.rollsLeft > 0 ? 'Tap a die to hold it for the next roll.' : 'No rolls left — pick a box on the card.'}
+                {y.rollsLeft > 0 ? 'Tap a die to hold it for the next roll.' : 'No rolls left. Pick a box on the card.'}
               </p>
             )}
           </div>

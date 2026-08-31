@@ -367,9 +367,9 @@ export function SolitaireTable({
         if (homeMove) {
           return 'Click it again to remove it.'
         }
-        return 'Click a card that adds up to 13 with it — or just drag it there.'
+        return 'Click a card that adds up to 13 with it, or drag it there.'
       }
-      return 'Click a card to select it, then click one that adds up to 13 — or just drag it there. Kings clear alone.'
+      return 'Click a card, then click one that adds up to 13, or drag it there. Kings clear alone.'
     }
     if (dragFrom) {
       const cell = state.mode === 'freecell' ? ', or a free cell' : ''
@@ -385,7 +385,7 @@ export function SolitaireTable({
       const cell = state.mode === 'freecell' ? ', or free cell' : ''
       return `Click a column, foundation${cell} to move ${selection.count} card(s).`
     }
-    return 'Click a card to select it, then click where it goes — or just drag it there.'
+    return 'Click a card, then click where it goes, or drag it there.'
   }
 
   // Auto-play only offers itself once there's no hidden information left to
@@ -560,7 +560,7 @@ export function SolitaireTable({
                     design={cardBack}
                     canDraw={state.stock.length > 0}
                     empty={state.stock.length === 0}
-                    ariaLabel={state.stock.length === 0 ? 'Stock pile (empty)' : 'Stock pile — deals one card to every column'}
+                    ariaLabel={state.stock.length === 0 ? 'Stock pile (empty)' : 'Stock pile, deals one card to every column'}
                     onClick={tryStock}
                   />
                 </div>
@@ -630,7 +630,7 @@ export function SolitaireTable({
 
             {stuck && (
               <div className="sol-stuck-banner">
-                <span>No playable cards left in the deck right now — you can still pull cards back off a foundation to open things up.</span>
+                <span>No playable cards left in the deck right now. You can still pull cards back off a foundation.</span>
                 <button type="button" className="btn pill-small" onClick={() => setDismissedAtCycle(stuckCycles)}>Dismiss</button>
               </div>
             )}

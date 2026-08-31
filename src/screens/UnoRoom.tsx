@@ -180,7 +180,7 @@ export function UnoRoom({
           )}
           {seats.length < UNO_MAX_SEATS && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Two to six seats — bots can fill any of them.
+              Two to six seats. Bots can fill any of them.
             </p>
           )}
         </div>

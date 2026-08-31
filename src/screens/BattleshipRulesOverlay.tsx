@@ -1,11 +1,11 @@
 export function BattleshipRulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
-    'Place your five ships on your grid: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2). Rotate with the button or spacebar. Ships may touch — there’s no no-touch rule here.',
+    'Place your five ships on your grid: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2). Rotate with the button or spacebar. Ships may touch. There’s no no-touch rule here.',
     'Take turns firing one shot at the enemy waters. Hit or miss, the turn passes.',
-    'A ship goes down when every one of its squares is hit — sinking it scores you a point and reveals its shape.',
+    'A ship goes down when every one of its squares is hit. Sinking it scores you a point and reveals its shape.',
     'Your fleet panel shows your true damage; the enemy\u2019s only lights up as you sink their ships.',
     'Sink all five enemy ships to win the match.',
-    'Three ways to play \u2014 Standard (one shot each), Make it take it (keep firing while you hit), Free-for-all (no turns; first to sink all five wins).',
+    'Three ways to play: Standard (one shot each), Make it take it (keep firing while you hit), Free-for-all (no turns; first to sink all five wins).',
   ]
 
   return (
@@ -13,7 +13,7 @@ export function BattleshipRulesOverlay({ onClose }: { onClose: () => void }) {
       <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#1a6fae' }}>
-            Battleship — how to play
+            Battleship rules
           </h2>
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
