@@ -637,18 +637,13 @@ export function Phase10Table({
             return (
               <div
                 key={seatId}
-                className={`p10-opp-tile${isTurn ? ' p10-opp-tile--turn' : ''}`}
-                style={isTurn ? { background: seatColor, borderColor: seatColor, color: '#fff' } : undefined}
+                className={`p10-opp-tile${opponentIds.length === 1 ? ' p10-opp-tile--full' : ''}${opponentIds.length === 2 ? ' p10-opp-tile--wide' : ''}${isTurn ? ' p10-opp-tile--turn' : ''}`}
+                style={isTurn ? { borderColor: seatColor } : undefined}
               >
                 <div className="p10-opp-tile-top">
-                  <span
-                    className="p10-seat-dot"
-                    style={isTurn
-                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
-                      : { background: seatColor }}
-                  />
-                  <span className="p10-opp-name" style={isTurn ? undefined : { color: seatColor }}>{seatName}</span>
-                  {isTurn && <span className="p10-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
+                  <span className="p10-seat-dot" style={{ background: seatColor }} />
+                  <span className="p10-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                  {isTurn && <span className="p10-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
                 </div>
                 <div className="p10-opp-tile-hand">
                   {fanCount > 0 && (

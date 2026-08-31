@@ -147,9 +147,15 @@
   transition: border-color 0.2s;
 }
 
-/* 2- and 3-player games (1–2 opponents): each opponent tile spans half the
-   table width instead of the quarter-width cap meant for 4+ opponents, so
-   a lone opponent isn't left scrunched into a small corner tile. */
+/* 2-player game (1 opponent): the lone opponent tile spans the full table
+   width — its laid-down melds get the whole row instead of escaping a
+   small corner tile. */
+.rummy-opp-tile--full {
+  max-width: 100%;
+}
+
+/* 3-player game (2 opponents): each opponent tile spans half the table
+   width instead of the quarter-width cap meant for 4+ opponents. */
 .rummy-opp-tile--wide {
   max-width: calc((100% - var(--rummy-opp-gap)) / 2);
 }

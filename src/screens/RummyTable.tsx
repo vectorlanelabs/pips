@@ -650,7 +650,7 @@ export function RummyTable({
             return (
               <div
                 key={seatId}
-                className={`rummy-opp-tile${opponentIds.length <= 2 ? ' rummy-opp-tile--wide' : ''}${isTurn ? ' rummy-opp-tile--turn' : ''}`}
+                className={`rummy-opp-tile${opponentIds.length === 1 ? ' rummy-opp-tile--full' : ''}${opponentIds.length === 2 ? ' rummy-opp-tile--wide' : ''}${isTurn ? ' rummy-opp-tile--turn' : ''}`}
                 style={isTurn ? { borderColor: seatColor } : undefined}
               >
                 <div className="rummy-opp-tile-top">
