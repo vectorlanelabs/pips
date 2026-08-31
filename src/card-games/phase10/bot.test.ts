@@ -391,6 +391,90 @@ describe('phase10BotStrategy', () => {
       expect(p1Hand).toContain(action.cardId)
     }
   })
+
+  it('never proposes a hit into a run\'s wild-locked range — it would be rejected and freeze the bot', () => {
+    // p2's laid run is red 3-4-Wild-6: the Wild is locked in as the 5, so rules.ts
+    // rejects any HIT of a natural 5 ("already covered by a Wild"). isValidRun alone
+    // still passes for [3,4,Wild,6,5] (the Wild can re-read as 2 or 7), so a bot that
+    // only checks isValidRun proposes the hit, gets rejected, and — because the app's
+    // bot loop re-runs the deterministic strategy on rejection — freezes forever.
+    // The bot must skip the covered 5 and fall through to discarding it instead.
+    const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), cardsByIds('p10-4', 'p10-6', 'p10-100', 'p10-10'))
+    // red 5 (p10-8) is the trapped card; every filler avoids ranks 2, 5, and 7 so no
+    // OTHER hit on the run is legal and the locked-range card is the only candidate.
+    const p1Hand = ['p10-8', 'p10-40', 'p10-44', 'p10-46', 'p10-64', 'p10-68', 'p10-70', 'p10-88', 'p10-92', 'p10-94']
+    const p2Hand = ['p10-24', 'p10-28', 'p10-30', 'p10-34', 'p10-36', 'p10-38', 'p10-42', 'p10-52', 'p10-54', 'p10-56']
+    const game = buildSession({
+      p1HandCardIds: p1Hand,
+      p2HandCardIds: p2Hand,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Hand, ...p2Hand, 'p10-96', 'p10-4', 'p10-6', 'p10-100', 'p10-10']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: true },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
+    })
+
+    // The trapped red 5 has zero connectivity, so it's also the natural discard.
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'DISCARD_CARD', cardId: 'p10-8' })
+
+    // And the full bot turn goes through the validator without a rejection.
+    const result = runPhase10BotTurn(game, 'p1', phase10BotStrategy)
+    expect(result.outcome.ok).toBe(true)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('regression: the exact live freeze state — run 4-5-W-W-8..12, bot holding two 6s and a 5', () => {
+    // Observed in a real game (2026-08-30): the human's laid run was red
+    // 4,5,Wild,Wild,8,9,10,11,12 (Wilds standing in for 6 and 7), the bot held
+    // green 6, green 5, yellow 6 — every one a natural inside the locked range
+    // 4..12 — and the bot froze forever proposing a hit of a 6 that the
+    // validator rejected. It must discard instead.
+    const runZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), cardsByIds('p10-6', 'p10-8', 'p10-100', 'p10-101', 'p10-14', 'p10-16', 'p10-18', 'p10-20', 'p10-22'))
+    const p1Hand = ['p10-58', 'p10-56', 'p10-82']
+    const p2Hand = ['p10-24', 'p10-28', 'p10-30', 'p10-34', 'p10-36', 'p10-38', 'p10-42', 'p10-52']
+    const game = buildSession({
+      p1HandCardIds: p1Hand,
+      p2HandCardIds: p2Hand,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Hand, ...p2Hand, 'p10-96', 'p10-6', 'p10-8', 'p10-100', 'p10-101', 'p10-14', 'p10-16', 'p10-18', 'p10-20', 'p10-22']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: true },
+      groups: { p1: [], p2: [{ type: 'run', zone: runZone, phaseNumber: 5 }] },
+    })
+
+    const action = strategyAction(game, 'p1')
+    expect(action.type).toBe('DISCARD_CARD')
+
+    const result = runPhase10BotTurn(game, 'p1', phase10BotStrategy)
+    expect(result.outcome.ok).toBe(true)
+    expect(totalCards(result.game)).toBe(108)
+  })
+})
+
+// ── tests: bot-vs-bot full matches — no proposal is ever rejected ─────────────
+
+describe('bot-vs-bot integration', () => {
+  it('plays full matches and every action the strategy proposes is accepted by the validator', () => {
+    // The freeze class this guards against: ANY strategy/validator disagreement
+    // deadlocks the app's bot loop, because a rejected deterministic proposal is
+    // re-proposed forever. Playing whole matches sweeps a wide sample of real
+    // reachable states through the exact strategy → validator path.
+    for (const seed of [1, 42, 987654321]) {
+      let game = createPhase10Game(['p1', 'p2'], seed)
+      let actions = 0
+      while (!game.session.publicState.matchWinnerId && actions < 40000) {
+        const ps = game.session.publicState
+        const actor = ps.roundOver ? 'p1' : currentPlayer(ps.turn)
+        const result = runPhase10BotTurn(game, actor, phase10BotStrategy)
+        expect(result.outcome, `seed ${seed}, action ${actions}: ${JSON.stringify(result.outcome)}`).toHaveProperty('ok', true)
+        game = result.game
+        actions++
+      }
+      expect(game.session.publicState.matchWinnerId, `seed ${seed} did not finish within ${actions} actions`).not.toBeNull()
+    }
+  })
 })
 
 // ── tests: canCompletePhase / findPhaseSelection ─────────────

@@ -2,7 +2,7 @@ import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
 import type { Phase10PublicState, Phase10PrivateState, Phase10Action } from './state.ts'
 import { fullGroupCards } from './state.ts'
-import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup } from './classify.ts'
+import { classifyPhaseHand, validateGroupExtension } from './classify.ts'
 import { PHASES, type PhaseRequirement } from './phases.ts'
 import { cardPenalty } from './scoring.ts'
 
@@ -179,13 +179,12 @@ export const phase10BotStrategy: BotStrategy<
       for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
         const group = groups[groupIndex]
         const currentFull = fullGroupCards(publicState.groups, publicState.hits, targetPlayerId, groupIndex)
+        // validateGroupExtension is the SAME predicate the host validator runs —
+        // the bot must never judge a hit by anything weaker (it once used the
+        // bare isValid* predicates, missed the runLockedRange rule, proposed a
+        // hit the validator rejected, and froze forever re-proposing it).
         for (const card of hand) {
-          if (card.meta?.kind === 'skip') continue
-          const valid =
-            group.type === 'set' ? isValidSet([...currentFull, card])
-            : group.type === 'run' ? isValidRun([...currentFull, card])
-            : isValidColorGroup([...currentFull, card])
-          if (valid) {
+          if (validateGroupExtension(currentFull, group.type, [card]).ok) {
             return { type: 'HIT', targetPlayerId, groupIndex, cardIds: [card.id] }
           }
         }

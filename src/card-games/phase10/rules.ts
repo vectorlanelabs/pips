@@ -4,7 +4,7 @@ import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, skipNext, createTurnState } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, topCard, cardCount, createPlayerZone, addCards, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
-import { isValidSet, isValidRun, isValidColorGroup, classifyPhaseHand, runLockedRange } from './classify.ts'
+import { classifyPhaseHand, validateGroupExtension } from './classify.ts'
 import { PHASES } from './phases.ts'
 import { handPenalty } from './scoring.ts'
 import type { Phase10Session, Phase10PublicState, Phase10PrivateState, Phase10Action, Phase10TurnPhase, Phase10Group, Phase10Hit } from './state.ts'
@@ -279,29 +279,13 @@ function makeValidator(
       if (!Array.isArray(action.cardIds) || action.cardIds.length === 0) return { ok: false, reason: 'invalid cardIds' }
       const selected = myHand.cards.filter((c) => action.cardIds.includes(c.id))
       if (selected.length !== action.cardIds.length) return { ok: false, reason: 'card not in hand' }
-      if (selected.some((c) => c.meta?.kind === 'skip')) {
-        return { ok: false, reason: 'a Skip card cannot be used in a phase' }
-      }
-      // Check against the FULL accumulated group so far — and use the un-wrapped predicate,
-      // NOT classifyGroup: there's no exact-count constraint when extending an existing group.
+      // Check against the FULL accumulated group so far, via the shared predicate —
+      // the bot's hit search and the table UI use the same one, so what they propose
+      // and what this validator accepts can never drift apart again.
       const currentFull = fullGroupCards(publicState.groups, publicState.hits, action.targetPlayerId, action.groupIndex)
       const groupType = publicState.groups[action.targetPlayerId][action.groupIndex].type
-      // A run's already-established range is off-limits to new naturals: every rank in it is
-      // already covered (by a natural, or by a Wild filling that gap), so a new natural landing
-      // in-range would silently evict a Wild from the slot it was locked into — see runLockedRange.
-      if (groupType === 'run') {
-        const locked = runLockedRange(currentFull)
-        if (locked) {
-          const intruder = selected.find((c) => c.meta?.kind === 'number' && Number(c.rank) >= locked.min && Number(c.rank) <= locked.max)
-          if (intruder) return { ok: false, reason: 'that number is already covered by a Wild in this run' }
-        }
-      }
-      const combined = [...currentFull, ...selected]
-      const valid =
-        groupType === 'set' ? isValidSet(combined)
-        : groupType === 'run' ? isValidRun(combined)
-        : isValidColorGroup(combined)
-      if (!valid) return { ok: false, reason: 'those cards cannot be added to that group' }
+      const extension = validateGroupExtension(currentFull, groupType, selected)
+      if (!extension.ok) return { ok: false, reason: extension.reason }
 
       // Cards leave the hand but are NOT merged into the target group's zone — they stay
       // attributed to (and render on the side of) whoever hit them. See Phase10Hit.
