@@ -170,6 +170,24 @@ describe('validFleet', () => {
   })
 })
 
+describe('touch-legal placement (deliberate — no no-touch house rule)', () => {
+  it('accepts a fleet with orthogonally and diagonally adjacent ships', () => {
+    const board = emptyBoard()
+    place(board, 'carrier', [0, 1, 2, 3, 4])
+    place(board, 'battleship', [20, 21, 22, 23])
+    place(board, 'submarine', [34, 35, 36])       // diagonally adjacent to battleship's cell 23
+    place(board, 'cruiser', [50, 51, 52])
+    place(board, 'destroyer', [60, 61])            // orthogonally adjacent to cruiser's row above
+    expect(validFleet(board)).toBe(true)
+  })
+
+  it('the placement preview (fits) allows a ship directly against an existing one', () => {
+    const board = emptyBoard()
+    place(board, 'carrier', [0, 1, 2, 3, 4])
+    expect(fits(board, [10, 11, 12, 13])).toBe(true) // orthogonally touching the carrier
+  })
+})
+
 describe('randomFleet', () => {
   it('produces a valid fleet, deterministically per seed', () => {
     const a = randomFleet(createRng(1))

@@ -348,7 +348,8 @@ function makeValidator(
 
       // Every discarded Skip skips the NEXT player's turn: skipNext advances by 2 seats in
       // playerOrder order. With 2 players that lands back on the discarder (nobody to skip);
-      // with 3+ it passes the next player entirely.
+      // with 3+ it passes the next player entirely. No per-round cap on repeat Skips against
+      // the same target — a possible future house-rule toggle, not implemented today.
       const discarded = newDiscard.cards[newDiscard.cards.length - 1]
       const skipApplied = discarded.meta?.kind === 'skip'
       return {

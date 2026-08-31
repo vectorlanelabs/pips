@@ -67,6 +67,7 @@ function buildGame(config: {
   const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), config.boneyard ?? [])
   const publicState: DominoesPublicState = {
     stage: config.stage ?? 'play',
+    seatOrder: ['p1', 'p2'],
     turn,
     center: config.center ?? null,
     isSpinner: config.isSpinner ?? false,
@@ -130,10 +131,59 @@ describe('deal', () => {
   })
 
   it('dealRound is the shared deal logic', () => {
-    const { p0Hand, p1Hand, boneyard } = dealRound(['p1', 'p2'], createRng(42))
-    expect(p0Hand.cards).toHaveLength(7)
-    expect(p1Hand.cards).toHaveLength(7)
+    const { hands, boneyard } = dealRound(['p1', 'p2'], createRng(42))
+    expect(hands.p1.cards).toHaveLength(7)
+    expect(hands.p2.cards).toHaveLength(7)
     expect(boneyard.cards).toHaveLength(14)
+  })
+
+  it('3-player deal: 5 tiles each (15 total dealt), 13 in boneyard', () => {
+    const dm = createDominoesGame(['p1', 'p2', 'p3'], 42)
+    const p1 = dm.session.privateStates.p1.hand.cards
+    const p2 = dm.session.privateStates.p2.hand.cards
+    const p3 = dm.session.privateStates.p3.hand.cards
+    const yard = dm.boneyard.cards
+    expect(p1).toHaveLength(5)
+    expect(p2).toHaveLength(5)
+    expect(p3).toHaveLength(5)
+    expect(yard).toHaveLength(13)
+    expect(dm.session.publicState.boneyardCount).toBe(13)
+    const all = new Set([...p1, ...p2, ...p3, ...yard].map((t) => t.id))
+    expect(all.size).toBe(28)
+  })
+
+  it('4-player deal: 5 tiles each (20 total dealt), 8 in boneyard', () => {
+    const dm = createDominoesGame(['p1', 'p2', 'p3', 'p4'], 42)
+    const p1 = dm.session.privateStates.p1.hand.cards
+    const p2 = dm.session.privateStates.p2.hand.cards
+    const p3 = dm.session.privateStates.p3.hand.cards
+    const p4 = dm.session.privateStates.p4.hand.cards
+    const yard = dm.boneyard.cards
+    expect(p1).toHaveLength(5)
+    expect(p2).toHaveLength(5)
+    expect(p3).toHaveLength(5)
+    expect(p4).toHaveLength(5)
+    expect(yard).toHaveLength(8)
+    expect(dm.session.publicState.boneyardCount).toBe(8)
+    const all = new Set([...p1, ...p2, ...p3, ...p4, ...yard].map((t) => t.id))
+    expect(all.size).toBe(28)
+  })
+
+  it('dealRound for 3 players returns hands with correct keys and sizes', () => {
+    const { hands, boneyard } = dealRound(['p1', 'p2', 'p3'], createRng(42))
+    expect(hands.p1.cards).toHaveLength(5)
+    expect(hands.p2.cards).toHaveLength(5)
+    expect(hands.p3.cards).toHaveLength(5)
+    expect(boneyard.cards).toHaveLength(13)
+  })
+
+  it('dealRound for 4 players returns hands with correct keys and sizes', () => {
+    const { hands, boneyard } = dealRound(['p1', 'p2', 'p3', 'p4'], createRng(42))
+    expect(hands.p1.cards).toHaveLength(5)
+    expect(hands.p2.cards).toHaveLength(5)
+    expect(hands.p3.cards).toHaveLength(5)
+    expect(hands.p4.cards).toHaveLength(5)
+    expect(boneyard.cards).toHaveLength(8)
   })
 })
 
@@ -396,6 +446,143 @@ describe('PASS and blocked rounds', () => {
     expect(pub.roundResult).toEqual({ kind: 'blocked', scorerId: 'p2', points: 5 })
     expect(pub.scores).toEqual({ p1: 0, p2: 5 })
   })
+
+  it('3-player blocked: requires ALL three players to pass, not just 2', () => {
+    // All players must have no legal plays: center is 5-5 spinner, all hands have no 5s
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[1, 1], [2, 2]]))
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[0, 0], [3, 3]]))
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[4, 4], [6, 6]]))
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3'],
+      turn,
+      center: { a: 5, b: 5 },
+      isSpinner: true,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 2, p2: 2, p3: 2 },
+      passStreak: 0,
+      scores: { p1: 0, p2: 0, p3: 0 },
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    // p1 passes
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.passStreak).toBe(1)
+    expect(r.dm.session.publicState.stage).toBe('play')  // NOT over yet
+    // p2 passes
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.passStreak).toBe(2)
+    expect(r.dm.session.publicState.stage).toBe('play')  // Still NOT over (need 3 passes)
+    // p3 passes
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.passStreak).toBe(3)
+    expect(pub.stage).toBe('roundEnd')  // NOW it's over
+    expect(pub.roundResult).not.toBeNull()
+    expect(pub.roundResult!.kind).toBe('blocked')
+  })
+
+  it('3-player blocked round: lowest pip holder scores everyone\'s pips (ties prevent scoring)', () => {
+    // p1: 1+1+2+2=6 pips
+    // p2: 0+0+0+1=1 pip (lowest, unique)
+    // p3: 4+4+4+0=12 pips
+    // total = 6+1+12 = 19 → 15 points for p2
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[1, 1], [2, 2]]))
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[0, 0], [0, 1]]))
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[4, 4], [4, 0]]))
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3'],
+      turn,
+      center: { a: 5, b: 5 },
+      isSpinner: true,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 2, p2: 2, p3: 2 },
+      passStreak: 0,
+      scores: { p1: 0, p2: 0, p3: 0 },
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.roundResult).toEqual({ kind: 'blocked', scorerId: 'p2', points: 15 })
+    expect(pub.scores).toEqual({ p1: 0, p2: 15, p3: 0 })
+  })
+
+  it('4-player blocked: requires all 4 players to pass', () => {
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[1, 1]]))
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[2, 2]]))
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[3, 3]]))
+    const p4Hand = addCards(createHand<DominoTile>('p4'), tiles([[4, 4]]))
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3', 'p4'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3', 'p4'],
+      turn,
+      center: { a: 5, b: 5 },
+      isSpinner: true,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 1, p2: 1, p3: 1, p4: 1 },
+      passStreak: 0,
+      scores: { p1: 0, p2: 0, p3: 0, p4: 0 },
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+      p4: { hand: p4Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    expect(r.dm.session.publicState.stage).toBe('play')
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    expect(r.dm.session.publicState.stage).toBe('play')
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    expect(r.dm.session.publicState.stage).toBe('play')
+    r = applyDominoesAction(r.dm, 'p4', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.stage).toBe('roundEnd')  // NOW it's over
+  })
 })
 
 describe('going out', () => {
@@ -412,6 +599,89 @@ describe('going out', () => {
     expect(pub.roundResult).toEqual({ kind: 'out', scorerId: 'p1', points: 10 })
     expect(pub.stage).toBe('roundEnd')
     expect(pub.matchWinnerId).toBeNull()    // 20 < 150
+  })
+
+  it('3-player going out: scores all opponents\' combined pips, rounded down', () => {
+    // p1 goes out: p2 has 5+7=12 pips, p3 has 1+2=3 pips → 12+3=15 → 15
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[5, 5]]))
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[6, 1], [2, 3]]))
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[0, 1], [0, 2]]))
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3'],
+      turn,
+      center: null,
+      isSpinner: false,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 1, p2: 2, p3: 2 },
+      passStreak: 0,
+      scores: { p1: 0, p2: 0, p3: 0 },
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    const r = applyDominoesAction(dm, 'p1', { type: 'PLAY_TILE', tileId: '5-5', arm: 'center' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.scores.p1).toBe(25)          // 10 from the play + 15 go-out bonus
+    expect(pub.roundResult).toEqual({ kind: 'out', scorerId: 'p1', points: 15 })
+    expect(pub.stage).toBe('roundEnd')
+  })
+
+  it('4-player going out: scores all three opponents\' combined pips, rounded down', () => {
+    // p1 goes out with 6-6 lead: p2 has 5 pips, p3 has 3+4+1+1=9 pips, p4 has 2 pips
+    // p1 lead 6-6 (double, spinner): board total 12 (not divisible by 5) → scores 0
+    // opponents total: 5+9+2=16 → rounded down to 15
+    // p1 total: 0 + 15 = 15
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[6, 6]]))
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[0, 5]]))
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[3, 4], [1, 1]]))
+    const p4Hand = addCards(createHand<DominoTile>('p4'), tiles([[0, 2]]))
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3', 'p4'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3', 'p4'],
+      turn,
+      center: null,
+      isSpinner: false,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 1, p2: 1, p3: 2, p4: 1 },
+      passStreak: 0,
+      scores: { p1: 0, p2: 0, p3: 0, p4: 0 },
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+      p4: { hand: p4Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    const r = applyDominoesAction(dm, 'p1', { type: 'PLAY_TILE', tileId: '6-6', arm: 'center' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.scores.p1).toBe(15)          // 0 from the lead + 15 go-out bonus
+    expect(pub.roundResult).toEqual({ kind: 'out', scorerId: 'p1', points: 15 })
+    expect(pub.stage).toBe('roundEnd')
   })
 })
 
@@ -491,6 +761,154 @@ describe('rounds', () => {
     expect(pub.stage).toBe('roundEnd')
     expect(pub.matchWinnerId).toBeNull()
     expect(pub.scores).toEqual({ p1: 150, p2: 150 })
+  })
+
+  it('3-player round-starter rotation: p1→p2→p3→p1', () => {
+    let dm = createDominoesGame(['p1', 'p2', 'p3'], 42)
+    expect(dm.session.publicState.roundStarterId).toBe('p1')
+    expect(currentPlayer(dm.session.publicState.turn)).toBe('p1')
+
+    // Advance to roundEnd (easiest: one immediate pass from each player)
+    dm.session.publicState.center = { a: 5, b: 5 }
+    dm.session.publicState.isSpinner = true
+    // Simulate game state where all hands are empty except current player (blocked round)
+    const p1StateEmpty = { hand: addCards(createHand<DominoTile>('p1'), []) }
+    const p2StateEmpty = { hand: addCards(createHand<DominoTile>('p2'), []) }
+    const p3StateEmpty = { hand: addCards(createHand<DominoTile>('p3'), []) }
+    const boneyardEmpty = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+
+    dm.session.publicState.boneyardCount = 0
+    dm.session.publicState.handCounts = { p1: 0, p2: 0, p3: 0 }
+    dm.session.privateStates.p1 = p1StateEmpty
+    dm.session.privateStates.p2 = p2StateEmpty
+    dm.session.privateStates.p3 = p3StateEmpty
+    dm.boneyard = boneyardEmpty
+
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.stage).toBe('roundEnd')
+
+    // Start round 2
+    r = applyDominoesAction(r.dm, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.roundNumber).toBe(2)
+    expect(r.dm.session.publicState.roundStarterId).toBe('p2')  // rotates to p2
+    expect(currentPlayer(r.dm.session.publicState.turn)).toBe('p2')
+
+    // Move to round 3 (skip to roundEnd quickly by dealing empty hands again)
+    const dm2 = r.dm
+    dm2.session.publicState.center = { a: 5, b: 5 }
+    dm2.session.publicState.isSpinner = true
+    dm2.session.publicState.boneyardCount = 0
+    dm2.session.publicState.handCounts = { p1: 0, p2: 0, p3: 0 }
+    dm2.session.privateStates.p1 = p1StateEmpty
+    dm2.session.privateStates.p2 = p2StateEmpty
+    dm2.session.privateStates.p3 = p3StateEmpty
+    dm2.boneyard = boneyardEmpty
+
+    r = applyDominoesAction(dm2, 'p2', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p1', { type: 'PASS' })
+    expect(r.dm.session.publicState.stage).toBe('roundEnd')
+
+    // Start round 3
+    r = applyDominoesAction(r.dm, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.dm.session.publicState.roundNumber).toBe(3)
+    expect(r.dm.session.publicState.roundStarterId).toBe('p3')  // rotates to p3
+    expect(currentPlayer(r.dm.session.publicState.turn)).toBe('p3')
+  })
+
+  it('3-player tied ≥150 keeps the match going', () => {
+    // p1 and p2 tied at 150 (leaders); p3 at 100 (behind)
+    // p3 has lowest pips (1), scores: stays at 100-110, p1 and p2 remain tied at 150
+    // All tiles must avoid 5 (no legal play on 5-5 spinner)
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[1, 4]]))  // 5 pips (no 5)
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[3, 3]]))  // 6 pips (no 5)
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[0, 1]]))  // 1 pip (lowest, unique, no 5)
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3'],
+      turn,
+      center: { a: 5, b: 5 },
+      isSpinner: true,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 1, p2: 1, p3: 1 },
+      passStreak: 0,
+      scores: { p1: 150, p2: 150, p3: 100 },  // p1 and p2 tied at 150
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.stage).toBe('roundEnd')
+    expect(pub.matchWinnerId).toBeNull()  // Tied at 150, match continues
+    // p3 scores (5+6+1)=12→10 points: 100+10=110. p1, p2 stay at 150 tied.
+    expect(pub.scores).toEqual({ p1: 150, p2: 150, p3: 110 })
+  })
+
+  it('4-player tied ≥150 keeps the match going', () => {
+    // p1 and p2 tied for lowest pips, so neither scores in blocked round
+    const p1Hand = addCards(createHand<DominoTile>('p1'), tiles([[0, 2]]))  // 2 pips (tied for lowest)
+    const p2Hand = addCards(createHand<DominoTile>('p2'), tiles([[1, 1]]))  // 2 pips (tied for lowest)
+    const p3Hand = addCards(createHand<DominoTile>('p3'), tiles([[0, 3]]))  // 3 pips
+    const p4Hand = addCards(createHand<DominoTile>('p4'), tiles([[0, 4]]))  // 4 pips
+    const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), [])
+    const turn = createTurnState<'play'>(['p1', 'p2', 'p3', 'p4'], 'play')
+    const publicState: DominoesPublicState = {
+      stage: 'play',
+      seatOrder: ['p1', 'p2', 'p3', 'p4'],
+      turn,
+      center: { a: 5, b: 5 },
+      isSpinner: true,
+      arms: emptyArms(),
+      boneyardCount: 0,
+      handCounts: { p1: 1, p2: 1, p3: 1, p4: 1 },
+      passStreak: 0,
+      scores: { p1: 150, p2: 150, p3: 100, p4: 100 },  // p1 and p2 tied at 150
+      target: 150,
+      roundNumber: 1,
+      roundStarterId: 'p1',
+      roundResult: null,
+      lastAction: null,
+      matchWinnerId: null,
+    }
+    const privateStates: Record<string, DominoesPrivateState> = {
+      p1: { hand: p1Hand },
+      p2: { hand: p2Hand },
+      p3: { hand: p3Hand },
+      p4: { hand: p4Hand },
+    }
+    const dm = { session: createHostSession(publicState, privateStates), boneyard, rng: createRng(0) }
+    let r = applyDominoesAction(dm, 'p1', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p2', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p3', { type: 'PASS' })
+    r = applyDominoesAction(r.dm, 'p4', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.dm.session.publicState
+    expect(pub.stage).toBe('roundEnd')
+    expect(pub.matchWinnerId).toBeNull()  // Tied at 150, match continues
+    expect(pub.scores).toEqual({ p1: 150, p2: 150, p3: 100, p4: 100 })  // No one scored (four-way tie for lowest)
   })
 })
 

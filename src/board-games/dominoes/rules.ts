@@ -30,10 +30,12 @@ function finishRound(
     scorerId === null
       ? publicState.scores
       : { ...publicState.scores, [scorerId]: publicState.scores[scorerId] + points }
-  const [a, b] = publicState.turn.playerOrder
-  const atTarget = scores[a] >= publicState.target || scores[b] >= publicState.target
-  const stage: DominoesStage = atTarget && scores[a] !== scores[b] ? 'over' : 'roundEnd'
-  const matchWinnerId = stage === 'over' ? (scores[a] > scores[b] ? a : b) : null
+  const seatOrder = publicState.seatOrder
+  const atTarget = seatOrder.some((p) => scores[p] >= publicState.target)
+  const maxScore = Math.max(...seatOrder.map((p) => scores[p]))
+  const leaders = seatOrder.filter((p) => scores[p] === maxScore)
+  const stage: DominoesStage = atTarget && leaders.length === 1 ? 'over' : 'roundEnd'
+  const matchWinnerId = stage === 'over' ? leaders[0] : null
   return {
     ok: true,
     publicState: {
@@ -60,28 +62,38 @@ function makeValidator(
     if (action.type === 'START_NEXT_ROUND') {
       if (!Object.hasOwn(privateStates, playerId)) return { ok: false, reason: 'not a player in this match' }
       if (publicState.stage !== 'roundEnd') return { ok: false, reason: 'the round is not over' }
-      const starter = publicState.turn.playerOrder.find((p) => p !== publicState.roundStarterId)!
-      const nextOrder: [string, string] = [starter, publicState.roundStarterId]
-      const { p0Hand, p1Hand, boneyard: newBoneyard } = dealRound(nextOrder, rng)
+      const { hands, boneyard: newBoneyard } = dealRound(publicState.seatOrder, rng)
       setBoneyard(newBoneyard)
+      // The next round's starter rotates through the FIXED seatOrder (never the previous round's
+      // turn order) — same pattern as Rummy's START_NEXT_ROUND: build the turn fresh from
+      // seatOrder, then advanceTurn exactly (roundNumber % seatOrder.length) times.
+      let turn = createTurnState<'play'>(publicState.seatOrder, 'play')
+      for (let i = 0; i < publicState.roundNumber % publicState.seatOrder.length; i++) turn = advanceTurn(turn, 'play')
+      const starter = currentPlayer(turn)
+      const handCounts: Record<string, number> = {}
+      const newPrivateStates: Record<string, DominoesPrivateState> = {}
+      for (const seatedPlayer of publicState.seatOrder) {
+        handCounts[seatedPlayer] = cardCount(hands[seatedPlayer])
+        newPrivateStates[seatedPlayer] = { hand: hands[seatedPlayer] }
+      }
       return {
         ok: true,
         publicState: {
           ...publicState,
           stage: 'play',
-          turn: createTurnState<'play'>(nextOrder, 'play'),
+          turn,
           center: null,
           isSpinner: false,
           arms: { right: [], left: [], up: [], down: [] },
           boneyardCount: cardCount(newBoneyard),
-          handCounts: { [nextOrder[0]]: cardCount(p0Hand), [nextOrder[1]]: cardCount(p1Hand) },
+          handCounts,
           passStreak: 0,
           roundNumber: publicState.roundNumber + 1,
           roundStarterId: starter,
           roundResult: null,
           lastAction: null,
         },
-        privateStates: { [nextOrder[0]]: { hand: p0Hand }, [nextOrder[1]]: { hand: p1Hand } },
+        privateStates: newPrivateStates,
       }
     }
 
@@ -133,11 +145,12 @@ function makeValidator(
       }
       const newPrivateStates = { ...privateStates, [playerId]: { hand: newHand } }
 
-      // Going out: the opponent's remaining pips (rounded down) are credited on top of any
+      // Going out: all other seated players' remaining pips (rounded down) are credited on top of any
       // points the final play itself scored.
       if (cardCount(newHand) === 0) {
-        const opponentId = publicState.turn.playerOrder.find((p) => p !== playerId)!
-        const points = roundDownToFive(pipSum(privateStates[opponentId].hand.cards))
+        const opponents = publicState.seatOrder.filter((p) => p !== playerId)
+        const totalPips = opponents.reduce((sum, p) => sum + pipSum(privateStates[p].hand.cards), 0)
+        const points = roundDownToFive(totalPips)
         return finishRound(newPublicState, newPrivateStates, 'out', playerId, points)
       }
 
@@ -176,16 +189,18 @@ function makeValidator(
         passStreak: publicState.passStreak + 1,
         lastAction: { by: playerId, kind: 'pass', tile: null, arm: null, scored: 0 },
       }
-      if (newPublicState.passStreak >= 2) {
-        // Blocked: the lower pip total scores both hands' pips rounded down; a tie scores nobody.
-        const [a, b] = publicState.turn.playerOrder
-        const aPips = pipSum(privateStates[a].hand.cards)
-        const bPips = pipSum(privateStates[b].hand.cards)
-        if (aPips === bPips) {
+      if (newPublicState.passStreak >= publicState.seatOrder.length) {
+        // Blocked: the player with the (unique) lowest pip total scores everyone's combined
+        // pips, rounded down; if the lowest is tied across 2+ players, nobody scores.
+        const seatOrder = publicState.seatOrder
+        const pipsByPlayer = Object.fromEntries(seatOrder.map((p) => [p, pipSum(privateStates[p].hand.cards)]))
+        const minPips = Math.min(...seatOrder.map((p) => pipsByPlayer[p]))
+        const lowest = seatOrder.filter((p) => pipsByPlayer[p] === minPips)
+        if (lowest.length !== 1) {
           return finishRound(newPublicState, privateStates, 'blocked', null, 0)
         }
-        const scorerId = aPips < bPips ? a : b
-        return finishRound(newPublicState, privateStates, 'blocked', scorerId, roundDownToFive(aPips + bPips))
+        const totalPips = seatOrder.reduce((sum, p) => sum + pipsByPlayer[p], 0)
+        return finishRound(newPublicState, privateStates, 'blocked', lowest[0], roundDownToFive(totalPips))
       }
       return {
         ok: true,

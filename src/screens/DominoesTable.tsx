@@ -4,7 +4,6 @@ import { handHasLegalPlay, legalArms } from '../board-games/dominoes/state'
 import { layoutBoard, scaleToFit, type LaidTile } from '../board-games/dominoes/layout'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro, type DealIntroCardBackProps } from '../components/DealIntro'
-import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { TurnSoundToggle } from '../components/TurnSoundToggle'
@@ -18,8 +17,8 @@ import './DominoesTable.css'
 export interface DominoesTableProps {
   code: string
   localPlayerId: string
-  opponentName: string
-  opponentColor: string
+  names: Record<string, string>
+  colors: Record<string, string>
   connection: 'connected' | 'disconnected'
   notice?: string | null
   publicState: DominoesPublicState
@@ -107,23 +106,23 @@ function DominoTileBack({ size, style, className }: DominoTileBackProps) {
 
 // ---- Status lines ----
 
-function actorName(actorId: string, localPlayerId: string, opponentName: string): string {
-  return actorId === localPlayerId ? 'You' : opponentName
+function actorName(actorId: string, localPlayerId: string, names: Record<string, string>): string {
+  return actorId === localPlayerId ? 'You' : (names[actorId] ?? actorId)
 }
 
 // Event line: the last action (null → this round just opened).
 function computeEventLine(
   publicState: DominoesPublicState,
   localPlayerId: string,
-  opponentName: string,
+  names: Record<string, string>,
 ): string {
   const action = publicState.lastAction
   if (action === null) {
     return publicState.roundStarterId === localPlayerId
       ? 'Your lead — play any tile to open the board.'
-      : `${opponentName} opens the board…`
+      : `${names[publicState.roundStarterId] ?? publicState.roundStarterId} opens the board…`
   }
-  const name = actorName(action.by, localPlayerId, opponentName)
+  const name = actorName(action.by, localPlayerId, names)
   if (action.kind === 'lead' || action.kind === 'play') {
     const tile = action.tile
     const pipText = tile ? `${tile.a}·${tile.b}` : ''
@@ -138,7 +137,7 @@ function computeEventLine(
 function computePromptLine(
   publicState: DominoesPublicState,
   localPlayerId: string,
-  opponentName: string,
+  names: Record<string, string>,
   noLegalPlay: boolean,
 ): string {
   if (publicState.stage === 'play') {
@@ -150,19 +149,20 @@ function computePromptLine(
       }
       return 'Your move.'
     }
-    return `${opponentName} is thinking…`
+    const currentId = currentPlayer(publicState.turn)
+    return `${names[currentId] ?? currentId} is thinking…`
   }
 
   const result = publicState.roundResult
   if (!result) return ''
   let line: string
   if (result.kind === 'out') {
-    const name = actorName(result.scorerId ?? '', localPlayerId, opponentName)
+    const name = actorName(result.scorerId ?? '', localPlayerId, names)
     line = `${name} went out — +${result.points}.`
   } else if (result.scorerId === null) {
     line = 'Blocked — nobody scores.'
   } else {
-    const name = actorName(result.scorerId, localPlayerId, opponentName)
+    const name = actorName(result.scorerId, localPlayerId, names)
     const verb = result.scorerId === localPlayerId ? 'bank' : 'banks'
     line = `Blocked — ${name} ${verb} +${result.points}.`
   }
@@ -177,8 +177,8 @@ function computePromptLine(
 export function DominoesTable({
   code,
   localPlayerId,
-  opponentName,
-  opponentColor,
+  names,
+  colors,
   connection,
   notice,
   publicState,
@@ -189,15 +189,16 @@ export function DominoesTable({
   onLeave,
 }: DominoesTableProps) {
   // ---- Derived ----
-  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && publicState.stage === 'play'
   const isMyLead = publicState.center === null && isMyTurn
   const noLegalPlay = useMemo(() => !handHasLegalPlay(hand, publicState), [hand, publicState])
+  const humanCount = publicState.seatOrder.filter((id) => !id.startsWith('bot')).length
 
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
-  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [paneSize, setPaneSize] = useState({ w: 0, h: 0 })
@@ -323,15 +324,13 @@ export function DominoesTable({
 
   // ---- Status ----
   const eventLine = useMemo(
-    () => computeEventLine(publicState, localPlayerId, opponentName),
-    [publicState, localPlayerId, opponentName],
+    () => computeEventLine(publicState, localPlayerId, names),
+    [publicState, localPlayerId, names],
   )
   const promptLine = useMemo(
-    () => computePromptLine(publicState, localPlayerId, opponentName, noLegalPlay),
-    [publicState, localPlayerId, opponentName, noLegalPlay],
+    () => computePromptLine(publicState, localPlayerId, names, noLegalPlay),
+    [publicState, localPlayerId, names, noLegalPlay],
   )
-
-  const opponentHandCount = publicState.handCounts[opponentId] ?? 0
 
   // ---- Render ----
   return (
@@ -347,18 +346,23 @@ export function DominoesTable({
               style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
             />
             <span className="dm-peer-label">
-              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+              {connection === 'connected' ? (
+                opponentIds.length === 1
+                  ? `peer to peer with ${names[opponentIds[0]] ?? opponentIds[0]}`
+                  : `peer to peer with ${opponentIds.length} others`
+              ) : 'connection lost'}
             </span>
           </span>
         </div>
-        <ScoreHeader
-          youScore={publicState.scores[localPlayerId] ?? 0}
-          youColor="var(--green-text)"
-          opponentName={opponentName}
-          opponentScore={publicState.scores[opponentId] ?? 0}
-          opponentColor={opponentColor}
-          hint={`to ${publicState.target}`}
-        />
+        <div className="dm-scoreboard">
+          {publicState.seatOrder.map((pid) => (
+            <span key={pid} className="dm-score-pill">
+              <span className="dm-score-dot" style={{ background: colors[pid] ?? '#5b5bd6' }} />
+              {names[pid] ?? pid} {publicState.scores[pid] ?? 0}
+            </span>
+          ))}
+          <span className="dm-score-hint">to {publicState.target}</span>
+        </div>
         <div className="dm-header-actions">
           <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
@@ -379,26 +383,52 @@ export function DominoesTable({
       <div className="dm-table-card">
         {showIntro ? (
           <DealIntro
-            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
+            others={opponentIds.map((id) => ({
+              id,
+              name: names[id] ?? id,
+              color: colors[id] ?? '#5b5bd6',
+              handSize: publicState.handCounts[id] ?? 0,
+            }))}
             yourHandSize={hand.length}
             shuffleSound="domino-shuffle"
             renderCardBack={(p) => <DominoTileBack {...p} />}
             onComplete={() => setShowIntro(false)}
-            maxFlights={hand.length + opponentHandCount}
+            maxFlights={hand.length + opponentIds.reduce((sum, id) => sum + (publicState.handCounts[id] ?? 0), 0)}
           />
         ) : (
         <>
-        {/* Their side */}
-        <div className="dm-their-side">
-          <div className="dm-their-side-left">
-            <div className="dm-their-name" style={{ color: opponentColor }}>{opponentName}</div>
-            <div className="dm-their-count">{opponentHandCount} tiles · hidden</div>
-            <div className="dm-their-backs">
-              {Array.from({ length: opponentHandCount }, (_, i) => (
-                <DominoTileBack key={i} size="small" />
-              ))}
-            </div>
-          </div>
+        {/* Opponent rail */}
+        <div className="dm-opp-rail">
+          {opponentIds.map((seatId) => {
+            const seatColor = colors[seatId] ?? '#5b5bd6'
+            const seatName = names[seatId] ?? seatId
+            const isTurn = seatId === currentPlayer(publicState.turn)
+            const handCount = publicState.handCounts[seatId] ?? 0
+
+            return (
+              <div
+                key={seatId}
+                className={`dm-opp-tile${opponentIds.length <= 2 ? ' dm-opp-tile--wide' : ''}${isTurn ? ' dm-opp-tile--turn' : ''}`}
+                style={isTurn ? { borderColor: seatColor } : undefined}
+              >
+                <div className="dm-opp-tile-top">
+                  <span className="dm-seat-dot" style={{ background: seatColor }} />
+                  <span className="dm-opp-name" style={{ color: seatColor }}>{seatName}</span>
+                  {isTurn && <span className="dm-turn-tag" style={{ background: seatColor, color: '#fff' }}>turn</span>}
+                </div>
+                <div className="dm-opp-tile-hand">
+                  {handCount > 0 && (
+                    <div className="dm-opp-tile-fan">
+                      {Array.from({ length: handCount }, (_, i) => (
+                        <DominoTileBack key={i} size="small" />
+                      ))}
+                    </div>
+                  )}
+                  <span className="dm-opp-tile-count">{handCount} tiles · hidden</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Status — two lines above the board */}

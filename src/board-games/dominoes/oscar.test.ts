@@ -65,6 +65,7 @@ function buildGame(config: {
   const boneyard = addCards(createPublicZone<DominoTile>('boneyard', 'private'), config.boneyard ?? [])
   const publicState: DominoesPublicState = {
     stage: config.stage ?? 'play',
+    seatOrder: ['p1', 'p2'],
     turn,
     center: config.center ?? null,
     isSpinner: config.isSpinner ?? false,

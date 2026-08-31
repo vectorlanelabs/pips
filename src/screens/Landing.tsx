@@ -55,7 +55,7 @@ export function Landing({
     {
       label: 'Tiles',
       games: [
-        { title: 'Dominoes', note: '2 players', color: '#5b5bd6', onClick: onPickDominoes },
+        { title: 'Dominoes', note: '2–4 players', color: '#5b5bd6', onClick: onPickDominoes },
         { title: 'Mexican Train', note: '2–8 players', color: '#c2410c', onClick: onPickMexicanTrain },
       ],
     },
