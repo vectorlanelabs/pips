@@ -562,3 +562,75 @@
 .holdem-your-cards--draw {
   padding-top: 18px;
 }
+
+/* ---- House rules (lobby toggle list) ----
+   Holdem-scoped copy of Uno's .uno-house-rule* rules (UnoRoom.css), so the
+   poker lobby's toggle block keeps visual parity without sharing class names. */
+
+.holdem-house-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holdem-house-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px 12px 16px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.1s ease;
+}
+
+.holdem-house-rule:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.holdem-house-rule--on {
+  border-color: var(--ink);
+}
+
+.holdem-house-rule:disabled {
+  cursor: default;
+}
+
+.holdem-house-rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.holdem-house-rule-label {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.holdem-house-rule-desc {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.holdem-house-rule-pill {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.holdem-house-rule--on .holdem-house-rule-pill {
+  background: var(--ink);
+  color: #fff;
+}

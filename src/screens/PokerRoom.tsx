@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { PokerVariant } from '../card-games/poker/state'
-import { POKER_MIN_SEATS, maxSeatsFor } from '../card-games/poker/state'
+import type { PokerVariant, PokerHouseRules } from '../card-games/poker/state'
+import { POKER_MIN_SEATS, maxSeatsFor, POKER_HOUSE_RULE_DEFS, DEFAULT_HOUSE_RULES } from '../card-games/poker/state'
 import { PokerRulesOverlay } from './PokerRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
 import { CardBackPicker } from '../components/CardBackPicker'
@@ -39,6 +39,8 @@ export interface PokerRoomProps {
   onLeave: () => void
   variant?: PokerVariant
   onSelectVariant?: (v: PokerVariant) => void
+  houseRules?: PokerHouseRules
+  onToggleHouseRule?: (key: keyof PokerHouseRules) => void
 }
 
 const BRAND = 'var(--coral)'
@@ -56,6 +58,8 @@ export function PokerRoom({
   onLeave,
   variant = 'holdem',
   onSelectVariant,
+  houseRules = DEFAULT_HOUSE_RULES,
+  onToggleHouseRule,
 }: PokerRoomProps) {
   const [copied, setCopied] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
@@ -186,6 +190,32 @@ export function PokerRoom({
               </p>
             </>
           )}
+
+          <div style={{ marginTop: 26 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>House rules</div>
+            <div className="holdem-house-rules">
+              {POKER_HOUSE_RULE_DEFS.map((def) => {
+                const on = houseRules[def.key]
+                return (
+                  <button
+                    key={def.key}
+                    type="button"
+                    disabled={!onToggleHouseRule}
+                    aria-pressed={on}
+                    className={`holdem-house-rule${on ? ' holdem-house-rule--on' : ''}`}
+                    onClick={() => onToggleHouseRule?.(def.key)}
+                  >
+                    <span className="holdem-house-rule-text">
+                      <span className="holdem-house-rule-label">{def.label}</span>
+                      <span className="holdem-house-rule-desc">{def.description}</span>
+                    </span>
+                    <span className="holdem-house-rule-pill">{on ? 'On' : 'Off'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {slots.map((seat, i) =>
@@ -224,7 +254,7 @@ export function PokerRoom({
         </div>
       </div>
 
-      {rulesOpen && <PokerRulesOverlay variant={variant} onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay variant={variant} houseRules={houseRules} onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

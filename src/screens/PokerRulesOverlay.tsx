@@ -1,4 +1,4 @@
-import type { PokerVariant } from '../card-games/poker/state'
+import type { PokerVariant, PokerHouseRules } from '../card-games/poker/state'
 import { POKER_VARIANT_LABELS } from './PokerRoom'
 
 const HOLDEM_BULLETS = [
@@ -37,12 +37,24 @@ const OMAHA_BULLETS = [
 
 export function PokerRulesOverlay({
   variant = 'holdem',
+  houseRules,
   onClose,
 }: {
   variant?: PokerVariant
+  houseRules?: PokerHouseRules
   onClose: () => void
 }) {
   const bullets = variant === 'holdem' ? HOLDEM_BULLETS : variant === 'omaha' ? OMAHA_BULLETS : DRAW_BULLETS[variant]
+  // House rules that are switched on append one bullet each to whatever
+  // variant bullet list renders.
+  const houseRuleBullets: string[] = []
+  if (houseRules?.deucesWild) {
+    houseRuleBullets.push('House rule in play: all four 2s are wild, and five of a kind beats a straight flush.')
+  }
+  if (houseRules?.ante) {
+    houseRuleBullets.push('House rule in play: everyone antes 10 instead of blinds, and the first betting round starts unopened.')
+  }
+  const allBullets = [...bullets, ...houseRuleBullets]
 
   return (
     <div className="overlay-backdrop" onClick={onClose}>
@@ -59,7 +71,7 @@ export function PokerRulesOverlay({
           </p>
         )}
         <ul style={{ marginTop: 16, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {bullets.map((b) => (
+          {allBullets.map((b) => (
             <li key={b} style={{ display: 'flex', gap: 10, fontSize: 15, lineHeight: 1.5, color: 'var(--body-text)' }}>
               <span style={{ color: 'var(--coral)' }}>●</span>
               <span>{b}</span>

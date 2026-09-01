@@ -121,7 +121,7 @@ import { BlackjackTable } from './screens/BlackjackTable'
 import { BlackjackRoom } from './screens/BlackjackRoom'
 
 // ---- Texas Hold'em (separate parallel session, per CHARTER.md resolution #7) ----
-import { createPokerGame, POKER_MIN_SEATS, maxSeatsFor, handSizeFor, type PokerSession, type PokerPublicState, type PokerPrivateState, type PokerAction, type PokerVariant } from './card-games/poker/state'
+import { createPokerGame, POKER_MIN_SEATS, maxSeatsFor, handSizeFor, DEFAULT_HOUSE_RULES, type PokerSession, type PokerPublicState, type PokerPrivateState, type PokerAction, type PokerVariant, type PokerHouseRules } from './card-games/poker/state'
 import { applyPokerAction, runPokerBotTurn } from './card-games/poker/rules'
 import { pokerBotStrategy } from './card-games/poker/bot'
 import { PokerTable } from './screens/PokerTable'
@@ -215,7 +215,7 @@ type BlackjackView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: BlackjackPublicState; names: Record<string, string> }
 type HoldemView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string; variant: PokerVariant }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string; variant: PokerVariant; houseRules: PokerHouseRules }
   | { kind: 'game'; revision: number; publicState: PokerPublicState; privateState: PokerPrivateState; names: Record<string, string> }
 type ScrabbleView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
@@ -343,7 +343,9 @@ const BLACKJACK_DEAL_HOLD_BUFFER_MS = 700
 // Hold'em: same DealIntro race as Blackjack, plus this table also stages a
 // paced "small blind posts / big blind posts" reveal (see HoldemTable's
 // HOLDEM_BLIND_STAGE_MS) before the deal intro even starts, so the hold
-// must cover both stages, not just the deal.
+// must cover both stages, not just the deal. Ante games stage ONE shared
+// beat instead of two, so the hand-start hold uses 900 (one beat) for those
+// -- see holdemBroadcast.
 const HOLDEM_BLIND_STAGE_MS = 900 * 2
 const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
 // Scrabble: when a bot is about to act on a still-challengeable placement it
@@ -585,6 +587,7 @@ export default function App() {
   const [holdemStarted, setHoldemStarted] = useState(false)
   const [holdemSeats, setHoldemSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [holdemVariant, setHoldemVariant] = useState<PokerVariant>('holdem')
+  const [holdemHouseRules, setHoldemHouseRules] = useState<PokerHouseRules>(DEFAULT_HOUSE_RULES)
 
   // ---- Solitaire ----
   const [solitaireOpen, setSolitaireOpen] = useState(false)
@@ -768,6 +771,7 @@ export default function App() {
   const holdemLastHandRef = useRef<number | null>(null)
   const holdemBotsHeldUntilRef = useRef(0)
   const holdemVariantRef = useRef<PokerVariant>('holdem')
+  const holdemHouseRulesRef = useRef<PokerHouseRules>(DEFAULT_HOUSE_RULES)
   const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
   const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
   const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
@@ -1305,6 +1309,8 @@ export default function App() {
     holdemNamesRef.current = {}
     holdemVariantRef.current = 'holdem'
     setHoldemVariant('holdem')
+    setHoldemHouseRules(DEFAULT_HOUSE_RULES)
+    holdemHouseRulesRef.current = DEFAULT_HOUSE_RULES
     // Card back deliberately survives a reset — it's the host's saved preference.
     // Solitaire
     setSolitaireOpen(false)
@@ -1998,6 +2004,7 @@ export default function App() {
         roster: holdemSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerIdRef.current })),
         cardBack: holdemCardBackRef.current,
         variant: holdemVariantRef.current,
+        houseRules: { ...holdemHouseRulesRef.current },
       }
       setHoldemView(view)
       holdemHostRef.current?.broadcast(view)
@@ -2008,7 +2015,11 @@ export default function App() {
     if (holdemLastHandRef.current !== handNumber) {
       holdemLastHandRef.current = handNumber
       const totalFlights = session.session.publicState.seatOrder.length * handSizeFor(session.session.publicState.variant)
-      holdemBotsHeldUntilRef.current = Date.now() + HOLDEM_BLIND_STAGE_MS + estimateDealIntroMs(totalFlights) + HOLDEM_DEAL_HOLD_BUFFER_MS
+      // Blind games stage two paced beats (sb, then bb); ante games stage
+      // one shared beat (see PokerTable's blinds stage) -- the bot hold
+      // must cover whichever beat count the table is actually showing.
+      const blindStageMs = session.session.publicState.houseRules.ante ? 900 : HOLDEM_BLIND_STAGE_MS
+      holdemBotsHeldUntilRef.current = Date.now() + blindStageMs + estimateDealIntroMs(totalFlights) + HOLDEM_DEAL_HOLD_BUFFER_MS
     }
     const hostSnap = deriveSnapshot(session.session, holdemLocalPlayerIdRef.current!)
     setHoldemView({
@@ -2050,6 +2061,8 @@ export default function App() {
         holdemSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
         setHoldemVariant('holdem')
         holdemVariantRef.current = 'holdem'
+        setHoldemHouseRules(DEFAULT_HOUSE_RULES)
+        holdemHouseRulesRef.current = DEFAULT_HOUSE_RULES
         setHoldemNotice(null)
         holdemBroadcast()
       },
@@ -2101,6 +2114,17 @@ export default function App() {
     holdemBroadcast()
   }
 
+  function toggleHoldemHouseRule(key: keyof PokerHouseRules) {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    // Ref-first (not the state value): holdemBroadcast() runs synchronously
+    // below and must send the just-toggled rules, which the state updater
+    // can't guarantee yet.
+    const next = { ...holdemHouseRulesRef.current, [key]: !holdemHouseRulesRef.current[key] }
+    holdemHouseRulesRef.current = next
+    setHoldemHouseRules(next)
+    holdemBroadcast()
+  }
+
   function addHoldemHouseBot() {
     if (holdemRole !== 'host' || holdemStartedRef.current) return
     if (holdemSeatsRef.current.length >= maxSeatsFor(holdemVariantRef.current)) return
@@ -2119,7 +2143,7 @@ export default function App() {
     if (seats.length < POKER_MIN_SEATS || seats.length > maxSeatsFor(holdemVariantRef.current)) return
     const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    holdemSessionRef.current = createPokerGame(playerIds, seed, holdemCardBackRef.current, holdemVariantRef.current)
+    holdemSessionRef.current = createPokerGame(playerIds, seed, holdemCardBackRef.current, holdemVariantRef.current, { ...holdemHouseRulesRef.current })
     holdemNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     holdemStartedRef.current = true
     setHoldemStarted(true)
@@ -6480,6 +6504,9 @@ export default function App() {
     const viewCardBack = holdemRole === 'host'
       ? holdemCardBackRef.current
       : (holdemView?.kind === 'lobby' ? holdemView.cardBack : DEFAULT_CARD_BACK)
+    const viewHouseRules = holdemRole === 'host'
+      ? holdemHouseRules
+      : (holdemView?.kind === 'lobby' ? holdemView.houseRules : DEFAULT_HOUSE_RULES)
     return (
       <PokerRoom
         code={holdemCode}
@@ -6489,6 +6516,8 @@ export default function App() {
         notice={holdemNotice ?? error}
         cardBack={viewCardBack}
         variant={holdemRole === 'host' ? holdemVariant : (holdemView?.kind === 'lobby' ? holdemView.variant : 'holdem')}
+        houseRules={viewHouseRules}
+        onToggleHouseRule={holdemRole === 'host' ? toggleHoldemHouseRule : undefined}
         onSelectVariant={holdemRole === 'host' ? selectHoldemVariant : undefined}
         onSelectCardBack={holdemSetCardBack}
         onAddHouseBot={addHoldemHouseBot}

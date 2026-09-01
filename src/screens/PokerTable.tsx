@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Card } from '../card-engine/cards'
 import { RANKS } from '../card-engine/cards'
 import type { PokerPublicState, PokerPrivateState } from '../card-games/poker/state'
-import { POKER_BIG_BLIND, handSizeFor, isDrawVariant } from '../card-games/poker/state'
+import { POKER_BIG_BLIND, POKER_ANTE, handSizeFor, isDrawVariant } from '../card-games/poker/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
 import { HoldemBoard } from '../components/HoldemBoard'
@@ -116,11 +116,20 @@ export function PokerTable({
     stagedForHandRef.current = publicState.handNumber
     setBlindStage('sb')
     setUiPhase('blinds')
-    const t1 = window.setTimeout(() => setBlindStage('bb'), BLIND_POST_REVEAL_MS)
-    const t2 = window.setTimeout(() => setUiPhase('deal'), BLIND_POST_REVEAL_MS * 2)
+    // Ante games post one shared beat ("everyone antes") instead of the two
+    // paced blind beats, so the stage skips the 'bb' sub-stage entirely and
+    // goes straight to the deal after a single BLIND_POST_REVEAL_MS timeout.
+    const ante = publicState.houseRules.ante
+    const timers: number[] = []
+    if (!ante) {
+      timers.push(window.setTimeout(() => setBlindStage('bb'), BLIND_POST_REVEAL_MS))
+    }
+    // Blind games: two full beats (sb, then bb) before the deal — the second
+    // timer must wait out BOTH, or the bb caption flashes for a sub-frame.
+    // Ante games: one shared beat.
+    timers.push(window.setTimeout(() => setUiPhase('deal'), ante ? BLIND_POST_REVEAL_MS : BLIND_POST_REVEAL_MS * 2))
     return () => {
-      window.clearTimeout(t1)
-      window.clearTimeout(t2)
+      timers.forEach((t) => window.clearTimeout(t))
     }
   }, [publicState.handNumber])
 
@@ -378,6 +387,12 @@ export function PokerTable({
         <div className="holdem-header-left">
           <Wordmark small onClick={onLeaveTable} />
           <span className="holdem-game-label">{POKER_VARIANT_LABELS[variant]}</span>
+          {publicState.houseRules.deucesWild && (
+            <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)', fontSize: 12 }}>Deuces wild</span>
+          )}
+          {publicState.houseRules.ante && (
+            <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)', fontSize: 12 }}>Ante</span>
+          )}
           <span className="holdem-peer-strip">
             <span
               className="holdem-peer-dot"
@@ -409,19 +424,29 @@ export function PokerTable({
              own paced beat instead of silently existing in the state the
              moment the hand starts. */
           <div className="holdem-blinds-stage">
-            <div className="holdem-blinds-caption">Posting blinds…</div>
-            <div
-              className="holdem-blinds-seat"
-              style={{ color: colors[blindStage === 'sb' ? publicState.smallBlindSeat : publicState.bigBlindSeat] ?? 'var(--ink)' }}
-            >
-              {(blindStage === 'sb' ? names[publicState.smallBlindSeat] : names[publicState.bigBlindSeat]) ?? 'A player'}
-              {' posts the '}
-              {blindStage === 'sb' ? 'small' : 'big'}
-              {' blind: '}
-              {blindStage === 'sb'
-                ? publicState.hands[publicState.smallBlindSeat]?.betThisStreet ?? 0
-                : publicState.hands[publicState.bigBlindSeat]?.betThisStreet ?? 0}
+            <div className="holdem-blinds-caption">
+              {publicState.houseRules.ante ? 'Posting antes…' : 'Posting blinds…'}
             </div>
+            {publicState.houseRules.ante ? (
+              /* Ante games: everyone antes at once, one shared beat. */
+              <div className="holdem-blinds-seat">
+                {'Everyone antes '}
+                {POKER_ANTE}
+              </div>
+            ) : (
+              <div
+                className="holdem-blinds-seat"
+                style={{ color: colors[blindStage === 'sb' ? publicState.smallBlindSeat : publicState.bigBlindSeat] ?? 'var(--ink)' }}
+              >
+                {(blindStage === 'sb' ? names[publicState.smallBlindSeat] : names[publicState.bigBlindSeat]) ?? 'A player'}
+                {' posts the '}
+                {blindStage === 'sb' ? 'small' : 'big'}
+                {' blind: '}
+                {blindStage === 'sb'
+                  ? publicState.hands[publicState.smallBlindSeat]?.betThisStreet ?? 0
+                  : publicState.hands[publicState.bigBlindSeat]?.betThisStreet ?? 0}
+              </div>
+            )}
           </div>
         ) : uiPhase === 'deal' ? (
           <DealIntro
@@ -815,7 +840,7 @@ export function PokerTable({
         )}
       </div>
 
-      {rulesOpen && <PokerRulesOverlay variant={variant} onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay variant={variant} houseRules={publicState.houseRules} onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

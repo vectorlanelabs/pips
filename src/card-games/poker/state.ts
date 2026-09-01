@@ -29,6 +29,14 @@ export const DEFAULT_HOUSE_RULES: PokerHouseRules = {
   ante: false,
 }
 
+export interface PokerHouseRuleDef { key: keyof PokerHouseRules; label: string; description: string }
+export const POKER_HOUSE_RULE_DEFS: PokerHouseRuleDef[] = [
+  { key: 'deucesWild', label: 'Deuces wild',
+    description: 'All four 2s are wild. Five of a kind beats a straight flush.' },
+  { key: 'ante', label: 'Ante',
+    description: 'Everyone antes 10 instead of posting blinds. The first betting round starts unopened.' },
+]
+
 export interface PokerPlayerHandState {
   cards: Card[] // always the variant's hand size once dealt this hand (2 holdem / 4 omaha / 5 five-draw / 7 seven-draw), [] before dealt / after fold+reveal-not-needed
   folded: boolean
