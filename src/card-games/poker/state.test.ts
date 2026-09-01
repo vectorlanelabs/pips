@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { createHoldemGame, HOLDEM_MIN_SEATS, HOLDEM_MAX_SEATS, HOLDEM_SMALL_BLIND, HOLDEM_BIG_BLIND } from './state.ts'
+import { createPokerGame, POKER_MIN_SEATS, POKER_MAX_SEATS, POKER_SMALL_BLIND, POKER_BIG_BLIND } from './state.ts'
 
 describe('holdem state', () => {
-  describe('createHoldemGame', () => {
+  describe('createPokerGame', () => {
     it('creates game with correct constants', () => {
-      expect(HOLDEM_MIN_SEATS).toBe(2)
-      expect(HOLDEM_MAX_SEATS).toBe(8)
-      expect(HOLDEM_SMALL_BLIND).toBe(5)
-      expect(HOLDEM_BIG_BLIND).toBe(10)
+      expect(POKER_MIN_SEATS).toBe(2)
+      expect(POKER_MAX_SEATS).toBe(8)
+      expect(POKER_SMALL_BLIND).toBe(5)
+      expect(POKER_BIG_BLIND).toBe(10)
     })
 
     it('initializes 2-player game correctly', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       expect(game.session.publicState.seatOrder).toEqual(['p1', 'p2'])
       // After blinds are posted, chips are reduced: p1 (SB) has 995, p2 (BB) has 990
@@ -22,7 +22,7 @@ describe('holdem state', () => {
     })
 
     it('initializes 3-player game correctly', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
 
       expect(game.session.publicState.seatOrder).toEqual(['p1', 'p2', 'p3'])
       // Button at p1, SB at p2 (posts 5), BB at p3 (posts 10)
@@ -35,10 +35,10 @@ describe('holdem state', () => {
     })
 
     it('initializes maxseats game correctly', () => {
-      const playerIds = Array.from({ length: HOLDEM_MAX_SEATS }, (_, i) => `p${i + 1}`)
-      const game = createHoldemGame(playerIds, 42)
+      const playerIds = Array.from({ length: POKER_MAX_SEATS }, (_, i) => `p${i + 1}`)
+      const game = createPokerGame(playerIds, 42)
 
-      expect(game.session.publicState.seatOrder).toHaveLength(HOLDEM_MAX_SEATS)
+      expect(game.session.publicState.seatOrder).toHaveLength(POKER_MAX_SEATS)
       // Button at first (p1), SB at second (p2, has 995), BB at third (p3, has 990), rest have 1000
       expect(game.session.publicState.chips[playerIds[0]]).toBe(1000) // Button
       expect(game.session.publicState.chips[playerIds[1]]).toBe(995) // SB
@@ -49,7 +49,7 @@ describe('holdem state', () => {
     })
 
     it('sets button and blinds correctly in 2-player', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       // In heads-up: button = SB, other = BB
       expect(game.session.publicState.buttonSeat).toBe('p1')
@@ -58,7 +58,7 @@ describe('holdem state', () => {
     })
 
     it('sets button and blinds correctly in 3-player', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
 
       // Button at first non-eliminated (p1)
       expect(game.session.publicState.buttonSeat).toBe('p1')
@@ -69,7 +69,7 @@ describe('holdem state', () => {
     })
 
     it('posts blinds into pot correctly', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       // SB (p1) posts 5: 1000 - 5 = 995
       // BB (p2) posts 10: 1000 - 10 = 990
@@ -80,7 +80,7 @@ describe('holdem state', () => {
     })
 
     it('deals hole cards privately, never into public state (hole cards must not leak to other peers)', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
 
       // publicState.hands[id].cards is broadcast to every peer -- it must stay
       // empty until a genuine showdown reveal, or every seat could read every
@@ -96,14 +96,14 @@ describe('holdem state', () => {
     })
 
     it('initializes preflop street correctly', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
 
       expect(game.session.publicState.turn.phase).toBe('preflop')
       expect(game.session.publicState.turn.playerOrder.length).toBeGreaterThan(0)
     })
 
     it('initializes hand state for each player', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       for (const pid of ['p1', 'p2']) {
         const hand = game.session.publicState.hands[pid]
@@ -115,7 +115,7 @@ describe('holdem state', () => {
     })
 
     it('initializes game state fields', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
       const state = game.session.publicState
 
       expect(state.handNumber).toBe(1)
@@ -123,13 +123,13 @@ describe('holdem state', () => {
       expect(state.handResults).toBe(null)
       expect(state.gameOverWinnerId).toBe(null)
       expect(state.board).toEqual([])
-      expect(state.currentBetThisStreet).toBe(HOLDEM_BIG_BLIND)
-      expect(state.lastFullRaiseIncrement).toBe(HOLDEM_BIG_BLIND)
+      expect(state.currentBetThisStreet).toBe(POKER_BIG_BLIND)
+      expect(state.lastFullRaiseIncrement).toBe(POKER_BIG_BLIND)
     })
 
     it('all chips accounted for after initialization', () => {
       const playerIds = ['p1', 'p2', 'p3']
-      const game = createHoldemGame(playerIds, 42)
+      const game = createPokerGame(playerIds, 42)
       const state = game.session.publicState
 
       const totalChips = playerIds.reduce((sum, pid) => sum + state.chips[pid], 0) + state.pot
@@ -138,8 +138,8 @@ describe('holdem state', () => {
     })
 
     it('initializes with different random seeds', () => {
-      const game1 = createHoldemGame(['p1', 'p2', 'p3'], 1)
-      const game2 = createHoldemGame(['p1', 'p2', 'p3'], 2)
+      const game1 = createPokerGame(['p1', 'p2', 'p3'], 1)
+      const game2 = createPokerGame(['p1', 'p2', 'p3'], 2)
 
       // Different seeds should produce different shuffles
       // Just verify both games created successfully with different initial states
@@ -147,19 +147,19 @@ describe('holdem state', () => {
     })
 
     it('card back can be customized', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42, 'custom_back')
+      const game = createPokerGame(['p1', 'p2'], 42, 'custom_back')
       expect(game.session.publicState.cardBack).toBe('custom_back')
     })
 
     it('default card back is pips_default', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
       expect(game.session.publicState.cardBack).toBe('pips_default')
     })
   })
 
   describe('hand state tracking', () => {
     it('tracks contributions correctly', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       // SB should have 5 contributed
       expect(game.session.publicState.hands[game.session.publicState.smallBlindSeat].totalContributedThisHand).toBe(5)
@@ -168,7 +168,7 @@ describe('holdem state', () => {
     })
 
     it('tracks bet this street correctly', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       // SB should have 5 bet this street
       expect(game.session.publicState.hands[game.session.publicState.smallBlindSeat].betThisStreet).toBe(5)

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { createHoldemGame } from './state.ts'
-import { computeSidePots, applyHoldemAction } from './rules.ts'
-import { holdemBotStrategy } from './bot.ts'
-import type { HoldemPublicState } from './state.ts'
+import { createPokerGame } from './state.ts'
+import { computeSidePots, applyPokerAction } from './rules.ts'
+import { pokerBotStrategy } from './bot.ts'
+import type { PokerPublicState } from './state.ts'
 
 describe('holdem rules', () => {
   describe('computeSidePots', () => {
@@ -60,7 +60,7 @@ describe('holdem rules', () => {
   describe('full hand chip trajectories (action-driven tests)', () => {
     it('bug 1 fix: 3-player hand where all players CHECK on flop — street should not close until all have checked', () => {
       // This tests the Bug 1 fix: isActionClosed() must require actedThisStreet check
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
 
       // Preflop: p1 and p2 call the big blind (p3 posts)
@@ -69,21 +69,21 @@ describe('holdem rules', () => {
       expect(currentPlayer1).toBeDefined()
 
       // P1 calls
-      let actionResult = applyHoldemAction(game, currentPlayer1, { type: 'CALL' })
+      let actionResult = applyPokerAction(game, currentPlayer1, { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
       // P2 calls
       const currentPlayer2 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, currentPlayer2, { type: 'CALL' })
+      actionResult = applyPokerAction(game, currentPlayer2, { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
       // P3 (BB) checks to close preflop
       const currentPlayer3 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, currentPlayer3, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, currentPlayer3, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -95,7 +95,7 @@ describe('holdem rules', () => {
       // Now on flop: p1, p2, p3 are all still active. Flop checks should close after all 3 act.
       // First check: just p1
       const flopPlayer1 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, flopPlayer1, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, flopPlayer1, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -105,7 +105,7 @@ describe('holdem rules', () => {
 
       // Second check: p2
       const flopPlayer2 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, flopPlayer2, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, flopPlayer2, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -115,7 +115,7 @@ describe('holdem rules', () => {
 
       // Third check: p3
       const flopPlayer3 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, flopPlayer3, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, flopPlayer3, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -127,7 +127,7 @@ describe('holdem rules', () => {
 
     it('bug 1 fix: big blind must get to act even though their bet matches after blinds', () => {
       // This tests the BB-option bug: preflop must not close until BB explicitly acts
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
 
       // Preflop: p1 and p2 call the big blind
@@ -135,14 +135,14 @@ describe('holdem rules', () => {
       const utgPlayer = state.turn.playerOrder[state.turn.currentIndex]
 
       // P1 calls
-      let actionResult = applyHoldemAction(game, utgPlayer, { type: 'CALL' })
+      let actionResult = applyPokerAction(game, utgPlayer, { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
       // P2 calls
       const hj = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, hj, { type: 'CALL' })
+      actionResult = applyPokerAction(game, hj, { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -155,7 +155,7 @@ describe('holdem rules', () => {
       expect(state.currentBetThisStreet).toBe(10)
 
       // BB should be able to check (no bet to face)
-      actionResult = applyHoldemAction(game, 'p3', { type: 'CHECK' })
+      actionResult = applyPokerAction(game, 'p3', { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -167,25 +167,25 @@ describe('holdem rules', () => {
     it('bug 3 fix: all-in preflop runout auto-deals flop, turn, river to showdown', () => {
       // Simplified test: 2 players go all-in heads-up to verify auto-runout
       // This is more stable than 3-player positioning
-      let game = createHoldemGame(['p1', 'p2'], 42)
+      let game = createPokerGame(['p1', 'p2'], 42)
       let state = game.session.publicState
 
       // P1 (button/SB) is first to act
       // P1 calls
-      let actionResult = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      let actionResult = applyPokerAction(game, 'p1', { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
       // P2 (BB) goes all-in by raising to 1000 (all remaining chips)
-      actionResult = applyHoldemAction(game, 'p2', { type: 'RAISE', amount: 1000 })
+      actionResult = applyPokerAction(game, 'p2', { type: 'RAISE', amount: 1000 })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
       expect(state.hands['p2'].allIn).toBe(true)
 
       // P1 calls all-in
-      actionResult = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      actionResult = applyPokerAction(game, 'p1', { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -201,7 +201,7 @@ describe('holdem rules', () => {
 
     it('bug 2 fix: fold at last position wraps correctly to first player', () => {
       // This tests the fold wraparound fix
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
 
       // Get preflop order
@@ -213,7 +213,7 @@ describe('holdem rules', () => {
       // Move to that player's turn
       while (state.turn.playerOrder[state.turn.currentIndex] !== lastPlayer) {
         const current = state.turn.playerOrder[state.turn.currentIndex]
-        const actionResult = applyHoldemAction(game, current, { type: 'CALL' })
+        const actionResult = applyPokerAction(game, current, { type: 'CALL' })
         expect(actionResult.outcome.ok).toBe(true)
         game = actionResult.holdemSession
         state = actionResult.outcome.publicState!
@@ -223,7 +223,7 @@ describe('holdem rules', () => {
       expect(state.turn.playerOrder[state.turn.currentIndex]).toBe(lastPlayer)
 
       // That player folds
-      const actionResult = applyHoldemAction(game, lastPlayer, { type: 'FOLD' })
+      const actionResult = applyPokerAction(game, lastPlayer, { type: 'FOLD' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -236,16 +236,16 @@ describe('holdem rules', () => {
 
     it('real full-hand: both players check to showdown', () => {
       // 2-player heads-up where both check every street to reach showdown
-      let game = createHoldemGame(['p1', 'p2'], 42)
+      let game = createPokerGame(['p1', 'p2'], 42)
       let state = game.session.publicState
 
       // Preflop: P1 calls, P2 checks
-      let actionResult = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      let actionResult = applyPokerAction(game, 'p1', { type: 'CALL' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
-      actionResult = applyHoldemAction(game, 'p2', { type: 'CHECK' })
+      actionResult = applyPokerAction(game, 'p2', { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -254,12 +254,12 @@ describe('holdem rules', () => {
       expect(state.turn.phase).toBe('flop')
 
       // Flop: P2 checks, P1 checks
-      actionResult = applyHoldemAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
+      actionResult = applyPokerAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
-      actionResult = applyHoldemAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
+      actionResult = applyPokerAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -268,12 +268,12 @@ describe('holdem rules', () => {
       expect(state.turn.phase).toBe('turn')
 
       // Turn: both check
-      actionResult = applyHoldemAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
+      actionResult = applyPokerAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
 
-      actionResult = applyHoldemAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
+      actionResult = applyPokerAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -284,14 +284,14 @@ describe('holdem rules', () => {
       // River: both check
       expect(state.turn.phase).toBe('river')
       const riverPlayer1 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, riverPlayer1, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, riverPlayer1, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
       expect(state.turn.phase).toBe('river') // Still river after first check
 
       const riverPlayer2 = state.turn.playerOrder[state.turn.currentIndex]
-      actionResult = applyHoldemAction(game, riverPlayer2, { type: 'CHECK' })
+      actionResult = applyPokerAction(game, riverPlayer2, { type: 'CHECK' })
       expect(actionResult.outcome.ok).toBe(true)
       game = actionResult.holdemSession
       state = actionResult.outcome.publicState!
@@ -309,15 +309,15 @@ describe('holdem rules', () => {
     })
 
     it('regression: sole remaining non-all-in caller closes the street after matching a shove (found live by the lead — isActionClosed previously always returned false when exactly 1 actor remained, even after they matched, freezing the hand forever)', () => {
-      let game = createHoldemGame(['p1', 'p2'], 42)
+      let game = createPokerGame(['p1', 'p2'], 42)
       let state = game.session.publicState
 
       // Hand 1: p1 folds immediately -> stacks become unequal (p2 wins the blinds).
-      let r = applyHoldemAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'FOLD' })
+      let r = applyPokerAction(game, state.turn.playerOrder[state.turn.currentIndex], { type: 'FOLD' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.handOver).toBe(true)
 
-      r = applyHoldemAction(game, 'p1', { type: 'START_NEXT_HAND' })
+      r = applyPokerAction(game, 'p1', { type: 'START_NEXT_HAND' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       const shortStack = Object.entries(state.chips).sort((a, b) => a[1] - b[1])[0][0]
@@ -329,7 +329,7 @@ describe('holdem rules', () => {
         guard++
         const actor = state.turn.playerOrder[state.turn.currentIndex]
         const facingBet = state.currentBetThisStreet > state.hands[actor].betThisStreet
-        r = applyHoldemAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
+        r = applyPokerAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       }
       expect(state.turn.phase).toBe('flop')
@@ -337,14 +337,14 @@ describe('holdem rules', () => {
       // Short stack shoves everything on the flop; big stack calls with leftover chips.
       const flopActor = state.turn.playerOrder[state.turn.currentIndex]
       if (flopActor !== shortStack) {
-        r = applyHoldemAction(game, flopActor, { type: 'CHECK' })
+        r = applyPokerAction(game, flopActor, { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       }
-      r = applyHoldemAction(game, shortStack, { type: 'BET', amount: state.chips[shortStack] })
+      r = applyPokerAction(game, shortStack, { type: 'BET', amount: state.chips[shortStack] })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.hands[shortStack].allIn).toBe(true)
 
-      r = applyHoldemAction(game, bigStack, { type: 'CALL' })
+      r = applyPokerAction(game, bigStack, { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       // The big stack should NOT be all-in (they had more chips than the shove) --
@@ -355,7 +355,7 @@ describe('holdem rules', () => {
     })
 
     it('regression: a fold that leaves only already-matched players closes the street immediately (found live by the lead — FOLD was the only action handler that never checked isActionClosed)', () => {
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
 
       let guard = 0
@@ -363,7 +363,7 @@ describe('holdem rules', () => {
         guard++
         const actor = state.turn.playerOrder[state.turn.currentIndex]
         const facingBet = state.currentBetThisStreet > state.hands[actor].betThisStreet
-        const r = applyHoldemAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
+        const r = applyPokerAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true)
         game = r.holdemSession
         state = r.outcome.publicState!
@@ -371,13 +371,13 @@ describe('holdem rules', () => {
       expect(state.turn.phase).toBe('flop')
 
       const [a, b, c] = state.turn.playerOrder
-      let r = applyHoldemAction(game, a, { type: 'BET', amount: 20 })
+      let r = applyPokerAction(game, a, { type: 'BET', amount: 20 })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
-      r = applyHoldemAction(game, b, { type: 'CALL' })
+      r = applyPokerAction(game, b, { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       // a and b have both matched; c folding should close the street immediately.
-      r = applyHoldemAction(game, c, { type: 'FOLD' })
+      r = applyPokerAction(game, c, { type: 'FOLD' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       expect(state.turn.phase).toBe('turn')
@@ -387,25 +387,25 @@ describe('holdem rules', () => {
 
   describe('hole card privacy (found live by the lead — hole cards were being written into publicState, which is broadcast to every peer, instead of staying in the private per-seat channel)', () => {
     it('never exposes hole cards in public state during active betting, but reveals them for showdown contestants only', () => {
-      let game = createHoldemGame(['p1', 'p2'], 42)
+      let game = createPokerGame(['p1', 'p2'], 42)
       let state = game.session.publicState
       expect(state.hands['p1'].cards).toHaveLength(0)
       expect(state.hands['p2'].cards).toHaveLength(0)
 
-      let r = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      let r = applyPokerAction(game, 'p1', { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.hands['p1'].cards).toHaveLength(0)
       expect(state.hands['p2'].cards).toHaveLength(0)
 
-      r = applyHoldemAction(game, 'p2', { type: 'CHECK' })
+      r = applyPokerAction(game, 'p2', { type: 'CHECK' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.hands['p1'].cards).toHaveLength(0)
       expect(state.hands['p2'].cards).toHaveLength(0)
 
       for (let i = 0; i < 3; i++) {
-        r = applyHoldemAction(game, 'p2', { type: 'CHECK' })
+        r = applyPokerAction(game, 'p2', { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
-        r = applyHoldemAction(game, 'p1', { type: 'CHECK' })
+        r = applyPokerAction(game, 'p1', { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       }
 
@@ -415,21 +415,21 @@ describe('holdem rules', () => {
     })
 
     it('never reveals a folded players cards', () => {
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
       const first = state.turn.playerOrder[state.turn.currentIndex]
-      const r = applyHoldemAction(game, first, { type: 'FOLD' })
+      const r = applyPokerAction(game, first, { type: 'FOLD' })
       expect(r.outcome.ok).toBe(true)
       state = r.outcome.publicState!
       expect(state.hands[first].cards).toHaveLength(0)
     })
 
     it('a players own private hand survives their own actions (does not get wiped after acting)', () => {
-      let game = createHoldemGame(['p1', 'p2'], 42)
+      let game = createPokerGame(['p1', 'p2'], 42)
       const before = game.session.privateStates['p1'].hand
       expect(before).toHaveLength(2)
 
-      const r = applyHoldemAction(game, 'p1', { type: 'CALL' })
+      const r = applyPokerAction(game, 'p1', { type: 'CALL' })
       expect(r.outcome.ok).toBe(true)
       const after = r.holdemSession.session.privateStates['p1'].hand
       expect(after).toEqual(before)
@@ -438,14 +438,14 @@ describe('holdem rules', () => {
 
   describe('betting rules', () => {
     it('enforces minimum raise', () => {
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 42)
       let state = game.session.publicState
       let guard = 0
       while (state.turn.phase === 'preflop' && !state.handOver && guard < 10) {
         guard++
         const actor = state.turn.playerOrder[state.turn.currentIndex]
         const facingBet = state.currentBetThisStreet > state.hands[actor].betThisStreet
-        const r = applyHoldemAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
+        const r = applyPokerAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true)
         game = r.holdemSession
         state = r.outcome.publicState!
@@ -453,16 +453,16 @@ describe('holdem rules', () => {
       expect(state.turn.phase).toBe('flop')
 
       const [a, b] = state.turn.playerOrder
-      let r = applyHoldemAction(game, a, { type: 'BET', amount: 100 })
+      let r = applyPokerAction(game, a, { type: 'BET', amount: 100 })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       // Min raise-to is 200 (currentBet 100 + increment >= max(lastFullRaiseIncrement=100, BB=10)).
       // Raise to 150 (increment 50) is below the minimum and must be rejected.
-      const tooSmall = applyHoldemAction(game, b, { type: 'RAISE', amount: 150 })
+      const tooSmall = applyPokerAction(game, b, { type: 'RAISE', amount: 150 })
       expect(tooSmall.outcome.ok).toBe(false)
 
       // Raise to exactly 200 (increment 100) is the minimum and must be accepted.
-      const exact = applyHoldemAction(game, b, { type: 'RAISE', amount: 200 })
+      const exact = applyPokerAction(game, b, { type: 'RAISE', amount: 200 })
       expect(exact.outcome.ok).toBe(true)
       expect(exact.outcome.publicState!.currentBetThisStreet).toBe(200)
     })
@@ -470,7 +470,7 @@ describe('holdem rules', () => {
     it('allows short all-in raise below minimum', () => {
       // Drain p3's stack across two hands so they have a genuinely short stack
       // relative to p1/p2, then have them shove for less than a full min-raise.
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 3)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 3)
       let state = game.session.publicState
 
       // p3 makes a big bet, p1/p2 fold, p3 wins a modest pot but this doesn't
@@ -478,12 +478,12 @@ describe('holdem rules', () => {
       // repeating a couple of hands where they're forced to post a blind and fold.
       for (let i = 0; i < 3 && !state.gameOverWinnerId; i++) {
         const actor = state.turn.playerOrder[state.turn.currentIndex]
-        const r = applyHoldemAction(game, actor, { type: 'FOLD' })
+        const r = applyPokerAction(game, actor, { type: 'FOLD' })
         if (!r.outcome.ok) break
         game = r.holdemSession
         state = r.outcome.publicState!
         if (state.handOver) {
-          const rn = applyHoldemAction(game, state.seatOrder[0], { type: 'START_NEXT_HAND' })
+          const rn = applyPokerAction(game, state.seatOrder[0], { type: 'START_NEXT_HAND' })
           if (!rn.outcome.ok) break
           game = rn.holdemSession
           state = rn.outcome.publicState!
@@ -501,14 +501,14 @@ describe('holdem rules', () => {
         const actor = state.turn.playerOrder[state.turn.currentIndex]
         if (actor === shortId && state.chips[shortId] > 0) {
           const raiseTo = state.hands[shortId].betThisStreet + state.chips[shortId]
-          const r = applyHoldemAction(game, actor, { type: 'RAISE', amount: raiseTo })
+          const r = applyPokerAction(game, actor, { type: 'RAISE', amount: raiseTo })
           if (r.outcome.ok) {
             expect(r.outcome.publicState!.hands[shortId].allIn).toBe(true)
             return // short all-in accepted -- test satisfied
           }
         }
         const facingBet = state.currentBetThisStreet > state.hands[actor].betThisStreet
-        const r = applyHoldemAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
+        const r = applyPokerAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
         if (!r.outcome.ok) break
         game = r.holdemSession
         state = r.outcome.publicState!
@@ -519,14 +519,14 @@ describe('holdem rules', () => {
     })
 
     it('short all-in does not reopen re-raise eligibility for a seat that already called', () => {
-      let game = createHoldemGame(['p1', 'p2', 'p3'], 5)
+      let game = createPokerGame(['p1', 'p2', 'p3'], 5)
       let state = game.session.publicState
       let guard = 0
       while (state.turn.phase === 'preflop' && !state.handOver && guard < 10) {
         guard++
         const actor = state.turn.playerOrder[state.turn.currentIndex]
         const facingBet = state.currentBetThisStreet > state.hands[actor].betThisStreet
-        const r = applyHoldemAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
+        const r = applyPokerAction(game, actor, facingBet ? { type: 'CALL' } : { type: 'CHECK' })
         expect(r.outcome.ok).toBe(true)
         game = r.holdemSession
         state = r.outcome.publicState!
@@ -534,9 +534,9 @@ describe('holdem rules', () => {
       expect(state.turn.phase).toBe('flop')
 
       const [a, b, c] = state.turn.playerOrder
-      let r = applyHoldemAction(game, a, { type: 'BET', amount: 50 })
+      let r = applyPokerAction(game, a, { type: 'BET', amount: 50 })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
-      r = applyHoldemAction(game, b, { type: 'CALL' })
+      r = applyPokerAction(game, b, { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
 
       // b has now acted since the last full bet -- their eligibility to raise again is spent
@@ -544,20 +544,20 @@ describe('holdem rules', () => {
       expect(state.reRaiseEligible[b]).toBe(false)
 
       // c makes a FULL raise -- this correctly reopens everyone else's eligibility.
-      r = applyHoldemAction(game, c, { type: 'RAISE', amount: 200 })
+      r = applyPokerAction(game, c, { type: 'RAISE', amount: 200 })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.reRaiseEligible[a]).toBe(true)
       expect(state.reRaiseEligible[b]).toBe(true)
 
       // a calls the full raise -- spends their eligibility again.
-      r = applyHoldemAction(game, a, { type: 'CALL' })
+      r = applyPokerAction(game, a, { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.reRaiseEligible[a]).toBe(false)
 
       // b calls too -- this is the final outstanding action, so it closes the
       // flop betting round entirely and advances to the turn, where eligibility
       // correctly resets to true for everyone (a fresh street, not a "reopen").
-      r = applyHoldemAction(game, b, { type: 'CALL' })
+      r = applyPokerAction(game, b, { type: 'CALL' })
       expect(r.outcome.ok).toBe(true); game = r.holdemSession; state = r.outcome.publicState!
       expect(state.turn.phase).toBe('turn')
       expect(state.reRaiseEligible[a]).toBe(true)
@@ -568,7 +568,7 @@ describe('holdem rules', () => {
 
   describe('blinds', () => {
     it('posts blinds correctly in heads-up', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       // Heads-up: button = SB, other = BB
       expect(game.session.publicState.buttonSeat).toBe('p1')
@@ -588,7 +588,7 @@ describe('holdem rules', () => {
     })
 
     it('rotates button to next non-eliminated seat', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
       expect(game.session.publicState.buttonSeat).toBe('p1')
 
       // After hand, button would rotate to next non-eliminated seat
@@ -598,7 +598,7 @@ describe('holdem rules', () => {
 
   describe('elimination and game over', () => {
     it('marks player eliminated when chips reach 0', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
       expect(game.session.publicState.eliminated['p1']).toBe(false)
       expect(game.session.publicState.eliminated['p2']).toBe(false)
 
@@ -607,7 +607,7 @@ describe('holdem rules', () => {
     })
 
     it('sets gameOverWinnerId when only 1 player remains', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
       expect(game.session.publicState.gameOverWinnerId).toBe(null)
 
       // After eliminating all but one, this would be set
@@ -617,30 +617,30 @@ describe('holdem rules', () => {
 
   describe('bot strategy', () => {
     it('bot strategy is deterministic on same hand', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
       const privState = game.session.privateStates['p1']
-      const action1 = holdemBotStrategy(game.session.publicState, privState, 'p1')
-      const action2 = holdemBotStrategy(game.session.publicState, privState, 'p1')
+      const action1 = pokerBotStrategy(game.session.publicState, privState, 'p1')
+      const action2 = pokerBotStrategy(game.session.publicState, privState, 'p1')
 
       expect(action1).toEqual(action2)
     })
 
     it('bot never emits START_NEXT_HAND', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
       const privState = game.session.privateStates['p1']
-      const action = holdemBotStrategy(game.session.publicState, privState, 'p1')
+      const action = pokerBotStrategy(game.session.publicState, privState, 'p1')
 
       expect(action.type).not.toBe('START_NEXT_HAND')
     })
   })
 
   describe('wire safety', () => {
-    it('HoldemPublicState round-trips through JSON', () => {
-      const game = createHoldemGame(['p1', 'p2', 'p3'], 42)
+    it('PokerPublicState round-trips through JSON', () => {
+      const game = createPokerGame(['p1', 'p2', 'p3'], 42)
       const state = game.session.publicState
 
       const json = JSON.stringify(state)
-      const restored = JSON.parse(json) as HoldemPublicState
+      const restored = JSON.parse(json) as PokerPublicState
 
       expect(restored.pot).toBe(state.pot)
       expect(restored.buttonSeat).toBe(state.buttonSeat)
@@ -649,7 +649,7 @@ describe('holdem rules', () => {
     })
 
     it('full game state including private data serializes', () => {
-      const game = createHoldemGame(['p1', 'p2'], 42)
+      const game = createPokerGame(['p1', 'p2'], 42)
 
       const pubStr = JSON.stringify(game.session.publicState)
       const privStr = JSON.stringify(game.session.privateStates)

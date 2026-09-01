@@ -1,4 +1,4 @@
-export function HoldemRulesOverlay({ onClose }: { onClose: () => void }) {
+export function PokerRulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
     'Starting chips: 1000. Small blind: 5, big blind: 10.',
     'No-limit betting: wager any amount from 1 chip to your entire stack.',

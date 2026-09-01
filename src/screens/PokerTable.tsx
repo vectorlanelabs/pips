@@ -1,25 +1,25 @@
 import { useState, useEffect, useRef } from 'react'
-import type { HoldemPublicState, HoldemPrivateState } from '../card-games/holdem/state'
-import { HOLDEM_BIG_BLIND } from '../card-games/holdem/state'
+import type { PokerPublicState, PokerPrivateState } from '../card-games/poker/state'
+import { POKER_BIG_BLIND } from '../card-games/poker/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
 import { HoldemBoard } from '../components/HoldemBoard'
 import { PlayingCard, CardBack } from '../components/PlayingCard'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
-import { HoldemRulesOverlay } from './HoldemRulesOverlay'
+import { PokerRulesOverlay } from './PokerRulesOverlay'
 import { useSound } from '../hooks/useSound'
-import './HoldemTable.css'
+import './PokerTable.css'
 
-export interface HoldemTableProps {
+export interface PokerTableProps {
   code: string
   localPlayerId: string
   names: Record<string, string>
   colors: Record<string, string>
   connection: 'connected' | 'disconnected'
   notice?: string | null
-  publicState: HoldemPublicState
-  privateState: HoldemPrivateState
+  publicState: PokerPublicState
+  privateState: PokerPrivateState
   onFold: () => void
   onCheck: () => void
   onCall: () => void
@@ -29,7 +29,7 @@ export interface HoldemTableProps {
   onLeaveTable: () => void
 }
 
-export function HoldemTable({
+export function PokerTable({
   localPlayerId,
   names,
   colors,
@@ -44,7 +44,7 @@ export function HoldemTable({
   onRaise,
   onStartNextHand,
   onLeaveTable,
-}: HoldemTableProps) {
+}: PokerTableProps) {
   const { play, enabled, setEnabled } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
   // Every hand stages the same three beats before the table becomes
@@ -56,7 +56,7 @@ export function HoldemTable({
   // which never happens for the very first hand.
   const [uiPhase, setUiPhase] = useState<'blinds' | 'deal' | 'table'>('blinds')
   const [blindStage, setBlindStage] = useState<'sb' | 'bb'>('sb')
-  const [betAmount, setBetAmount] = useState(HOLDEM_BIG_BLIND * 2)
+  const [betAmount, setBetAmount] = useState(POKER_BIG_BLIND * 2)
   const [raiseSizingOpen, setRaiseSizingOpen] = useState(false)
 
   const stagedForHandRef = useRef<number | null>(null)
@@ -246,11 +246,11 @@ export function HoldemTable({
     // Betting: min = one big blind (the stepper below moves in 10s, so
     // starting it anywhere off that grid -- e.g. the engine's true floor of
     // 1 chip -- means every step lands on an off-grid number: 1, 11, 21...).
-    minBetAmount = Math.min(HOLDEM_BIG_BLIND, myChips)
+    minBetAmount = Math.min(POKER_BIG_BLIND, myChips)
     maxBetAmount = myChips
   } else if (canRaise) {
     // Raising: min = currentBet + minRaise, max = myChips + myBetThisStreet (max possible bet-to)
-    const minRaise = Math.max(publicState.lastFullRaiseIncrement, HOLDEM_BIG_BLIND)
+    const minRaise = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
     minBetAmount = publicState.currentBetThisStreet + minRaise
     maxBetAmount = myChips + myBetThisStreet
     // If min exceeds max (short all-in scenario), allow short all-in: clamp min to max
@@ -676,7 +676,7 @@ export function HoldemTable({
         )}
       </div>
 
-      {rulesOpen && <HoldemRulesOverlay onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

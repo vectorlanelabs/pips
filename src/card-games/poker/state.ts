@@ -6,9 +6,9 @@ import { createTurnState } from '../../engine/turn-engine.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { createRng } from '../../engine/rng.ts'
 
-export type HoldemStreet = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'handOver'
+export type PokerStreet = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'handOver'
 
-export interface HoldemPlayerHandState {
+export interface PokerPlayerHandState {
   cards: Card[] // always length 2 once dealt this hand, [] before dealt / after fold+reveal-not-needed
   folded: boolean
   allIn: boolean
@@ -16,15 +16,15 @@ export interface HoldemPlayerHandState {
   betThisStreet: number // resets to 0 at the start of each new street
 }
 
-export interface HoldemPublicState {
-  turn: TurnState<HoldemStreet> // playerOrder = seats still able to act THIS STREET (folded/all-in seats excluded from rotation but not from the hand)
+export interface PokerPublicState {
+  turn: TurnState<PokerStreet> // playerOrder = seats still able to act THIS STREET (folded/all-in seats excluded from rotation but not from the hand)
   seatOrder: string[] // fixed table seat order
   chips: Record<string, number>
   eliminated: Record<string, boolean>
   buttonSeat: string
   smallBlindSeat: string
   bigBlindSeat: string
-  hands: Record<string, HoldemPlayerHandState>
+  hands: Record<string, PokerPlayerHandState>
   board: Card[] // 0, 3, 4, or 5 cards depending on street
   pot: number // total chips in the middle this hand (all streets combined)
   currentBetThisStreet: number
@@ -43,17 +43,17 @@ export interface HoldemPublicState {
   cardBack: string
 }
 
-export interface HoldemPrivateState {
+export interface PokerPrivateState {
   hand: Card[]
 }
 
-export interface HoldemSession {
-  session: HostSession<HoldemPublicState, HoldemPrivateState>
+export interface PokerSession {
+  session: HostSession<PokerPublicState, PokerPrivateState>
   deck: Card[]
   rng: () => number
 }
 
-export type HoldemAction =
+export type PokerAction =
   | { type: 'FOLD' }
   | { type: 'CHECK' }
   | { type: 'CALL' }
@@ -61,15 +61,15 @@ export type HoldemAction =
   | { type: 'RAISE'; amount: number }
   | { type: 'START_NEXT_HAND' }
 
-export const HOLDEM_MIN_SEATS = 2
-export const HOLDEM_MAX_SEATS = 8
-export const HOLDEM_SMALL_BLIND = 5
-export const HOLDEM_BIG_BLIND = 10
+export const POKER_MIN_SEATS = 2
+export const POKER_MAX_SEATS = 8
+export const POKER_SMALL_BLIND = 5
+export const POKER_BIG_BLIND = 10
 const STARTING_CHIPS = 1000
 
 // Track which seats are still able to act in the current betting round
 // (excludes folded and all-in players, but includes button/blinds who may still act)
-function getActingSeats(publicState: HoldemPublicState): string[] {
+function getActingSeats(publicState: PokerPublicState): string[] {
   return publicState.seatOrder.filter(
     (seatId) =>
       !publicState.hands[seatId].folded &&
@@ -94,15 +94,15 @@ function getNextNonEliminatedSeat(seatOrder: string[], currentSeat: string, elim
 }
 
 // Initialize a new hand of poker
-export function createHoldemGame(playerIds: string[], seed: number, cardBack = 'pips_default'): HoldemSession {
+export function createPokerGame(playerIds: string[], seed: number, cardBack = 'pips_default'): PokerSession {
   const rng = createRng(seed)
   let deck = shuffleDeck(createStandardDeck(), rng)
 
   const seatOrder = playerIds
   const chips: Record<string, number> = {}
   const eliminated: Record<string, boolean> = {}
-  const hands: Record<string, HoldemPlayerHandState> = {}
-  const privateStates: Record<string, HoldemPrivateState> = {}
+  const hands: Record<string, PokerPlayerHandState> = {}
+  const privateStates: Record<string, PokerPrivateState> = {}
 
   for (const playerId of seatOrder) {
     chips[playerId] = STARTING_CHIPS
@@ -130,8 +130,8 @@ export function createHoldemGame(playerIds: string[], seed: number, cardBack = '
   }
 
   // Post blinds
-  const sbAmount = Math.min(HOLDEM_SMALL_BLIND, chips[smallBlindSeat])
-  const bbAmount = Math.min(HOLDEM_BIG_BLIND, chips[bigBlindSeat])
+  const sbAmount = Math.min(POKER_SMALL_BLIND, chips[smallBlindSeat])
+  const bbAmount = Math.min(POKER_BIG_BLIND, chips[bigBlindSeat])
   chips[smallBlindSeat] -= sbAmount
   chips[bigBlindSeat] -= bbAmount
   hands[smallBlindSeat].betThisStreet = sbAmount
@@ -165,7 +165,7 @@ export function createHoldemGame(playerIds: string[], seed: number, cardBack = '
   }
   const preflopActing = preflopOrder.filter((seatId) => !hands[seatId].folded && !hands[seatId].allIn)
 
-  const turn = createTurnState<HoldemStreet>(preflopActing, 'preflop')
+  const turn = createTurnState<PokerStreet>(preflopActing, 'preflop')
 
   const actedThisStreet: Record<string, boolean> = {}
   const reRaiseEligible: Record<string, boolean> = {}
@@ -174,7 +174,7 @@ export function createHoldemGame(playerIds: string[], seed: number, cardBack = '
     reRaiseEligible[seatId] = true
   }
 
-  const publicState: HoldemPublicState = {
+  const publicState: PokerPublicState = {
     turn,
     seatOrder,
     chips,
@@ -186,7 +186,7 @@ export function createHoldemGame(playerIds: string[], seed: number, cardBack = '
     board: [],
     pot,
     currentBetThisStreet: bbAmount,
-    lastFullRaiseIncrement: HOLDEM_BIG_BLIND,
+    lastFullRaiseIncrement: POKER_BIG_BLIND,
     handNumber: 1,
     handOver: false,
     actedThisStreet,

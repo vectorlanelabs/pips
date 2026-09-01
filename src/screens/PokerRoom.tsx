@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { HOLDEM_MAX_SEATS, HOLDEM_MIN_SEATS } from '../card-games/holdem/state'
-import { HoldemRulesOverlay } from './HoldemRulesOverlay'
+import { POKER_MAX_SEATS, POKER_MIN_SEATS } from '../card-games/poker/state'
+import { PokerRulesOverlay } from './PokerRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
 import { CardBackPicker } from '../components/CardBackPicker'
 
-export interface HoldemRoomProps {
+export interface PokerRoomProps {
   code: string
   localName: string
   isHost: boolean
@@ -19,7 +19,7 @@ export interface HoldemRoomProps {
 
 const BRAND = 'var(--coral)'
 
-export function HoldemRoom({
+export function PokerRoom({
   code,
   localName,
   isHost,
@@ -30,7 +30,7 @@ export function HoldemRoom({
   onAddHouseBot,
   onStartGame,
   onLeave,
-}: HoldemRoomProps) {
+}: PokerRoomProps) {
   const [copied, setCopied] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -49,7 +49,7 @@ export function HoldemRoom({
   }
 
   const hostName = seats.find((s) => s.isHost)?.name ?? 'the host'
-  const slots = Array.from({ length: HOLDEM_MAX_SEATS }, (_, i) => seats[i] ?? null)
+  const slots = Array.from({ length: POKER_MAX_SEATS }, (_, i) => seats[i] ?? null)
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -103,10 +103,10 @@ export function HoldemRoom({
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
-              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= HOLDEM_MAX_SEATS}>
+              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= POKER_MAX_SEATS}>
                 Add house bot
               </button>
-              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < HOLDEM_MIN_SEATS}>
+              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < POKER_MIN_SEATS}>
                 Start game
               </button>
             </div>
@@ -115,7 +115,7 @@ export function HoldemRoom({
               Waiting for {hostName} to start…
             </p>
           )}
-          {seats.length < HOLDEM_MAX_SEATS && (
+          {seats.length < POKER_MAX_SEATS && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
               Two to eight seats. Bots can fill any of them.
             </p>
@@ -171,7 +171,7 @@ export function HoldemRoom({
         </div>
       </div>
 
-      {rulesOpen && <HoldemRulesOverlay onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

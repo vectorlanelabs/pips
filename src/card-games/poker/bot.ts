@@ -1,7 +1,7 @@
 import type { BotStrategy } from '../../engine/bot.ts'
 import { evaluateBestHand } from './hand-eval.ts'
-import type { HoldemPublicState, HoldemPrivateState, HoldemAction } from './state.ts'
-import { HOLDEM_BIG_BLIND } from './state.ts'
+import type { PokerPublicState, PokerPrivateState, PokerAction } from './state.ts'
+import { POKER_BIG_BLIND } from './state.ts'
 
 // Preflop hand strength categories
 function getPreflopStrength(holeCards: { rank: string }[]): 'premium' | 'good' | 'weak' {
@@ -53,7 +53,7 @@ function getPostflopHandStrength(holeCards: Array<{ rank: string; suit: string; 
   }
 }
 
-export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateState, HoldemAction> = (publicState, privateState, playerId) => {
+export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, PokerAction> = (publicState, privateState, playerId) => {
   const playerHand = publicState.hands[playerId]
   const holeCards = privateState.hand
 
@@ -74,7 +74,7 @@ export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateStat
       // No bet yet, decide whether to bet or check
       if (strength === 'premium') {
         // Bet a small amount (2.5x BB)
-        const betAmount = Math.min(HOLDEM_BIG_BLIND * 2, playerChips)
+        const betAmount = Math.min(POKER_BIG_BLIND * 2, playerChips)
         return { type: 'BET', amount: betAmount }
       } else if (strength === 'good') {
         // Check
@@ -100,7 +100,7 @@ export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateStat
         // and since this strategy is deterministic, a caller that blindly
         // retries a rejected action would retry the identical rejected
         // action forever, permanently hanging the bot's turn.
-        const minIncrement = Math.max(publicState.lastFullRaiseIncrement, HOLDEM_BIG_BLIND)
+        const minIncrement = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
         const raiseAmount = Math.min(currentBet + minIncrement, playerChips + playerBetThisStreet)
         return { type: 'RAISE', amount: raiseAmount }
       } else if (strength === 'premium' || strength === 'good') {
@@ -108,7 +108,7 @@ export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateStat
         return { type: 'CALL' }
       } else {
         // Fold (unless it's just the big blind to call)
-        if (amountToCall <= HOLDEM_BIG_BLIND && currentBet <= HOLDEM_BIG_BLIND) {
+        if (amountToCall <= POKER_BIG_BLIND && currentBet <= POKER_BIG_BLIND) {
           return { type: 'CALL' }
         }
         return { type: 'FOLD' }
@@ -124,7 +124,7 @@ export const holdemBotStrategy: BotStrategy<HoldemPublicState, HoldemPrivateStat
       // No bet, decide to check or bet
       if (handStrength === 'strong') {
         // Bet
-        const betAmount = Math.min(HOLDEM_BIG_BLIND, playerChips)
+        const betAmount = Math.min(POKER_BIG_BLIND, playerChips)
         return { type: 'BET', amount: betAmount }
       } else {
         // Check

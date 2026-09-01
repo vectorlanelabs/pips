@@ -6,16 +6,16 @@ import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../eng
 import { dealCards, shuffleDeck, createStandardDeck } from '../../card-engine/deck.ts'
 import { evaluateBestHand, compareRanks } from './hand-eval.ts'
 import type {
-  HoldemSession,
-  HoldemPublicState,
-  HoldemPrivateState,
-  HoldemAction,
-  HoldemPlayerHandState,
-  HoldemStreet,
+  PokerSession,
+  PokerPublicState,
+  PokerPrivateState,
+  PokerAction,
+  PokerPlayerHandState,
+  PokerStreet,
 } from './state.ts'
 import {
-  HOLDEM_SMALL_BLIND,
-  HOLDEM_BIG_BLIND,
+  POKER_SMALL_BLIND,
+  POKER_BIG_BLIND,
   getActingSeats,
   getNextNonEliminatedSeat,
 } from './state.ts'
@@ -68,7 +68,7 @@ export function computeSidePots(
 }
 
 // Check if action should close (all active players matched bet or folded/all-in)
-function isActionClosed(publicState: HoldemPublicState): boolean {
+function isActionClosed(publicState: PokerPublicState): boolean {
   const acting = getActingSeats(publicState)
 
   // Every remaining actor (0, 1, or many) must have both taken a voluntary
@@ -88,17 +88,17 @@ function isActionClosed(publicState: HoldemPublicState): boolean {
 }
 
 // Count non-folded players
-function getActivePlayers(publicState: HoldemPublicState): string[] {
+function getActivePlayers(publicState: PokerPublicState): string[] {
   return publicState.seatOrder.filter((seatId) => !publicState.hands[seatId].folded)
 }
 
 // Start the hand: post blinds and deal cards
-function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicState: HoldemPublicState; deck: Card[]; privateStates: Record<string, HoldemPrivateState> } {
+function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicState: PokerPublicState; deck: Card[]; privateStates: Record<string, PokerPrivateState> } {
   let newPublicState = { ...publicState }
   let newDeck = deck
   const newChips = { ...publicState.chips }
-  const newHands: Record<string, HoldemPlayerHandState> = {}
-  const newPrivateStates: Record<string, HoldemPrivateState> = {}
+  const newHands: Record<string, PokerPlayerHandState> = {}
+  const newPrivateStates: Record<string, PokerPrivateState> = {}
   const contributions: Record<string, number> = {}
 
   // Reset all hands
@@ -115,8 +115,8 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
   }
 
   // Post blinds
-  const sbAmount = Math.min(HOLDEM_SMALL_BLIND, newChips[publicState.smallBlindSeat])
-  const bbAmount = Math.min(HOLDEM_BIG_BLIND, newChips[publicState.bigBlindSeat])
+  const sbAmount = Math.min(POKER_SMALL_BLIND, newChips[publicState.smallBlindSeat])
+  const bbAmount = Math.min(POKER_BIG_BLIND, newChips[publicState.bigBlindSeat])
 
   newChips[publicState.smallBlindSeat] -= sbAmount
   newChips[publicState.bigBlindSeat] -= bbAmount
@@ -130,7 +130,7 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
   newHands[publicState.smallBlindSeat].totalContributedThisHand = sbAmount
   newHands[publicState.bigBlindSeat].totalContributedThisHand = bbAmount
 
-  // Deal hole cards. As in createHoldemGame, cards go ONLY into the private
+  // Deal hole cards. As in createPokerGame, cards go ONLY into the private
   // per-seat channel -- never into publicState.hands[seatId].cards, which is
   // broadcast to every peer and would otherwise leak every seat's hole cards.
   const activeSeats = publicState.seatOrder.filter((seatId) => !publicState.eliminated[seatId])
@@ -166,8 +166,8 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
     board: [],
     pot: sbAmount + bbAmount,
     currentBetThisStreet: bbAmount,
-    lastFullRaiseIncrement: HOLDEM_BIG_BLIND,
-    turn: createTurnState<HoldemStreet>(preflopActing, 'preflop'),
+    lastFullRaiseIncrement: POKER_BIG_BLIND,
+    turn: createTurnState<PokerStreet>(preflopActing, 'preflop'),
     handNumber: publicState.handNumber + 1,
     handOver: false,
     actedThisStreet,
@@ -179,9 +179,9 @@ function startNewHand(publicState: HoldemPublicState, deck: Card[]): { publicSta
 }
 
 // Move to next street
-function advanceStreet(publicState: HoldemPublicState): HoldemPublicState {
+function advanceStreet(publicState: PokerPublicState): PokerPublicState {
   let newPublicState = { ...publicState }
-  let nextStreet: HoldemStreet = 'flop'
+  let nextStreet: PokerStreet = 'flop'
 
   if (publicState.turn.phase === 'preflop') {
     nextStreet = 'flop'
@@ -194,7 +194,7 @@ function advanceStreet(publicState: HoldemPublicState): HoldemPublicState {
   }
 
   // Reset betThisStreet, actedThisStreet, and reRaiseEligible for all players (a new street)
-  const newHands: Record<string, HoldemPlayerHandState> = {}
+  const newHands: Record<string, PokerPlayerHandState> = {}
   const newActedThisStreet: Record<string, boolean> = {}
   const newReRaiseEligible: Record<string, boolean> = {}
   for (const seatId of publicState.seatOrder) {
@@ -209,7 +209,7 @@ function advanceStreet(publicState: HoldemPublicState): HoldemPublicState {
     actedThisStreet: newActedThisStreet,
     reRaiseEligible: newReRaiseEligible,
     currentBetThisStreet: 0,
-    lastFullRaiseIncrement: HOLDEM_BIG_BLIND,
+    lastFullRaiseIncrement: POKER_BIG_BLIND,
   }
 
   // Determine acting order for next street (button position unless heads-up edge case)
@@ -231,14 +231,14 @@ function advanceStreet(publicState: HoldemPublicState): HoldemPublicState {
 
   newPublicState = {
     ...newPublicState,
-    turn: createTurnState<HoldemStreet>(nextActionOrder, nextStreet),
+    turn: createTurnState<PokerStreet>(nextActionOrder, nextStreet),
   }
 
   return newPublicState
 }
 
 // Deal board cards for a street (called after advanceStreet, so phase is the NEW phase)
-function dealBoardCards(deck: Card[], publicState: HoldemPublicState): { board: Card[]; deck: Card[] } {
+function dealBoardCards(deck: Card[], publicState: PokerPublicState): { board: Card[]; deck: Card[] } {
   let newDeck = deck
 
   // dealBoardCards is called AFTER advanceStreet, so the phase is already the new one.
@@ -265,9 +265,9 @@ function dealBoardCards(deck: Card[], publicState: HoldemPublicState): { board: 
 
 // Advance until either there's action possible or we reach showdown (for all-in runout)
 function advanceUntilActionOrShowdown(
-  baseState: HoldemPublicState,
+  baseState: PokerPublicState,
   deck: Card[],
-): { publicState: HoldemPublicState; deck: Card[] } {
+): { publicState: PokerPublicState; deck: Card[] } {
   let currentState = baseState
   let currentDeck = deck
   let currentBoard = [...baseState.board]
@@ -310,10 +310,10 @@ function advanceUntilActionOrShowdown(
 }
 
 function makeValidator(
-  holdemSession: HoldemSession,
+  holdemSession: PokerSession,
   onDeckChange: (newDeck: Card[]) => void,
-  onPrivateStatesChange: (newStates: Record<string, HoldemPrivateState>) => void,
-): ActionValidator<HoldemPublicState, HoldemPrivateState, HoldemAction> {
+  onPrivateStatesChange: (newStates: Record<string, PokerPrivateState>) => void,
+): ActionValidator<PokerPublicState, PokerPrivateState, PokerAction> {
   return (session, playerId, action) => {
     const { publicState } = session
     let deck = holdemSession.deck
@@ -724,7 +724,7 @@ function makeValidator(
         }
 
         const raiseIncrement = raiseToAmount - publicState.currentBetThisStreet
-        const minRaise = Math.max(publicState.lastFullRaiseIncrement, HOLDEM_BIG_BLIND)
+        const minRaise = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
 
         // Short all-in is allowed even if below min raise
         const isShortAllIn = raiseToAmount - playerHand.betThisStreet === playerChips
@@ -835,12 +835,12 @@ function makeValidator(
 
 // Conduct showdown and determine winners
 function conductShowdown(
-  publicState: HoldemPublicState,
-  privateStates: Record<string, HoldemPrivateState>,
+  publicState: PokerPublicState,
+  privateStates: Record<string, PokerPrivateState>,
   _deck: Card[],
   _onDeckChange: (newDeck: Card[]) => void,
-  _onPrivateStatesChange: (newStates: Record<string, HoldemPrivateState>) => void,
-): ActionOutcome<HoldemPublicState, HoldemPrivateState> {
+  _onPrivateStatesChange: (newStates: Record<string, PokerPrivateState>) => void,
+): ActionOutcome<PokerPublicState, PokerPrivateState> {
   void _deck
   void _onDeckChange
   void _onPrivateStatesChange
@@ -915,7 +915,7 @@ function conductShowdown(
 
   // Reveal: a genuine showdown means every contesting (non-folded) player's
   // cards become public. Folded players' cards are never revealed.
-  const revealedHands: Record<string, HoldemPlayerHandState> = { ...publicState.hands }
+  const revealedHands: Record<string, PokerPlayerHandState> = { ...publicState.hands }
   for (const seatId of activePlayers) {
     revealedHands[seatId] = { ...revealedHands[seatId], cards: privateStates[seatId].hand }
   }
@@ -936,13 +936,13 @@ function conductShowdown(
   }
 }
 
-export function applyHoldemAction(
-  holdemSession: HoldemSession,
+export function applyPokerAction(
+  holdemSession: PokerSession,
   playerId: string,
-  action: HoldemAction,
-): { holdemSession: HoldemSession; outcome: ActionOutcome<HoldemPublicState, HoldemPrivateState> } {
+  action: PokerAction,
+): { holdemSession: PokerSession; outcome: ActionOutcome<PokerPublicState, PokerPrivateState> } {
   let candidateDeck = holdemSession.deck
-  let _candidatePrivateStates: Record<string, HoldemPrivateState> = {}
+  let _candidatePrivateStates: Record<string, PokerPrivateState> = {}
 
   const validate = makeValidator(
     holdemSession,
@@ -964,13 +964,13 @@ export function applyHoldemAction(
   }
 }
 
-export function runHoldemBotTurn(
-  holdemSession: HoldemSession,
+export function runPokerBotTurn(
+  holdemSession: PokerSession,
   playerId: string,
-  strategy: BotStrategy<HoldemPublicState, HoldemPrivateState, HoldemAction>,
-): { holdemSession: HoldemSession; outcome: ActionOutcome<HoldemPublicState, HoldemPrivateState> } {
+  strategy: BotStrategy<PokerPublicState, PokerPrivateState, PokerAction>,
+): { holdemSession: PokerSession; outcome: ActionOutcome<PokerPublicState, PokerPrivateState> } {
   let candidateDeck = holdemSession.deck
-  let _candidatePrivateStates: Record<string, HoldemPrivateState> = {}
+  let _candidatePrivateStates: Record<string, PokerPrivateState> = {}
 
   const validate = makeValidator(
     holdemSession,
