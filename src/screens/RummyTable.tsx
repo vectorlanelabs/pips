@@ -174,7 +174,10 @@ function computeStatus(
     }
 
     // Idle — reach-in prompt
-    return { pre: 'Draw from the stock, or take any card in the discard pile plus every card above it.', card: null, post: '' }
+    // Short on purpose: this line shows on EVERY turn, and a long one forces
+    // the discard row to wrap below the stock. The reach-in mechanic is
+    // explained in the Rules overlay and by the hover status on pile cards.
+    return { pre: 'Draw from the stock or the discard pile.', card: null, post: '' }
   }
 
   // My turn — discard phase
