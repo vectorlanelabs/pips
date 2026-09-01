@@ -7,17 +7,20 @@ Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 
 ### Next up
-1. M1 — engine: variant + draw street cycle + DRAW action + bots
-   (spec 60a).
-2. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
+1. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
    Landing tile (spec 60b).
-3. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
+2. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
    guest plumbing (spec 60c).
-4. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
-5. M5 — live verification at max seats per variant incl. bot pacing;
+3. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
+4. M5 — live verification at max seats per variant incl. bot pacing;
    wrap-up.
 
 ### Done (this charter)
+- [cycle 2] M1 — draw-poker engine (ef8e01a). 1757 tests (all 1723
+  pre-existing pass unmodified). Sweeps exposed TWO pre-existing holdem
+  freezes (eliminated-seat rotations; all-in dead turns) — both fixed
+  at the engine with regressions. Review: 2 blocking (deck commit on
+  rejected action; missing seat-cap enforcement) fixed + regressions.
 - [cycle 1] M0 — mechanical rename holdem→poker (de91b44). 247 diff
   lines, all proven pure token substitution; 1723 tests untouched.
 

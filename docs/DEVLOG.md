@@ -4669,3 +4669,37 @@ shipping each verified charter promptly.
   left as-is (not exported API), M1 may rename in passing if it touches
   those lines anyway.
 - **Continue?** Yes — M1 (engine) next; the charter's core slice.
+
+## Cycle 2 (Poker variants charter) — 2026-08-31
+- **Shipped:** M1 draw-poker engine (ef8e01a): variant/streets/DRAW/
+  drawnCounts/bot policy/sweeps per spec 60a, split into 3 dispatches.
+- **Delegation honesty note:** deepseek:flash completed parts A and B
+  well (its part-B report even self-caught an overreach), but part C and
+  the follow-up fix dispatch BOTH died at its 25-tool-iteration cap (the
+  fix run also wandered into writing debug tests — debugging is never
+  the implementer's job). Per the twice-failed rule the lead implemented
+  the remainder personally: the all-in rotation fix, the sweep-assertion
+  correction, review fixes, and 3 regression tests. Logged, not hidden.
+- **Two pre-existing HOLDEM freezes** (live on main since the previous
+  charter) were exposed by the new bot-vs-bot sweeps and lead-reproduced:
+  (1) eliminated seats kept entering post-preflop rotations and made
+  showdown throw on their empty hands — any 3+ seat game froze forever
+  after a bust; (2) mid-street all-in seats stayed in the rotation and
+  drew dead turns after a reopening raise — deterministic bots hang.
+  Fixed at the engine (folded-from-start for eliminated; rotation
+  removal for all-in actors, mirroring FOLD's index math). LESSON fed
+  forward: bot-vs-bot full-match sweeps are the highest-value test class
+  in this codebase — the holdem charter shipped without them and both
+  its freezes were invisible to 667 lines of unit tests.
+- **Verification (lead, independent):** tsc/build clean; 1757 tests, all
+  1723 pre-existing passing UNMODIFIED (the chip-trajectory proof);
+  probe scripts reproduced each bug before each fix.
+- **Review (Sonnet, adversarial):** 2 BLOCKING — deck advanced even on
+  rejected actions (commit-semantics mismatch with the session layer),
+  and createPokerGame enforced no seat cap (8-seat seven-draw silently
+  dealt p8 three cards; reproduced verbatim). Both fixed with
+  regressions. 1 MINOR dead self-assignment removed. 1 probe (do raw
+  DRAW actions with discardIds reach other guests?) — rejected as safe:
+  actions travel guest->host only; guests receive per-seat views built
+  from publicState (spec 57's sendTo pattern), receipt in devlog.
+- **Continue?** Yes — M2 screens next.
