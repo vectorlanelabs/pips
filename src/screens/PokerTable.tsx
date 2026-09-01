@@ -571,29 +571,16 @@ export function PokerTable({
                       </div>
                     )}
                     <div className={`holdem-your-cards${isDraw ? ' holdem-your-cards--draw' : ''}`}>
-                      {displayCards.map((card) =>
-                        isMyDrawTurn ? (
-                          <button
-                            key={card.id}
-                            type="button"
-                            className={`holdem-your-card-btn${selectedDiscards.includes(card.id) ? ' holdem-your-card-btn--selected' : ''}`}
-                            onClick={() => toggleDiscard(card.id)}
-                          >
-                            <PlayingCard
-                              rank={card.rank as any}
-                              suit={card.suit as any}
-                              size="hand"
-                            />
-                          </button>
-                        ) : (
-                          <PlayingCard
-                            key={card.id}
-                            rank={card.rank as any}
-                            suit={card.suit as any}
-                            size="hand"
-                          />
-                        ),
-                      )}
+                      {displayCards.map((card) => (
+                        <PlayingCard
+                          key={card.id}
+                          rank={card.rank as any}
+                          suit={card.suit as any}
+                          size="hand"
+                          selected={selectedDiscards.includes(card.id)}
+                          onClick={isMyDrawTurn ? () => toggleDiscard(card.id) : undefined}
+                        />
+                      ))}
                     </div>
                   </>
                 )}

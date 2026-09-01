@@ -161,8 +161,19 @@ function drawBettingAction(publicState: PokerPublicState, privateState: PokerPri
   // RAISE the validator would reject (raiseToAmount must exceed the current
   // bet); a rejected deterministic action would hang the bot loop forever --
   // same rationale as the reRaiseEligible guard in the holdem preflop branch.
+  //
+  // Street-size cap: two+ bots holding trips-or-better used to re-raise the
+  // legal minimum back and forth until everyone was all-in (~25 raises,
+  // minutes of paced 900ms beats). Stateless bots need a state-derived
+  // throttle, so a strong hand only keeps raising while the street bet is
+  // below 8 big blinds -- that bounds a street to a few raises while still
+  // letting strong hands build real pots.
   if (cat >= 3) {
-    if (publicState.reRaiseEligible[playerId] && playerChips + playerBetThisStreet > currentBet) {
+    if (
+      publicState.reRaiseEligible[playerId] &&
+      playerChips + playerBetThisStreet > currentBet &&
+      publicState.currentBetThisStreet < POKER_BIG_BLIND * 8
+    ) {
       const minIncrement = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
       const raiseAmount = Math.min(currentBet + minIncrement, playerChips + playerBetThisStreet)
       return { type: 'RAISE', amount: raiseAmount }

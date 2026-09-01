@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPokerGame } from './state.ts'
+import { createPokerGame, POKER_BIG_BLIND } from './state.ts'
 import { pokerBotStrategy, drawDiscardAction } from './bot.ts'
 import { applyPokerAction, runPokerBotTurn } from './rules.ts'
 import type { Card } from '../../card-engine/cards.ts'
@@ -247,4 +247,33 @@ describe('draw full-match sweeps', () => {
       })
     }
   }
+})
+
+describe('draw betting street-size throttle', () => {
+  it('trips-or-better bot calls, not raises, once the street bet reaches 8 big blinds', () => {
+    // A 5-card hand that evaluates to trips (category 3) -- the bot's
+    // "raise by the legal minimum" tier. Three 9s plus two kickers.
+    const tripsHand = [
+      card('a', '2', 'clubs'),
+      card('b', '9', 'hearts'),
+      card('c', '9', 'diamonds'),
+      card('d', '9', 'spades'),
+      card('e', 'K', 'clubs'),
+    ]
+
+    // Fresh five-draw game: p1 is the button/small blind, so betThisStreet is
+    // 5 and amountToCall stays positive once the street bet is raised.
+    const game = createPokerGame(['p1', 'p2'], 42, 'pips_default', 'five-draw')
+    const pubState = {
+      ...game.session.publicState,
+      turn: { ...game.session.publicState.turn, phase: 'firstBet' as const, currentIndex: 0 },
+      // Exactly at the cap: >= 8 big blinds must stop the raise war.
+      currentBetThisStreet: POKER_BIG_BLIND * 8,
+      reRaiseEligible: { ...game.session.publicState.reRaiseEligible, p1: true },
+    }
+    const privState = { hand: tripsHand }
+
+    const action = pokerBotStrategy(pubState, privState, 'p1')
+    expect(action).toEqual({ type: 'CALL' })
+  })
 })

@@ -7,10 +7,10 @@ and Back returns to the shelf.
 
 Nineteen games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
 **Rummy**, **Phase 10**, **Battleship**, **Dominoes**, **Wahoo**, **Checkers**,
-**Mexican Train**, **Chess**, **Uno**, **Skip-Bo**, **Blackjack**, **Texas Hold'em**, **Solitaire** (Klondike or FreeCell),
+**Mexican Train**, **Chess**, **Uno**, **Skip-Bo**, **Blackjack**, **Poker** (Texas Hold'em, 5-Card Draw, or 7-Card Draw), **Solitaire** (Klondike or FreeCell),
 and **Scrabble**. Farkle and Yahtzee seat up to 8, Wahoo seats 2–4,
 Rummy seats 2–4, Phase 10 seats 2–6, Mexican Train seats 2–8, Uno seats 2–6, Skip-Bo
-seats 2–4, Blackjack seats 2–6, Texas Hold'em seats 2–8, Solitaire is one player, and Scrabble seats 2–4; the rest are two-player
+seats 2–4, Blackjack seats 2–6, Poker seats 2–8 (Texas Hold'em; 5-Card Draw seats 2–6, 7-Card Draw seats 2–5), Solitaire is one player, and Scrabble seats 2–4; the rest are two-player
 (for now).
 Every game can be played solo against house bots.
 
