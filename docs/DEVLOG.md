@@ -4641,3 +4641,31 @@ shipping each verified charter promptly.
   in a real browser. Nothing has been merged to `main` or pushed —
   awaiting the user's explicit "push" per this project's standing git
   workflow, unchanged by running in an isolated worktree.
+
+## Cycle 1 (Poker variants charter) — 2026-08-31
+- **Shipped:** M0 mechanical rename holdem→poker (de91b44). Lead ran the
+  git mv (git is lead work); deepseek:flash rewrote contents from a
+  locked rename table.
+- **Verification:** lead re-ran tsc / full suite (1723 passed) / build /
+  `git diff --check`; greps confirm zero `card-games/holdem` or
+  `screens/Holdem` references remain. Additionally proved the diff is
+  rename-ONLY: a script applied the spec's rename table to every removed
+  line and required equality with its added counterpart — 247/247 lines
+  explained, 0 unexplained.
+- **Review:** no Sonnet review this slice — the rename-only proof above
+  IS the review (a behavior defect cannot exist in a diff shown to be
+  pure token substitution with an untouched green suite). Recorded as a
+  justified exception, not a skip.
+- **Delegation note:** first dispatch died at deepseek's 25-tool-
+  iteration cap doing per-line edits; re-dispatch with "one bulk
+  multi-replacement edit per file" finished well under cap. Standing
+  instruction for future dispatches: always require bulk edits.
+  Implementer's report was well calibrated (listed judgment calls,
+  self-reverted an App.tsx comment it had overreached on).
+- **Lesson:** `src/components/HoldemBoard.tsx` was missed by the
+  charter inventory; it keeps its name deliberately — it renders the
+  community-card board, which only the holdem VARIANT has. Also:
+  lowercase `holdemSession` field/param names exist in rules code;
+  left as-is (not exported API), M1 may rename in passing if it touches
+  those lines anyway.
+- **Continue?** Yes — M1 (engine) next; the charter's core slice.

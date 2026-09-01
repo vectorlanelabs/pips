@@ -7,10 +7,7 @@ Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 
 ### Next up
-1. M0 — mechanical rename holdem→poker (dir, screens, exported
-   identifiers; NOT copy/CSS classes/App locals). Suite passes
-   untouched.
-2. M1 — engine: variant + draw street cycle + DRAW action + bots
+1. M1 — engine: variant + draw street cycle + DRAW action + bots
    (spec 60a).
 3. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
    Landing tile (spec 60b).
@@ -19,6 +16,10 @@ Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 5. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
 6. M5 — live verification at max seats per variant incl. bot pacing;
    wrap-up.
+
+### Done (this charter)
+- [cycle 1] M0 — mechanical rename holdem→poker (de91b44). 247 diff
+  lines, all proven pure token substitution; 1723 tests untouched.
 
 ## Charter: Blackjack + Texas Hold'em (2026-08-23) — done (merged & pushed)
 
