@@ -6,13 +6,17 @@ Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
 
 Branch `charter/poker-omaha-house-rules`.
 
+### Done (this charter)
+- [cycle 1] M6+M7 — Omaha Hold'em (5fff56d). Exactly-2+3 evaluator with
+  pinned gotcha tests; isDrawVariant refactor; TWO more latent holdem
+  bot bugs found by sweeps/review (short-stack illegal raise in both
+  new and holdem branches; PokerTable isDraw straggler) — all fixed;
+  flop render live-verified. 1778 tests.
+
 ### Next up
-1. M6 — Omaha engine (isDrawVariant audit, 4-card deal, exactly-2
-   evaluation, bot, sweeps).
-2. M7 — Omaha screens + wiring.
-3. M8 — house-rules engine (deucesWild + ante).
-4. M9 — house-rules screens + wiring.
-5. M10 — live verification; wrap-up for owner play-test.
+1. M8 — house-rules engine (deucesWild + ante).
+2. M9 — house-rules screens + wiring.
+3. M10 — live verification; wrap-up for owner play-test.
 
 ## Charter: Poker variants (2026-08-31) — done (merged & pushed 2026-08-31)
 

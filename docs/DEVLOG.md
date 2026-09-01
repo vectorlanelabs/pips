@@ -4791,3 +4791,24 @@ shipping each verified charter promptly.
   test runner's own exit code (`npm test && ...`), never a grep in the
   success path; (2) if a flake recurs, capture the full output before
   anything else. Watch item filed in REQUESTS.md.
+
+## Cycle 1 (Poker round 2) — 2026-09-01
+- **Shipped:** M6+M7 Omaha Hold'em (5fff56d), both milestones in one
+  cycle (the implementer's tsc-driven room patches made Omaha startable
+  early, so deferring the table fix would have left a live-broken state
+  inside the branch — Sonnet's blocking finding, fixed same-cycle).
+- **The sweep dividend continues:** omaha sweeps exposed the SAME
+  latent short-stack illegal-raise bug in the holdem premium branch
+  (third pre-existing holdem bot bug found by this charter series's
+  sweeps). Both branches guarded + regression tests.
+- **Verification (lead):** tsc/1778/build; evaluator + gotcha tests
+  read line-by-line; live browser smoke — Omaha room desc, 4-card deal
+  intro, flop renders, betting live. User confirmed mid-cycle that
+  Omaha Hold'em (not some other Omaha) is the intent — matches what
+  was built (community board, exactly-two rule).
+- **Review (Sonnet):** 1 blocking (PokerTable isDraw straggler — the
+  exact stale-comparison its own doc comment warned about) fixed +
+  live-verified; 1 major (same root, grep evidence) resolved by the
+  fix + full-tree re-grep; nit (omaha short-stack unit) fixed;
+  conductShowdown catch-all nit acknowledged as pre-existing pattern.
+- **Continue?** Yes — M8 house-rules engine (deucesWild + ante).
