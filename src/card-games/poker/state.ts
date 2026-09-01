@@ -19,6 +19,16 @@ export type PokerStreet =
   | 'showdown'
   | 'handOver'
 
+export interface PokerHouseRules {
+  deucesWild: boolean
+  ante: boolean
+}
+
+export const DEFAULT_HOUSE_RULES: PokerHouseRules = {
+  deucesWild: false,
+  ante: false,
+}
+
 export interface PokerPlayerHandState {
   cards: Card[] // always the variant's hand size once dealt this hand (2 holdem / 4 omaha / 5 five-draw / 7 seven-draw), [] before dealt / after fold+reveal-not-needed
   folded: boolean
@@ -53,6 +63,7 @@ export interface PokerPublicState {
   gameOverWinnerId: string | null
   cardBack: string
   variant: PokerVariant
+  houseRules: PokerHouseRules
   drawnCounts: Record<string, number | null> // null = has not drawn this hand; a number = how many cards they discarded. Reset for all seats every hand (holdem hands keep them all null forever).
 }
 
@@ -79,6 +90,7 @@ export const POKER_MIN_SEATS = 2
 export const POKER_MAX_SEATS = 8
 export const POKER_SMALL_BLIND = 5
 export const POKER_BIG_BLIND = 10
+export const POKER_ANTE = 10
 const STARTING_CHIPS = 1000
 
 // Number of private cards dealt to each seat at the start of a hand
@@ -138,6 +150,7 @@ export function createPokerGame(
   seed: number,
   cardBack = 'pips_default',
   variant: PokerVariant = 'holdem',
+  houseRules: PokerHouseRules = DEFAULT_HOUSE_RULES,
 ): PokerSession {
   if (playerIds.length < POKER_MIN_SEATS || playerIds.length > maxSeatsFor(variant)) {
     throw new Error(`${variant} supports ${POKER_MIN_SEATS}-${maxSeatsFor(variant)} seats, got ${playerIds.length}`)
@@ -176,19 +189,38 @@ export function createPokerGame(
     bigBlindSeat = getNextNonEliminatedSeat(seatOrder, smallBlindSeat, eliminated)
   }
 
-  // Post blinds
-  const sbAmount = Math.min(POKER_SMALL_BLIND, chips[smallBlindSeat])
-  const bbAmount = Math.min(POKER_BIG_BLIND, chips[bigBlindSeat])
-  chips[smallBlindSeat] -= sbAmount
-  chips[bigBlindSeat] -= bbAmount
-  hands[smallBlindSeat].betThisStreet = sbAmount
-  hands[smallBlindSeat].totalContributedThisHand = sbAmount
-  hands[bigBlindSeat].betThisStreet = bbAmount
-  hands[bigBlindSeat].totalContributedThisHand = bbAmount
-  hands[smallBlindSeat].allIn = chips[smallBlindSeat] === 0
-  hands[bigBlindSeat].allIn = chips[bigBlindSeat] === 0
+  // The seats still in the game (nobody is eliminated at creation): they post
+  // (antes or blinds), get dealt, and rotate.
+  const activeSeats = seatOrder.filter((seatId) => !eliminated[seatId])
 
-  const pot = sbAmount + bbAmount
+  // Posting: ante games post NO blinds. Every non-eliminated seat puts
+  // min(POKER_ANTE, chips) into the pot -- an ante is a pot contribution, not
+  // a street bet, so betThisStreet stays 0 and the opening street starts
+  // unopened (currentBetThisStreet stays 0). A seat whose whole stack is the
+  // ante goes all-in. Blind games keep the small/big blind flow untouched.
+  let bbAmount = 0
+  let pot = 0
+  if (houseRules.ante) {
+    for (const seatId of activeSeats) {
+      const anteAmount = Math.min(POKER_ANTE, chips[seatId])
+      chips[seatId] -= anteAmount
+      hands[seatId].totalContributedThisHand = anteAmount
+      hands[seatId].allIn = chips[seatId] === 0
+      pot += anteAmount
+    }
+  } else {
+    const sbAmount = Math.min(POKER_SMALL_BLIND, chips[smallBlindSeat])
+    bbAmount = Math.min(POKER_BIG_BLIND, chips[bigBlindSeat])
+    chips[smallBlindSeat] -= sbAmount
+    chips[bigBlindSeat] -= bbAmount
+    hands[smallBlindSeat].betThisStreet = sbAmount
+    hands[smallBlindSeat].totalContributedThisHand = sbAmount
+    hands[bigBlindSeat].betThisStreet = bbAmount
+    hands[bigBlindSeat].totalContributedThisHand = bbAmount
+    hands[smallBlindSeat].allIn = chips[smallBlindSeat] === 0
+    hands[bigBlindSeat].allIn = chips[bigBlindSeat] === 0
+    pot = sbAmount + bbAmount
+  }
 
   // Deal private cards to all non-eliminated players. Cards go ONLY into the
   // private per-seat channel -- publicState.hands[seatId].cards stays empty
@@ -196,20 +228,28 @@ export function createPokerGame(
   // broadcast to every connected peer verbatim; writing real cards into it
   // here would leak every seat's cards to every other seat regardless of what
   // the UI chooses to render.
-  const activeSeats = seatOrder.filter((seatId) => !eliminated[seatId])
   for (const seatId of activeSeats) {
     const { dealt: dealtCards, remaining } = dealCards(deck, handSizeFor(variant))
     deck = remaining
     privateStates[seatId].hand = dealtCards
   }
 
-  // Determine opening action order: starts left of BB (same for holdem/omaha
-  // preflop and draw firstBet)
+  // Determine opening action order. Blind games start left of the big blind
+  // (same for holdem/omaha preflop and draw firstBet); ante games post no
+  // blinds, so action starts LEFT OF THE BUTTON (the post-flop convention).
   let preflopOrder = [...activeSeats]
-  const bbIndex = preflopOrder.indexOf(bigBlindSeat)
-  if (bbIndex !== -1) {
-    const nextIndex = (bbIndex + 1) % preflopOrder.length
-    preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+  if (houseRules.ante) {
+    const buttonIndex = preflopOrder.indexOf(buttonSeat)
+    if (buttonIndex !== -1) {
+      const nextIndex = (buttonIndex + 1) % preflopOrder.length
+      preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+    }
+  } else {
+    const bbIndex = preflopOrder.indexOf(bigBlindSeat)
+    if (bbIndex !== -1) {
+      const nextIndex = (bbIndex + 1) % preflopOrder.length
+      preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+    }
   }
   const preflopActing = preflopOrder.filter((seatId) => !hands[seatId].folded && !hands[seatId].allIn)
 
@@ -246,6 +286,7 @@ export function createPokerGame(
     gameOverWinnerId: null,
     cardBack,
     variant,
+    houseRules,
     drawnCounts,
   }
 

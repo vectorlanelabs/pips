@@ -16,6 +16,7 @@ import type {
 import {
   POKER_SMALL_BLIND,
   POKER_BIG_BLIND,
+  POKER_ANTE,
   handSizeFor,
   getActingSeats,
   getNextNonEliminatedSeat,
@@ -115,7 +116,6 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
   const newChips = { ...publicState.chips }
   const newHands: Record<string, PokerPlayerHandState> = {}
   const newPrivateStates: Record<string, PokerPrivateState> = {}
-  const contributions: Record<string, number> = {}
 
   // Reset all hands
   for (const seatId of publicState.seatOrder) {
@@ -130,30 +130,45 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
       totalContributedThisHand: 0,
       betThisStreet: 0,
     }
-    contributions[seatId] = 0
     newPrivateStates[seatId] = { hand: [] }
   }
 
-  // Post blinds
-  const sbAmount = Math.min(POKER_SMALL_BLIND, newChips[publicState.smallBlindSeat])
-  const bbAmount = Math.min(POKER_BIG_BLIND, newChips[publicState.bigBlindSeat])
+  const activeSeats = publicState.seatOrder.filter((seatId) => !publicState.eliminated[seatId])
 
-  newChips[publicState.smallBlindSeat] -= sbAmount
-  newChips[publicState.bigBlindSeat] -= bbAmount
-  contributions[publicState.smallBlindSeat] = sbAmount
-  contributions[publicState.bigBlindSeat] = bbAmount
+  // Posting: ante games post NO blinds. Every non-eliminated seat puts
+  // min(POKER_ANTE, chips) into the pot -- an ante is a pot contribution, not
+  // a street bet, so betThisStreet stays 0 and the opening street starts
+  // unopened (currentBetThisStreet stays 0). A seat whose whole stack is the
+  // ante goes all-in. Blind games keep the small/big blind flow untouched.
+  let bbAmount = 0
+  let pot = 0
+  if (publicState.houseRules.ante) {
+    for (const seatId of activeSeats) {
+      const anteAmount = Math.min(POKER_ANTE, newChips[seatId])
+      newChips[seatId] -= anteAmount
+      newHands[seatId].allIn = newChips[seatId] === 0
+      newHands[seatId].totalContributedThisHand = anteAmount
+      pot += anteAmount
+    }
+  } else {
+    const sbAmount = Math.min(POKER_SMALL_BLIND, newChips[publicState.smallBlindSeat])
+    bbAmount = Math.min(POKER_BIG_BLIND, newChips[publicState.bigBlindSeat])
 
-  newHands[publicState.smallBlindSeat].allIn = newChips[publicState.smallBlindSeat] === 0
-  newHands[publicState.bigBlindSeat].allIn = newChips[publicState.bigBlindSeat] === 0
-  newHands[publicState.smallBlindSeat].betThisStreet = sbAmount
-  newHands[publicState.bigBlindSeat].betThisStreet = bbAmount
-  newHands[publicState.smallBlindSeat].totalContributedThisHand = sbAmount
-  newHands[publicState.bigBlindSeat].totalContributedThisHand = bbAmount
+    newChips[publicState.smallBlindSeat] -= sbAmount
+    newChips[publicState.bigBlindSeat] -= bbAmount
+
+    newHands[publicState.smallBlindSeat].allIn = newChips[publicState.smallBlindSeat] === 0
+    newHands[publicState.bigBlindSeat].allIn = newChips[publicState.bigBlindSeat] === 0
+    newHands[publicState.smallBlindSeat].betThisStreet = sbAmount
+    newHands[publicState.bigBlindSeat].betThisStreet = bbAmount
+    newHands[publicState.smallBlindSeat].totalContributedThisHand = sbAmount
+    newHands[publicState.bigBlindSeat].totalContributedThisHand = bbAmount
+    pot = sbAmount + bbAmount
+  }
 
   // Deal private cards. As in createPokerGame, cards go ONLY into the private
   // per-seat channel -- never into publicState.hands[seatId].cards, which is
   // broadcast to every peer and would otherwise leak every seat's hole cards.
-  const activeSeats = publicState.seatOrder.filter((seatId) => !publicState.eliminated[seatId])
   const handSize = handSizeFor(publicState.variant)
   for (const seatId of activeSeats) {
     const { dealt: handCards, remaining } = dealCards(newDeck, handSize)
@@ -161,13 +176,24 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     newPrivateStates[seatId].hand = handCards
   }
 
-  // Determine preflop action order: starts left of BB (next seat after BB, wrapping to start)
+  // Determine opening action order. Blind games start left of the big blind
+  // (next seat after BB, wrapping to start); ante games post no blinds, so
+  // action starts LEFT OF THE BUTTON (the post-flop convention).
   let preflopOrder = [...activeSeats]
-  const bbIndex = preflopOrder.indexOf(publicState.bigBlindSeat)
-  if (bbIndex !== -1) {
-    // Rotate so that the seat after BB is first
-    const nextIndex = (bbIndex + 1) % preflopOrder.length
-    preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+  if (publicState.houseRules.ante) {
+    const buttonIndex = preflopOrder.indexOf(publicState.buttonSeat)
+    if (buttonIndex !== -1) {
+      // Rotate so that the seat after the button is first
+      const nextIndex = (buttonIndex + 1) % preflopOrder.length
+      preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+    }
+  } else {
+    const bbIndex = preflopOrder.indexOf(publicState.bigBlindSeat)
+    if (bbIndex !== -1) {
+      // Rotate so that the seat after BB is first
+      const nextIndex = (bbIndex + 1) % preflopOrder.length
+      preflopOrder = [...preflopOrder.slice(nextIndex), ...preflopOrder.slice(0, nextIndex)]
+    }
   }
 
   // Filter out folded/all-in from action order (but they're not folded/all-in yet)
@@ -184,7 +210,7 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
 
   // Draw variants open with the first betting round; holdem and omaha open
   // preflop. The action order is identical in every case (starts left of the
-  // big blind).
+  // big blind, or left of the button in an ante game -- both set above).
   const initialPhase: PokerStreet = isDrawVariant(publicState.variant) ? 'firstBet' : 'preflop'
 
   newPublicState = {
@@ -192,7 +218,7 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     hands: newHands,
     chips: newChips,
     board: [],
-    pot: sbAmount + bbAmount,
+    pot,
     currentBetThisStreet: bbAmount,
     lastFullRaiseIncrement: POKER_BIG_BLIND,
     turn: createTurnState<PokerStreet>(preflopActing, initialPhase),
@@ -425,6 +451,30 @@ function makeValidator(
       const { publicState: stateAfterStart, deck: deckAfterStart, privateStates: newPrivateStates } = startNewHand(newPublicState, newDeck)
       onDeckChange(deckAfterStart)
       onPrivateStatesChange(newPrivateStates)
+
+      // The posts themselves can put every remaining seat all-in before anyone
+      // acts (e.g. 3 seats at exactly the ante, or heads-up with both blind
+      // posts taking the whole stack). With zero seats able to act the rotation
+      // is empty and every action would be rejected 'not your turn' forever --
+      // so run out the hand with the same closure the betting branches use.
+      // Exactly zero actors triggers this: a lone unmatched actor must still get
+      // their turn. advanceUntilActionOrShowdown stops at the 'draw' phase for
+      // draw variants (all-in seats still take their draw turns) and otherwise
+      // deals out the remaining board to showdown.
+      if (getActingSeats(stateAfterStart).length === 0) {
+        const { publicState: runoutState, deck: runoutDeck } = advanceUntilActionOrShowdown(stateAfterStart, deckAfterStart)
+        onDeckChange(runoutDeck)
+
+        if (runoutState.turn.phase === 'showdown') {
+          return conductShowdown(runoutState, newPrivateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
+        }
+
+        return {
+          ok: true,
+          publicState: runoutState,
+          privateStates: newPrivateStates,
+        }
+      }
 
       return {
         ok: true,
@@ -1018,8 +1068,8 @@ function conductShowdown(
   for (const seatId of activePlayers) {
     try {
       const hand = publicState.variant === 'omaha'
-        ? evaluateOmahaHand(privateStates[seatId].hand, publicState.board)
-        : evaluateBestHand(privateStates[seatId].hand, publicState.board)
+        ? evaluateOmahaHand(privateStates[seatId].hand, publicState.board, publicState.houseRules.deucesWild)
+        : evaluateBestHand(privateStates[seatId].hand, publicState.board, publicState.houseRules.deucesWild)
       handEvals[seatId] = hand
     } catch (e) {
       // Should not happen if board is complete

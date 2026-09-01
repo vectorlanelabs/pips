@@ -1,7 +1,7 @@
-import type { Card } from '../../card-engine/cards.ts'
+import { RANKS, SUITS, type Card } from '../../card-engine/cards.ts'
 
 export interface HandRank {
-  category: number // 8=straight flush, 7=four of a kind, ..., 0=high card
+  category: number // 9=five of a kind (only reachable with wilds), 8=straight flush, 7=four of a kind, ..., 0=high card
   tiebreakers: number[] // ordered from most significant to least, all converted to numeric values (A=14, K=13, ..., 2=2, except wheel A=1)
 }
 
@@ -16,6 +16,7 @@ const HAND_CATEGORIES = {
   FULL_HOUSE: 6,
   FOUR_OF_A_KIND: 7,
   STRAIGHT_FLUSH: 8,
+  FIVE_OF_A_KIND: 9,
 }
 
 // Convert rank string to numeric value (for sorting)
@@ -66,13 +67,25 @@ function evaluateHand(hand: Card[]): HandRank {
     throw new Error('Hand must be exactly 5 cards')
   }
 
+  // Five of a kind outranks everything. Only reachable when a wild assignment
+  // duplicated a rank (a single 52-card deck can never hold five natural
+  // copies of one rank), so the check lives in the 5-card core where
+  // wild-built hands land -- and it must run before the straight-flush check:
+  // five copies of one rank also satisfy isFlush when a wild copied a suit.
+  // One countRanks pass feeds this check and every category check below.
+  const rankCounts = countRanks(hand)
+  if (rankCounts.some((c) => c.count === 5)) {
+    const fiveRank = rankCounts.find((c) => c.count === 5)!.rank
+    return { category: HAND_CATEGORIES.FIVE_OF_A_KIND, tiebreakers: [rankToValue(fiveRank)] }
+  }
+
   const isStraightFlush = isFlush(hand) && getStraightHigh(hand) !== 0
-  const isFourOfAKind = countRanks(hand).some((c) => c.count === 4)
-  const isFullHouse = countRanks(hand).some((c) => c.count === 3) && countRanks(hand).some((c) => c.count === 2)
+  const isFourOfAKind = rankCounts.some((c) => c.count === 4)
+  const isFullHouse = rankCounts.some((c) => c.count === 3) && rankCounts.some((c) => c.count === 2)
   const isFlushHand = isFlush(hand)
   const straightHigh = getStraightHigh(hand)
-  const isThreeOfAKind = countRanks(hand).some((c) => c.count === 3)
-  const pairs = countRanks(hand).filter((c) => c.count === 2)
+  const isThreeOfAKind = rankCounts.some((c) => c.count === 3)
+  const pairs = rankCounts.filter((c) => c.count === 2)
   const isTwoPair = pairs.length === 2
   const isOnePair = pairs.length === 1
 
@@ -84,7 +97,7 @@ function evaluateHand(hand: Card[]): HandRank {
   }
 
   if (isFourOfAKind) {
-    const ranked = countRanks(hand)
+    const ranked = rankCounts
     const quads = ranked.find((c) => c.count === 4)!.rank
     const kicker = ranked.find((c) => c.count === 1)!.rank
     return {
@@ -94,7 +107,7 @@ function evaluateHand(hand: Card[]): HandRank {
   }
 
   if (isFullHouse) {
-    const ranked = countRanks(hand)
+    const ranked = rankCounts
     const trips = ranked.find((c) => c.count === 3)!.rank
     const pair = ranked.find((c) => c.count === 2)!.rank
     return {
@@ -119,7 +132,7 @@ function evaluateHand(hand: Card[]): HandRank {
   }
 
   if (isThreeOfAKind) {
-    const ranked = countRanks(hand)
+    const ranked = rankCounts
     const trips = ranked.find((c) => c.count === 3)!.rank
     const kickers = ranked
       .filter((c) => c.count === 1)
@@ -132,7 +145,7 @@ function evaluateHand(hand: Card[]): HandRank {
   }
 
   if (isTwoPair) {
-    const ranked = countRanks(hand)
+    const ranked = rankCounts
     const pairRanks = ranked
       .filter((c) => c.count === 2)
       .map((c) => rankToValue(c.rank))
@@ -145,7 +158,7 @@ function evaluateHand(hand: Card[]): HandRank {
   }
 
   if (isOnePair) {
-    const ranked = countRanks(hand)
+    const ranked = rankCounts
     const pair = ranked.find((c) => c.count === 2)!.rank
     const kickers = ranked
       .filter((c) => c.count === 1)
@@ -163,6 +176,120 @@ function evaluateHand(hand: Card[]): HandRank {
     category: HAND_CATEGORIES.HIGH_CARD,
     tiebreakers: values,
   }
+}
+
+// Deuces Wild evaluation of a single 5-card hand: every card whose rank is
+// '2' is wild and may be assigned any (rank, suit) from the full 52-card
+// space (13 ranks x 4 suits). Duplicates with natural cards ARE allowed -- a
+// wild may copy an existing card, which is exactly what makes five of a kind
+// and paired duplicates possible. w=1/w=2 brute-force every assignment (52 or
+// 2704 evaluations -- cheap); w=3/w=4 use the locked rule table below.
+function evaluateFiveWithWilds(cards: Card[]): HandRank {
+  const naturals = cards.filter((c) => c.rank !== '2')
+  const w = 5 - naturals.length
+
+  if (w === 0) {
+    return evaluateHand(cards)
+  }
+
+  if (w === 1 || w === 2) {
+    const allCards = wildAssignmentSpace()
+    let best: HandRank | null = null
+
+    if (w === 1) {
+      const assign = (assignments: Card[], depth: number): void => {
+        if (depth === w) {
+          const hand = evaluateHand([...naturals, ...assignments])
+          if (best === null || compareRanks(hand, best) > 0) {
+            best = hand
+          }
+          return
+        }
+        for (const candidate of allCards) {
+          assignments.push(candidate)
+          assign(assignments, depth + 1)
+          assignments.pop()
+        }
+      }
+      assign([], 0)
+      return best!
+    }
+
+    // w === 2: unordered pairs (j >= i) suffice -- assignment order is irrelevant, halving the 52^2 sweep.
+    for (let i = 0; i < allCards.length; i++) {
+      for (let j = i; j < allCards.length; j++) {
+        const hand = evaluateHand([...naturals, allCards[i], allCards[j]])
+        if (best === null || compareRanks(hand, best) > 0) {
+          best = hand
+        }
+      }
+    }
+    return best!
+  }
+
+  if (w === 3) {
+    // Naturals a, b with values va >= vb after rankToValue.
+    const [first, second] = naturals
+    const firstValue = rankToValue(first.rank)
+    const secondValue = rankToValue(second.rank)
+    const a = firstValue >= secondValue ? first : second
+    const b = firstValue >= secondValue ? second : first
+    const va = rankToValue(a.rank)
+    const vb = rankToValue(b.rank)
+
+    if (a.rank === b.rank) {
+      return { category: HAND_CATEGORIES.FIVE_OF_A_KIND, tiebreakers: [va] }
+    }
+
+    if (a.suit === b.suit) {
+      const top = getWildStraightTop(va, vb)
+      if (top !== 0) {
+        return { category: HAND_CATEGORIES.STRAIGHT_FLUSH, tiebreakers: [top] }
+      }
+    }
+
+    // Quads of the higher natural, lower natural kicker.
+    return { category: HAND_CATEGORIES.FOUR_OF_A_KIND, tiebreakers: [va, vb] }
+  }
+
+  if (w === 4) {
+    // Five of a kind always beats any straight flush the wilds could make instead.
+    return { category: HAND_CATEGORIES.FIVE_OF_A_KIND, tiebreakers: [rankToValue(naturals[0].rank)] }
+  }
+
+  // w === 5 cannot occur: only four 2s exist in a deck.
+  throw new Error('Cannot have 5 wild deuces in a 5-card hand')
+}
+
+// Largest straight top t (5..14) with both values inside the window [t-4, t];
+// also considers the wheel window [1..5] treating an Ace as 1 (t for wheel =
+// 5 -- a natural 2 cannot occur here, it would be wild). Returns 0 when no
+// straight window contains both values.
+function getWildStraightTop(va: number, vb: number): number {
+  for (let t = 14; t >= 5; t--) {
+    if (va >= t - 4 && va <= t && vb >= t - 4 && vb <= t) {
+      return t
+    }
+  }
+  const wheelVa = va === 14 ? 1 : va
+  const wheelVb = vb === 14 ? 1 : vb
+  if (wheelVa >= 1 && wheelVa <= 5 && wheelVb >= 1 && wheelVb <= 5) {
+    return 5
+  }
+  return 0
+}
+
+// The full 52-card (rank, suit) space a wild may be assigned to. Every wild
+// in a hand draws from this same space independently, so two wilds may be
+// assigned the same card (that is what makes five of a kind possible).
+function wildAssignmentSpace(): Card[] {
+  const cards: Card[] = []
+  for (const rank of RANKS) {
+    for (const suit of SUITS) {
+      cards.push({ id: `wild-${rank}${suit}`, rank, suit, deckIndex: 0 })
+    }
+  }
+  return cards
 }
 
 // Count cards by rank
@@ -198,7 +325,7 @@ function* combinations(items: Card[], size: number): Generator<Card[]> {
 }
 
 // Evaluate all possible 5-card hands from 7 cards
-export function evaluateBestHand(holeCards: Card[], boardCards: Card[]): HandRank {
+export function evaluateBestHand(holeCards: Card[], boardCards: Card[], deucesWild = false): HandRank {
   if (holeCards.length === 2) {
     if (boardCards.length < 0 || boardCards.length > 5) {
       throw new Error('Must have 0-5 board cards')
@@ -220,7 +347,7 @@ export function evaluateBestHand(holeCards: Card[], boardCards: Card[]): HandRan
   let bestHand: HandRank | null = null
 
   for (const combo of combinations(allCards, 5)) {
-    const hand = evaluateHand(combo)
+    const hand = deucesWild ? evaluateFiveWithWilds(combo) : evaluateHand(combo)
     if (bestHand === null || compareRanks(hand, bestHand) > 0) {
       bestHand = hand
     }
@@ -238,7 +365,7 @@ export function evaluateBestHand(holeCards: Card[], boardCards: Card[]): HandRan
 // C(5,3) = 60 candidates, each scored by the same evaluateHand as holdem).
 // Mirrors evaluateBestHand's incomplete-board behavior so mid-street probes
 // (bot strategy, tests) fail the same way for both variants.
-export function evaluateOmahaHand(holeCards: Card[], boardCards: Card[]): HandRank {
+export function evaluateOmahaHand(holeCards: Card[], boardCards: Card[], deucesWild = false): HandRank {
   if (holeCards.length !== 4) {
     throw new Error('Omaha needs exactly 4 hole cards')
   }
@@ -250,7 +377,7 @@ export function evaluateOmahaHand(holeCards: Card[], boardCards: Card[]): HandRa
 
   for (const holeCombo of combinations(holeCards, 2)) {
     for (const boardCombo of combinations(boardCards, 3)) {
-      const hand = evaluateHand([...holeCombo, ...boardCombo])
+      const hand = deucesWild ? evaluateFiveWithWilds([...holeCombo, ...boardCombo]) : evaluateHand([...holeCombo, ...boardCombo])
       if (bestHand === null || compareRanks(hand, bestHand) > 0) {
         bestHand = hand
       }

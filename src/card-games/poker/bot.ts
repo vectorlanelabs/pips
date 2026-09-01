@@ -24,11 +24,11 @@ function getPreflopStrength(holeCards: { rank: string }[]): 'premium' | 'good' |
 }
 
 // Postflop hand strength
-function getPostflopHandStrength(holeCards: Array<{ rank: string; suit: string; id: string; deckIndex: number }>, boardCards: Array<{ rank: string; suit: string; id: string; deckIndex: number }>): 'strong' | 'medium' | 'weak' {
+function getPostflopHandStrength(holeCards: Array<{ rank: string; suit: string; id: string; deckIndex: number }>, boardCards: Array<{ rank: string; suit: string; id: string; deckIndex: number }>, deucesWild = false): 'strong' | 'medium' | 'weak' {
   if (holeCards.length !== 2 || boardCards.length < 3) return 'weak'
 
   try {
-    const hand = evaluateBestHand(holeCards, boardCards)
+    const hand = evaluateBestHand(holeCards, boardCards, deucesWild)
 
     // Strong: at least a pair (category 1+)
     if (hand.category >= 1) {
@@ -91,9 +91,9 @@ export function getOmahaPreflopStrength(holeCards: Card[]): 'premium' | 'good' |
 // same-suit PAIR of hole cards whose suit also appears on 2+ board cards.
 // The exactly-two-hole rule means a lone suited hole card is NOT a draw.
 // Exported for the policy unit tests, same as drawDiscardAction below.
-export function getOmahaPostflopStrength(holeCards: Card[], boardCards: Card[]): 'strong' | 'medium' | 'weak' {
+export function getOmahaPostflopStrength(holeCards: Card[], boardCards: Card[], deucesWild = false): 'strong' | 'medium' | 'weak' {
   if (boardCards.length === 5) {
-    const hand = evaluateOmahaHand(holeCards, boardCards)
+    const hand = evaluateOmahaHand(holeCards, boardCards, deucesWild)
     return hand.category >= 1 ? 'strong' : 'weak'
   }
 
@@ -136,18 +136,26 @@ function discardLowestFirst(hand: Card[], keepIds: Set<string>): string[] {
 
 // Deterministic discard policy for the draw round (five-draw and seven-draw).
 // Exported so the policy unit tests can construct hands directly.
-export function drawDiscardAction(hand: Card[]): PokerAction {
-  const category = evaluateBestHand(hand, []).category
+// With deucesWild, deuces are wild cards: they are never discarded, every
+// piece of keep-logic (pair/flush/straight detection) runs over the non-deuce
+// cards only, and the stand-pat check evaluates the full hand with the wild
+// flag so wild-made straights and better stand pat.
+export function drawDiscardAction(hand: Card[], deucesWild = false): PokerAction {
+  // The discard pool: the whole hand normally; with wilds on, deuces are
+  // always worth keeping and never enter the pool (the fallback below also
+  // never exceeds the non-deuce count, since the pool holds only naturals).
+  const keepCandidates = deucesWild ? hand.filter((c) => c.rank !== '2') : hand
 
-  // Straight or better: stand pat.
-  if (category >= 4) {
+  // Straight or better: stand pat. With wilds this uses the wild evaluator,
+  // so e.g. four to a flush plus a deuce is a made flush and stands pat.
+  if (evaluateBestHand(hand, [], deucesWild).category >= 4) {
     return { type: 'DRAW', discardIds: [] }
   }
 
   // Any rank appearing 2+ times (pair, two pair, trips, full house, quads):
   // keep every such card, discard the rest -- lowest ranks first, at most 3.
   const rankCounts: Record<string, number> = {}
-  for (const c of hand) {
+  for (const c of keepCandidates) {
     rankCounts[c.rank] = (rankCounts[c.rank] ?? 0) + 1
   }
   const pairedRanks = new Set(
@@ -156,13 +164,13 @@ export function drawDiscardAction(hand: Card[]): PokerAction {
       .map(([rank]) => rank),
   )
   if (pairedRanks.size > 0) {
-    const keepIds = new Set(hand.filter((c) => pairedRanks.has(c.rank)).map((c) => c.id))
-    return { type: 'DRAW', discardIds: discardLowestFirst(hand, keepIds) }
+    const keepIds = new Set(keepCandidates.filter((c) => pairedRanks.has(c.rank)).map((c) => c.id))
+    return { type: 'DRAW', discardIds: discardLowestFirst(keepCandidates, keepIds) }
   }
 
   // 4+ cards of one suit: keep the 4 highest of that suit.
   const bySuit: Record<string, Card[]> = {}
-  for (const c of hand) {
+  for (const c of keepCandidates) {
     if (!bySuit[c.suit]) bySuit[c.suit] = []
     bySuit[c.suit].push(c)
   }
@@ -174,22 +182,23 @@ export function drawDiscardAction(hand: Card[]): PokerAction {
         .slice(0, 4)
         .map((c) => c.id),
     )
-    return { type: 'DRAW', discardIds: discardLowestFirst(hand, keepIds) }
+    return { type: 'DRAW', discardIds: discardLowestFirst(keepCandidates, keepIds) }
   }
 
   // 4 cards forming a run of consecutive ranks (ace high only: A is 14, so the
   // numeric check below never matches a wheel A-2-3-4). The highest run wins.
-  const values = new Set(hand.map((c) => rankValue(c.rank)))
+  const values = new Set(keepCandidates.map((c) => rankValue(c.rank)))
   for (let v = 11; v >= 2; v--) {
     if (values.has(v) && values.has(v + 1) && values.has(v + 2) && values.has(v + 3)) {
       const runValues = new Set([v, v + 1, v + 2, v + 3])
-      const keepIds = new Set(hand.filter((c) => runValues.has(rankValue(c.rank))).map((c) => c.id))
-      return { type: 'DRAW', discardIds: discardLowestFirst(hand, keepIds) }
+      const keepIds = new Set(keepCandidates.filter((c) => runValues.has(rankValue(c.rank))).map((c) => c.id))
+      return { type: 'DRAW', discardIds: discardLowestFirst(keepCandidates, keepIds) }
     }
   }
 
-  // High-card hand: discard the 3 lowest-ranked cards.
-  return { type: 'DRAW', discardIds: discardLowestFirst(hand, new Set()) }
+  // High-card hand: discard the 3 lowest-ranked cards (never a deuce when
+  // wilds are on -- the pool above excludes them).
+  return { type: 'DRAW', discardIds: discardLowestFirst(keepCandidates, new Set()) }
 }
 
 // Draw-variant betting for firstBet and secondBet (identical logic in both).
@@ -199,7 +208,7 @@ function drawBettingAction(publicState: PokerPublicState, privateState: PokerPri
   const playerBetThisStreet = playerHand.betThisStreet
   const playerChips = publicState.chips[playerId]
 
-  const cat = evaluateBestHand(privateState.hand, []).category
+  const cat = evaluateBestHand(privateState.hand, [], publicState.houseRules.deucesWild).category
 
   // Unopened street (secondBet opens at 0; firstBet always faces the big blind).
   if (currentBet === 0) {
@@ -279,7 +288,7 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
   // drawBettingAction, both of which evaluate the whole private hand.
   if (isDrawVariant(publicState.variant)) {
     if (publicState.turn.phase === 'draw') {
-      return drawDiscardAction(holeCards)
+      return drawDiscardAction(holeCards, publicState.houseRules.deucesWild)
     }
     if (publicState.turn.phase === 'firstBet' || publicState.turn.phase === 'secondBet') {
       return drawBettingAction(publicState, privateState, playerId)
@@ -348,7 +357,7 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
 
     // Postflop strategy (flop, turn, river)
     if (currentStreet === 'flop' || currentStreet === 'turn' || currentStreet === 'river') {
-      const handStrength = getOmahaPostflopStrength(holeCards, publicState.board)
+      const handStrength = getOmahaPostflopStrength(holeCards, publicState.board, publicState.houseRules.deucesWild)
 
       if (currentBet === 0) {
         // No bet, decide to check or bet
@@ -442,7 +451,7 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
 
   // Postflop strategy (flop, turn, river)
   if (currentStreet === 'flop' || currentStreet === 'turn' || currentStreet === 'river') {
-    const handStrength = getPostflopHandStrength(holeCards, publicState.board)
+    const handStrength = getPostflopHandStrength(holeCards, publicState.board, publicState.houseRules.deucesWild)
 
     if (currentBet === 0) {
       // No bet, decide to check or bet
