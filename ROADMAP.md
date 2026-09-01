@@ -2,11 +2,16 @@
 
 Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
 
-## Charter: Poker round 2 (2026-09-01) — active
+## Charter: Poker round 2 (2026-09-01) — done (unmerged, awaiting play-test + "push")
 
 Branch `charter/poker-omaha-house-rules`.
 
 ### Done (this charter)
+- [cycle 3] M9 — house-rules screens+wiring (c2aae35; review caught the
+  bb-beat regression, fixed) and M10 live verification: ante holdem
+  (pot 30, unopened preflop, single ante beat, header chip), deuces
+  five-draw (a wild 2 decided a real showdown on camera), toggle block
+  live in Uno's pattern. README updated.
 - [cycle 2] M8 — house-rules engine (fd9c97f). Wilds evaluator with
   oracle proofs, ante-replaces-blinds, sweeps per rule. Review found a
   BLOCKING all-in-on-ante hang (lead-reproduced; fixed via the standard
@@ -20,16 +25,17 @@ Branch `charter/poker-omaha-house-rules`.
   new and holdem branches; PokerTable isDraw straggler) — all fixed;
   flop render live-verified. 1778 tests.
 
-### Next up
-1. M9 — house-rules screens + wiring.
-2. M10 — live verification; wrap-up for owner play-test.
-
 ## Charter: Poker variants (2026-08-31) — done (merged & pushed 2026-08-31)
 
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 All six milestones complete; definition of done met; live-verified.
 
 ### Done (this charter)
+- [cycle 3] M9 — house-rules screens+wiring (c2aae35; review caught the
+  bb-beat regression, fixed) and M10 live verification: ante holdem
+  (pot 30, unopened preflop, single ante beat, header chip), deuces
+  five-draw (a wild 2 decided a real showdown on camera), toggle block
+  live in Uno's pattern. README updated.
 - [cycle 2] M8 — house-rules engine (fd9c97f). Wilds evaluator with
   oracle proofs, ante-replaces-blinds, sweeps per rule. Review found a
   BLOCKING all-in-on-ante hang (lead-reproduced; fixed via the standard

@@ -1,5 +1,14 @@
 # Requests for the human
 
+- [ ] 2026-09-01, Poker round 2 wrap-up — **charter complete, ready for
+      your play-test**: Omaha in the variant dropdown (exactly-two-hole
+      rule enforced and gotcha-tested), Deuces Wild and Ante as
+      Uno-pattern house-rule toggles (ante replaces blinds; five of a
+      kind above straight flush), all live-verified including a wild 2
+      deciding a real showdown. 1814 tests / tsc / build green. On
+      branch `charter/poker-omaha-house-rules` — play-test with `npm run
+      dev` on this branch, then say "push".
+
 - [ ] 2026-08-31, non-blocking, watch item — one unidentified test flake
       (1 of 1758) appeared in the poker charter's pre-push run and
       vanished across three immediate full reruns. Identity unknown (the

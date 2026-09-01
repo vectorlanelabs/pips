@@ -4834,3 +4834,30 @@ shipping each verified charter promptly.
 - **Verification (lead):** tsc/1814/build; hang repro before fix;
   evaluator diff read line-by-line.
 - **Continue?** Yes — M9 (screens+wiring), then M10 live verification.
+
+## Cycle 3 (Poker round 2) — 2026-09-01 — CHARTER WRAP-UP
+- **Shipped:** M9 house-rules screens+wiring (c2aae35) + M10 live
+  verification + README. Review (Sonnet) caught a real staging
+  regression (non-ante bb beat collapsed to a sub-frame flash) — fixed,
+  which also re-aligned the App bot hold in both modes; its other
+  probes (guest staleness, toggle gating, mid-game flips) came back
+  clean with receipts.
+- **M10 live evidence:** room shows the complete owner convention
+  (variant dropdown + Uno-pattern house-rule toggles); ante holdem —
+  'Ante' header chip, pot 30 from three antes, stacks 990, unopened
+  preflop offering Check AND Bet; deuces-wild five-draw — 'Deuces wild'
+  chip, full hand, and the showdown was decided by a wild 2 making
+  trips on camera (Rosa's 6-6-2wild beat a pair, +20 exact). Omaha
+  live-verified in cycle 1. No new console errors (only the known M0
+  rename HMR artifacts from the long-lived dev server).
+- **Charter definition of done: MET** in 3 cycles of 10. 1814 tests /
+  tsc / build green. Deferred-with-tracking: bot pre-river flush-draw
+  heuristics ignore wilds (strategy quality); wild-deuce visual
+  highlight on cards (cosmetic). Safety-net cron canceled. NOTHING
+  merged/pushed — the owner play-tests from this branch, then says
+  "push".
+- **Loop performance note:** across both poker charters the adversarial
+  review + bot-vs-bot sweeps found EVERY ship-blocker (5 latent
+  freezes, 2 chip-integrity bugs, 1 DOM violation, 2 staging/pacing
+  regressions) before landing; the implementer's iteration cap remains
+  the main friction (mitigated by bulk-edit instruction + part splits).
