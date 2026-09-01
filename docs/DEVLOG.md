@@ -4861,3 +4861,11 @@ shipping each verified charter promptly.
   freezes, 2 chip-integrity bugs, 1 DOM violation, 2 staging/pacing
   regressions) before landing; the implementer's iteration cap remains
   the main friction (mitigated by bulk-edit instruction + part splits).
+
+## Play-test fix round 1 (Poker round 2) — 2026-09-01
+- Owner play-test feedback, all fixed and live-verified in one round:
+  (1) landing notes standardized to player counts only; (2) PokerRoom
+  settings moved to the left column per the sibling lobby pattern (the
+  M2 spec had deviated by replacing the right-column brand pill with
+  the dropdown — the pill is restored); (3) poker codes now PK- with
+  HE- still routing for old links.
