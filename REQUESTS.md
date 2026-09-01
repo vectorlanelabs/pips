@@ -1,5 +1,17 @@
 # Requests for the human
 
+- [ ] 2026-08-31, Poker variants charter wrap-up — **charter complete**:
+      one Poker shelf entry with a host-chosen variant dropdown (Texas
+      Hold'em / 5-Card Draw / 7-Card Draw), full draw-poker engine on
+      the hardened Hold'em betting core, Battleship migrated to the
+      dropdown convention, 1758 tests / tsc / build green, live-verified
+      at max seats per variant including the measured bot-pacing check
+      (911-918ms = BASE_MS) and a real 4-way all-in with two-tier side
+      pots. Also riding on this branch: the two pre-existing Hold'em
+      freeze fixes (live on main today) and spec 60. Say "push" and the
+      lead merges `charter/poker-variants` into `main`, pushes, and
+      prunes per the standing rule.
+
 - [ ] 2026-08-31, cycle 2, non-blocking — the poker charter branch fixes
       TWO pre-existing Hold'em freezes that are LIVE on main (a 3+ player
       game freezes forever after any player busts; all-in seats get dead

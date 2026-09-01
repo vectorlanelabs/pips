@@ -4742,3 +4742,41 @@ shipping each verified charter promptly.
   settled by design (no per-draw flight animation; sound cues are
   local-player-only; M5 confirms feel at a full table).
 - **Continue?** Yes — M4 (Battleship dropdown migration), then M5 live.
+
+## Cycle 5 (Poker variants charter) — 2026-08-31 — CHARTER WRAP-UP
+- **Shipped:** M4 Battleship Mode dropdown (a3ebaab) + M5 live
+  verification with fixes (a82d4e1). README updated to Poker with three
+  variants and per-variant seat ranges.
+- **M5 live evidence (real browser, 1440x900):** five-draw at the maxed
+  6-seat table played end to end — blinds staging, 30-flight deal intro
+  (hold correct), first betting, draw round (bot captions Drew 3 x5),
+  select-then-confirm draw (kept QQ, drew 3, won 60, chips exact),
+  staged showdown reveals; SEVEN-draw at maxed 5 seats through a genuine
+  4-way all-in raise war settling TWO side-pot tiers to the chip
+  (conservation 5000/5000); heads-up five-draw exercising the fixed
+  native-selection path; holdem regression (flop deals, betting
+  normal); Battleship dropdown switches modes with descriptions.
+- **Bot pacing (CLAUDE.md mandatory check): PASSED with numbers** —
+  MutationObserver measured 911/913/915/918ms gaps between consecutive
+  bot draws at the max table, matching BASE_MS (900).
+- **Live findings, both fixed and re-verified:** (1) nested <button>
+  DOM violation in the draw hand — the M2 spec invented a wrapper
+  instead of citing PlayingCard's native selected/onClick (Rummy's
+  pattern); lead spec fault, logged; (2) draw-variant bots min-raised
+  each other ~25 times to a 4-way all-in — throttled at 8BB per street
+  (the all-in cascade itself settled perfectly, which is its own
+  side-pot evidence). Stale console HMR errors from the M0 rename
+  against the long-lived dev server were identified as artifacts, not
+  runtime errors.
+- **Charter definition of done: MET.** All three variants playable end
+  to end with host-chosen dropdown; Battleship migrated; 1758 tests /
+  tsc / build green; live verification recorded. 5 cycles of the
+  12-cycle budget used. Total delegated spend ~$1.05 of DeepSeek
+  tokens across ~12 dispatches; lead personally implemented three
+  slices after documented delegation failures (all logged in cycles
+  2-5). NOTHING merged or pushed — awaiting the user's explicit
+  "push" per the standing rule. The scheduled safety-net cron has been
+  canceled.
+- **Continue?** Wrap-up. The Deuces Wild house rule is the natural next
+  charter; the room layout and evaluator boundary are already shaped
+  for it (spec 60's Coming next section).

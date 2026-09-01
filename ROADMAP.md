@@ -2,16 +2,24 @@
 
 Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
 
-## Charter: Poker variants (2026-08-31) — active
+## Charter: Poker variants (2026-08-31) — done (unmerged, awaiting "push")
 
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
-
-### Next up
-1. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
-2. M5 — live verification at max seats per variant incl. bot pacing;
-   wrap-up.
+All six milestones complete; definition of done met; live-verified.
 
 ### Done (this charter)
+- [cycle 5] M4 — Battleship Mode dropdown (a3ebaab; lead removed the
+  stale 'House rules' heading the implementer left). M5 — full live
+  verification (a82d4e1): five-draw at max 6 seats end to end, bot draw
+  pacing MEASURED at 911-918ms gaps (=BASE_MS) across 5 consecutive bot
+  draws; seven-draw at max 5 seats through a 4-way all-in with two-tier
+  side pots paid to the chip; heads-up five-draw on the fixed selection
+  path; holdem regression (board deals, betting normal); Battleship
+  dropdown functional. Two live findings fixed: nested-button DOM
+  violation (now PlayingCard's native selected/onClick, the Rummy
+  sibling pattern the M2 spec should have cited) and a bot min-raise
+  war throttle (8BB cap; a live hand ran ~25 min-raises to a 4-way
+  all-in before it).
 - [cycle 4] M3 — wiring (see git log). Variant through room flow,
   variant-aware caps, deal-hold scales with hand size, draw-round bot
   fallback. Review: clean with receipts.
