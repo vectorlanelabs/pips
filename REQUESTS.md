@@ -1,5 +1,13 @@
 # Requests for the human
 
+- [ ] 2026-08-31, cycle 2, non-blocking — the poker charter branch fixes
+      TWO pre-existing Hold'em freezes that are LIVE on main (a 3+ player
+      game freezes forever after any player busts; all-in seats get dead
+      turns after a reopening raise). If you want these hotfixed to main
+      before the whole charter lands, say so and the lead will cherry-pick
+      the engine fixes onto a hotfix branch for a "push". Otherwise they
+      ship with the charter.
+
 - [x] 2026-08-24, Blackjack + Texas Hold'em charter wrap-up — RESOLVED
       2026-08-31: the user later said "push"; the worktree branch was
       merged to `main` and pushed (both games live on main). Item was
