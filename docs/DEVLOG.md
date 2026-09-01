@@ -4780,3 +4780,14 @@ shipping each verified charter promptly.
 - **Continue?** Wrap-up. The Deuces Wild house rule is the natural next
   charter; the room layout and evaluator boundary are already shaped
   for it (spec 60's Coming next section).
+
+## Post-push note (Poker variants charter) — 2026-08-31
+- The pre-push verification run showed "1 failed | 1757 passed" yet the
+  push proceeded: the lead's shell gate piped `npm test` into
+  `grep "Tests"`, which exits 0 on the failure summary line too. The
+  failing test's identity was swallowed by the same grep. Three full
+  reruns immediately after: 1758/1758 green each time — a one-off flake,
+  unidentified. Standing corrections: (1) verification gates use the
+  test runner's own exit code (`npm test && ...`), never a grep in the
+  success path; (2) if a flake recurs, capture the full output before
+  anything else. Watch item filed in REQUESTS.md.

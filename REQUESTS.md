@@ -1,5 +1,12 @@
 # Requests for the human
 
+- [ ] 2026-08-31, non-blocking, watch item — one unidentified test flake
+      (1 of 1758) appeared in the poker charter's pre-push run and
+      vanished across three immediate full reruns. Identity unknown (the
+      lead's grep swallowed the name — gate since corrected to use the
+      runner's exit code). If any suite run shows a failure again,
+      capture the full output first.
+
 - [ ] 2026-08-31, Poker variants charter wrap-up — **charter complete**:
       one Poker shelf entry with a host-chosen variant dropdown (Texas
       Hold'em / 5-Card Draw / 7-Card Draw), full draw-poker engine on
