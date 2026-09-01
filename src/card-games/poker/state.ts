@@ -6,10 +6,21 @@ import { createTurnState } from '../../engine/turn-engine.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { createRng } from '../../engine/rng.ts'
 
-export type PokerStreet = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'handOver'
+export type PokerVariant = 'holdem' | 'five-draw' | 'seven-draw'
+
+export type PokerStreet =
+  | 'preflop'
+  | 'flop'
+  | 'turn'
+  | 'river'
+  | 'firstBet'
+  | 'draw'
+  | 'secondBet'
+  | 'showdown'
+  | 'handOver'
 
 export interface PokerPlayerHandState {
-  cards: Card[] // always length 2 once dealt this hand, [] before dealt / after fold+reveal-not-needed
+  cards: Card[] // always the variant's hand size once dealt this hand (2 holdem / 5 five-draw / 7 seven-draw), [] before dealt / after fold+reveal-not-needed
   folded: boolean
   allIn: boolean
   totalContributedThisHand: number // across all streets, for side-pot math
@@ -41,6 +52,8 @@ export interface PokerPublicState {
     | null
   gameOverWinnerId: string | null
   cardBack: string
+  variant: PokerVariant
+  drawnCounts: Record<string, number | null> // null = has not drawn this hand; a number = how many cards they discarded. Reset for all seats every hand (holdem hands keep them all null forever).
 }
 
 export interface PokerPrivateState {
@@ -59,6 +72,7 @@ export type PokerAction =
   | { type: 'CALL' }
   | { type: 'BET'; amount: number }
   | { type: 'RAISE'; amount: number }
+  | { type: 'DRAW'; discardIds: string[] }
   | { type: 'START_NEXT_HAND' }
 
 export const POKER_MIN_SEATS = 2
@@ -66,6 +80,21 @@ export const POKER_MAX_SEATS = 8
 export const POKER_SMALL_BLIND = 5
 export const POKER_BIG_BLIND = 10
 const STARTING_CHIPS = 1000
+
+// Number of private cards dealt to each seat at the start of a hand
+export function handSizeFor(variant: PokerVariant): number {
+  if (variant === 'holdem') return 2
+  if (variant === 'five-draw') return 5
+  return 7
+}
+
+// Max seats a variant supports. POKER_MAX_SEATS stays 8 for holdem; draw
+// variants cap lower so a full table of max draws can never exhaust the deck.
+export function maxSeatsFor(variant: PokerVariant): number {
+  if (variant === 'holdem') return 8
+  if (variant === 'five-draw') return 6
+  return 5
+}
 
 // Track which seats are still able to act in the current betting round
 // (excludes folded and all-in players, but includes button/blinds who may still act)
@@ -94,7 +123,15 @@ function getNextNonEliminatedSeat(seatOrder: string[], currentSeat: string, elim
 }
 
 // Initialize a new hand of poker
-export function createPokerGame(playerIds: string[], seed: number, cardBack = 'pips_default'): PokerSession {
+export function createPokerGame(
+  playerIds: string[],
+  seed: number,
+  cardBack = 'pips_default',
+  variant: PokerVariant = 'holdem',
+): PokerSession {
+  if (playerIds.length < POKER_MIN_SEATS || playerIds.length > maxSeatsFor(variant)) {
+    throw new Error(`${variant} supports ${POKER_MIN_SEATS}-${maxSeatsFor(variant)} seats, got ${playerIds.length}`)
+  }
   const rng = createRng(seed)
   let deck = shuffleDeck(createStandardDeck(), rng)
 
@@ -143,20 +180,21 @@ export function createPokerGame(playerIds: string[], seed: number, cardBack = 'p
 
   const pot = sbAmount + bbAmount
 
-  // Deal hole cards to all non-eliminated players. Cards go ONLY into the
+  // Deal private cards to all non-eliminated players. Cards go ONLY into the
   // private per-seat channel -- publicState.hands[seatId].cards stays empty
   // (its initial value) until a genuine showdown reveal. The public state is
-  // broadcast to every connected peer verbatim; writing real hole cards into
-  // it here would leak every seat's cards to every other seat regardless of
-  // what the UI chooses to render.
+  // broadcast to every connected peer verbatim; writing real cards into it
+  // here would leak every seat's cards to every other seat regardless of what
+  // the UI chooses to render.
   const activeSeats = seatOrder.filter((seatId) => !eliminated[seatId])
   for (const seatId of activeSeats) {
-    const { dealt: twoCards, remaining } = dealCards(deck, 2)
+    const { dealt: dealtCards, remaining } = dealCards(deck, handSizeFor(variant))
     deck = remaining
-    privateStates[seatId].hand = twoCards
+    privateStates[seatId].hand = dealtCards
   }
 
-  // Determine preflop action order: starts left of BB
+  // Determine opening action order: starts left of BB (same for holdem preflop
+  // and draw firstBet)
   let preflopOrder = [...activeSeats]
   const bbIndex = preflopOrder.indexOf(bigBlindSeat)
   if (bbIndex !== -1) {
@@ -165,13 +203,16 @@ export function createPokerGame(playerIds: string[], seed: number, cardBack = 'p
   }
   const preflopActing = preflopOrder.filter((seatId) => !hands[seatId].folded && !hands[seatId].allIn)
 
-  const turn = createTurnState<PokerStreet>(preflopActing, 'preflop')
+  const initialPhase: PokerStreet = variant === 'holdem' ? 'preflop' : 'firstBet'
+  const turn = createTurnState<PokerStreet>(preflopActing, initialPhase)
 
   const actedThisStreet: Record<string, boolean> = {}
   const reRaiseEligible: Record<string, boolean> = {}
+  const drawnCounts: Record<string, number | null> = {}
   for (const seatId of seatOrder) {
     actedThisStreet[seatId] = false
     reRaiseEligible[seatId] = true
+    drawnCounts[seatId] = null
   }
 
   const publicState: PokerPublicState = {
@@ -194,6 +235,8 @@ export function createPokerGame(playerIds: string[], seed: number, cardBack = 'p
     handResults: null,
     gameOverWinnerId: null,
     cardBack,
+    variant,
+    drawnCounts,
   }
 
   return { session: createHostSession(publicState, privateStates), deck, rng }

@@ -199,16 +199,21 @@ function* combinations(items: Card[], size: number): Generator<Card[]> {
 
 // Evaluate all possible 5-card hands from 7 cards
 export function evaluateBestHand(holeCards: Card[], boardCards: Card[]): HandRank {
-  if (holeCards.length !== 2) {
-    throw new Error('Must have exactly 2 hole cards')
-  }
-  if (boardCards.length < 0 || boardCards.length > 5) {
-    throw new Error('Must have 0-5 board cards')
-  }
+  if (holeCards.length === 2) {
+    if (boardCards.length < 0 || boardCards.length > 5) {
+      throw new Error('Must have 0-5 board cards')
+    }
 
-  // For incomplete boards (preflop all-in), can't evaluate until river
-  if (boardCards.length < 5) {
-    throw new Error('Cannot evaluate hand until all board cards are known')
+    // For incomplete boards (preflop all-in), can't evaluate until river
+    if (boardCards.length < 5) {
+      throw new Error('Cannot evaluate hand until all board cards are known')
+    }
+  } else if (holeCards.length === 5 || holeCards.length === 7) {
+    if (boardCards.length !== 0) {
+      throw new Error('Draw hands are evaluated with no board')
+    }
+  } else {
+    throw new Error('Must have 2, 5, or 7 hole cards')
   }
 
   const allCards = [...holeCards, ...boardCards]

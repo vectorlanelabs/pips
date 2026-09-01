@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { createPokerGame } from './state.ts'
-import { pokerBotStrategy } from './bot.ts'
+import { pokerBotStrategy, drawDiscardAction } from './bot.ts'
+import { applyPokerAction, runPokerBotTurn } from './rules.ts'
+import type { Card } from '../../card-engine/cards.ts'
+
+function card(id: string, rank: string, suit: string): Card {
+  return { id, rank, suit, deckIndex: 0 }
+}
 
 describe('holdem bot', () => {
   describe('bot strategy', () => {
@@ -96,4 +102,149 @@ describe('holdem bot', () => {
       expect(game.session.publicState.board).toEqual([])
     })
   })
+})
+
+describe('draw discard policy', () => {
+  it('stands pat on a straight', () => {
+    const hand = [
+      card('a', '2', 'clubs'),
+      card('b', '3', 'hearts'),
+      card('c', '4', 'diamonds'),
+      card('d', '5', 'spades'),
+      card('e', '6', 'clubs'),
+    ]
+    expect(drawDiscardAction(hand)).toEqual({ type: 'DRAW', discardIds: [] })
+  })
+
+  it('keeps a pair and discards the 3 lowest cards', () => {
+    const hand = [
+      card('a', '2', 'clubs'),
+      card('b', '5', 'hearts'),
+      card('c', '5', 'diamonds'),
+      card('d', '8', 'spades'),
+      card('e', 'K', 'clubs'),
+    ]
+    expect(drawDiscardAction(hand)).toEqual({ type: 'DRAW', discardIds: ['a', 'd', 'e'] })
+  })
+
+  it('keeps a 4-flush and discards the off-suit card', () => {
+    const hand = [
+      card('a', '2', 'spades'),
+      card('b', '5', 'spades'),
+      card('c', '8', 'spades'),
+      card('d', 'K', 'spades'),
+      card('e', '3', 'hearts'),
+    ]
+    expect(drawDiscardAction(hand)).toEqual({ type: 'DRAW', discardIds: ['e'] })
+  })
+
+  it('keeps a 4-card run and discards the rest', () => {
+    const hand = [
+      card('a', '5', 'clubs'),
+      card('b', '6', 'hearts'),
+      card('c', '7', 'diamonds'),
+      card('d', '8', 'spades'),
+      card('e', 'A', 'clubs'),
+    ]
+    expect(drawDiscardAction(hand)).toEqual({ type: 'DRAW', discardIds: ['e'] })
+  })
+
+  it('high-card hand discards exactly the 3 lowest', () => {
+    const hand = [
+      card('a', '2', 'clubs'),
+      card('b', '5', 'diamonds'),
+      card('c', '9', 'spades'),
+      card('d', 'J', 'hearts'),
+      card('e', 'K', 'clubs'),
+    ]
+    expect(drawDiscardAction(hand)).toEqual({ type: 'DRAW', discardIds: ['a', 'b', 'c'] })
+  })
+
+  it('seven-draw hand discards at most 3', () => {
+    const hand = [
+      card('a', '2', 'clubs'),
+      card('b', '4', 'diamonds'),
+      card('c', '6', 'spades'),
+      card('d', '7', 'hearts'),
+      card('e', '9', 'clubs'),
+      card('f', '9', 'spades'),
+      card('g', 'K', 'diamonds'),
+    ]
+    const action = drawDiscardAction(hand)
+    expect(action.type).toBe('DRAW')
+    if (action.type === 'DRAW') {
+      expect(action.discardIds).toHaveLength(3)
+      expect(action.discardIds).toEqual(['a', 'b', 'c'])
+    }
+  })
+})
+
+describe('draw bot turns validate', () => {
+  it('every action the bot returns validates across a spread of seeded games', () => {
+    for (const variant of ['five-draw', 'seven-draw'] as const) {
+      for (const seed of [1, 5, 10, 42, 99, 123, 256, 777, 1000, 2024]) {
+        let game = createPokerGame(['p1', 'p2', 'p3'], seed, 'pips_default', variant)
+        let state = game.session.publicState
+        let drawActionsSeen = 0
+        let guard = 0
+
+        // Drive firstBet and the draw round with the bot itself; stop once the
+        // hand moves to secondBet (or ends by folds).
+        while ((state.turn.phase === 'firstBet' || state.turn.phase === 'draw') && !state.handOver && guard < 30) {
+          guard++
+          const actor = state.turn.playerOrder[state.turn.currentIndex]
+          if (state.turn.phase === 'draw') drawActionsSeen++
+          const r = runPokerBotTurn(game, actor, pokerBotStrategy)
+          expect(r.outcome.ok, `seed ${seed} ${variant} phase ${state.turn.phase} actor ${actor}: ${r.outcome.reason}`).toBe(true)
+          game = r.holdemSession
+          state = r.outcome.publicState!
+        }
+
+        // The draw round must have actually been reached and played out.
+        expect(drawActionsSeen).toBeGreaterThan(0)
+      }
+    }
+  })
+})
+
+describe('draw full-match sweeps', () => {
+  // The Phase 10 lesson: a bot strategy is only trustworthy when entire games
+  // run to completion with zero rejected actions.
+  for (const variant of ['five-draw', 'seven-draw'] as const) {
+    for (const seed of [11, 22, 33]) {
+      it(`${variant} seed ${seed}: every action validates and the game progresses`, () => {
+        let game = createPokerGame(['p1', 'p2', 'p3', 'p4'], seed, 'pips_default', variant)
+        let state = game.session.publicState
+        let actions = 0
+
+        while (!state.gameOverWinnerId && actions < 4000) {
+          if (state.handOver) {
+            const r = applyPokerAction(game, state.seatOrder[0], { type: 'START_NEXT_HAND' })
+            expect(r.outcome.ok, `hand ${state.handNumber} START_NEXT_HAND: ${r.outcome.reason}`).toBe(true)
+            game = r.holdemSession
+            state = r.outcome.publicState!
+            actions++
+            continue
+          }
+
+          // A live betting/draw phase always has an actor; if this ever fails
+          // the game is stuck and the sweep must fail loudly, not crash.
+          expect(state.turn.playerOrder.length).toBeGreaterThan(0)
+          const actor = state.turn.playerOrder[state.turn.currentIndex]
+          const r = runPokerBotTurn(game, actor, pokerBotStrategy)
+          expect(r.outcome.ok, `hand ${state.handNumber} phase ${state.turn.phase} actor ${actor}: ${r.outcome.reason}`).toBe(true)
+          game = r.holdemSession
+          state = r.outcome.publicState!
+          actions++
+        }
+
+        // The game really progressed: either it played to a genuine table
+        // winner (which can legitimately happen well before 15 hands) or it
+        // exhausted the action budget having gotten well past 15 hands.
+        if (state.gameOverWinnerId === null) {
+          expect(state.handNumber).toBeGreaterThan(15)
+        }
+      })
+    }
+  }
 })

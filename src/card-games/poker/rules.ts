@@ -2,7 +2,7 @@ import type { Card } from '../../card-engine/cards.ts'
 import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
-import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../engine/turn-engine.ts'
+import { advanceTurn, currentPlayer, setPhase, createTurnState, type TurnState } from '../../engine/turn-engine.ts'
 import { dealCards, shuffleDeck, createStandardDeck } from '../../card-engine/deck.ts'
 import { evaluateBestHand, compareRanks } from './hand-eval.ts'
 import type {
@@ -16,6 +16,7 @@ import type {
 import {
   POKER_SMALL_BLIND,
   POKER_BIG_BLIND,
+  handSizeFor,
   getActingSeats,
   getNextNonEliminatedSeat,
 } from './state.ts'
@@ -68,6 +69,20 @@ export function computeSidePots(
 }
 
 // Check if action should close (all active players matched bet or folded/all-in)
+// A seat that just went all-in leaves the street's rotation, exactly as a
+// folding seat does (see the FOLD branch's identical index math): removing the
+// current element shifts the next actor into currentIndex, so the mod IS the
+// turn advance. Without this, a later raise that reopens action hands the
+// all-in seat a dead turn where every betting action is rejected ('nothing to
+// call' / 'cannot check facing a bet') -- which permanently hangs a
+// deterministic bot re-proposing the same action.
+function turnAfterBettingAction(turn: TurnState<PokerStreet>, phase: PokerStreet, actorWentAllIn: boolean, playerId: string): TurnState<PokerStreet> {
+  if (!actorWentAllIn) return advanceTurn(turn, phase)
+  const newPlayerOrder = turn.playerOrder.filter((id) => id !== playerId)
+  if (newPlayerOrder.length === 0) return advanceTurn(turn, phase)
+  return { ...turn, playerOrder: newPlayerOrder, currentIndex: turn.currentIndex % newPlayerOrder.length }
+}
+
 function isActionClosed(publicState: PokerPublicState): boolean {
   const acting = getActingSeats(publicState)
 
@@ -105,7 +120,11 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
   for (const seatId of publicState.seatOrder) {
     newHands[seatId] = {
       cards: [],
-      folded: false,
+      // Eliminated seats are folded from hand start: folded is the single
+      // source of truth every rotation builder, isActionClosed, showdown
+      // evaluation, and side-pot eligibility already key off, so a busted
+      // seat gets no turns and never reaches showdown with an empty hand.
+      folded: publicState.eliminated[seatId] === true,
       allIn: false,
       totalContributedThisHand: 0,
       betThisStreet: 0,
@@ -130,14 +149,15 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
   newHands[publicState.smallBlindSeat].totalContributedThisHand = sbAmount
   newHands[publicState.bigBlindSeat].totalContributedThisHand = bbAmount
 
-  // Deal hole cards. As in createPokerGame, cards go ONLY into the private
+  // Deal private cards. As in createPokerGame, cards go ONLY into the private
   // per-seat channel -- never into publicState.hands[seatId].cards, which is
   // broadcast to every peer and would otherwise leak every seat's hole cards.
   const activeSeats = publicState.seatOrder.filter((seatId) => !publicState.eliminated[seatId])
+  const handSize = handSizeFor(publicState.variant)
   for (const seatId of activeSeats) {
-    const { dealt: twoCards, remaining } = dealCards(newDeck, 2)
+    const { dealt: handCards, remaining } = dealCards(newDeck, handSize)
     newDeck = remaining
-    newPrivateStates[seatId].hand = twoCards
+    newPrivateStates[seatId].hand = handCards
   }
 
   // Determine preflop action order: starts left of BB (next seat after BB, wrapping to start)
@@ -154,10 +174,16 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
 
   const actedThisStreet: Record<string, boolean> = {}
   const reRaiseEligible: Record<string, boolean> = {}
+  const drawnCounts: Record<string, number | null> = {}
   for (const seatId of publicState.seatOrder) {
     actedThisStreet[seatId] = false
     reRaiseEligible[seatId] = true
+    drawnCounts[seatId] = null
   }
+
+  // Draw variants open with the first betting round; holdem opens preflop. The
+  // action order is identical in both cases (starts left of the big blind).
+  const initialPhase: PokerStreet = publicState.variant === 'holdem' ? 'preflop' : 'firstBet'
 
   newPublicState = {
     ...newPublicState,
@@ -167,11 +193,12 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     pot: sbAmount + bbAmount,
     currentBetThisStreet: bbAmount,
     lastFullRaiseIncrement: POKER_BIG_BLIND,
-    turn: createTurnState<PokerStreet>(preflopActing, 'preflop'),
+    turn: createTurnState<PokerStreet>(preflopActing, initialPhase),
     handNumber: publicState.handNumber + 1,
     handOver: false,
     actedThisStreet,
     reRaiseEligible,
+    drawnCounts,
     handResults: null,
   }
 
@@ -183,7 +210,17 @@ function advanceStreet(publicState: PokerPublicState): PokerPublicState {
   let newPublicState = { ...publicState }
   let nextStreet: PokerStreet = 'flop'
 
-  if (publicState.turn.phase === 'preflop') {
+  // Variant-aware street map: holdem keeps preflop->flop->turn->river; draw
+  // variants run firstBet->draw->secondBet->showdown.
+  if (publicState.variant !== 'holdem') {
+    if (publicState.turn.phase === 'firstBet') {
+      nextStreet = 'draw'
+    } else if (publicState.turn.phase === 'draw') {
+      nextStreet = 'secondBet'
+    } else if (publicState.turn.phase === 'secondBet') {
+      nextStreet = 'showdown'
+    }
+  } else if (publicState.turn.phase === 'preflop') {
     nextStreet = 'flop'
   } else if (publicState.turn.phase === 'flop') {
     nextStreet = 'turn'
@@ -224,7 +261,14 @@ function advanceStreet(publicState: PokerPublicState): PokerPublicState {
   for (let i = 1; i <= publicState.seatOrder.length; i++) {
     const idx = (buttonIndex + i) % publicState.seatOrder.length
     const seatId = publicState.seatOrder[idx]
-    if (!newHands[seatId].folded && !newHands[seatId].allIn) {
+    if (nextStreet === 'draw') {
+      // The draw round covers every non-folded seat (all-in included -- drawing
+      // is free), starting left of the button. Eliminated seats are folded from
+      // hand start, so folded alone is the complete filter.
+      if (!newHands[seatId].folded) {
+        nextActionOrder.push(seatId)
+      }
+    } else if (!newHands[seatId].folded && !newHands[seatId].allIn) {
       nextActionOrder.push(seatId)
     }
   }
@@ -273,6 +317,15 @@ function advanceUntilActionOrShowdown(
   let currentBoard = [...baseState.board]
 
   while (true) {
+    // The draw round always plays out via DRAW actions; it is never auto-skipped,
+    // even when every remaining player is all-in.
+    if (currentState.turn.phase === 'draw') {
+      return {
+        publicState: { ...currentState, board: currentBoard },
+        deck: currentDeck,
+      }
+    }
+
     const acting = getActingSeats(currentState)
 
     // If we have more than 1 player who can act, stop here
@@ -385,6 +438,10 @@ function makeValidator(
 
     // Action validation for turn-ordered streets
     if (action.type === 'FOLD' || action.type === 'CHECK' || action.type === 'CALL' || action.type === 'BET' || action.type === 'RAISE') {
+      if (currentPhase === 'draw') {
+        return { ok: false, reason: 'draw round: choose your discards' }
+      }
+
       if (currentPlayer(publicState.turn) !== playerId) {
         return { ok: false, reason: 'not your turn' }
       }
@@ -414,8 +471,7 @@ function makeValidator(
           const winner = stillActive[0]
           const newChips = { ...publicState.chips }
           newChips[winner] += publicState.pot
-          newHands[winner] = { ...newHands[winner], totalContributedThisHand: newHands[winner].totalContributedThisHand }
-
+  
           return {
             ok: true,
             publicState: {
@@ -583,7 +639,7 @@ function makeValidator(
         const newReRaiseEligible = { ...publicState.reRaiseEligible }
         newReRaiseEligible[playerId] = false
         const newPot = publicState.pot + callAmount
-        const newTurn = advanceTurn(publicState.turn, currentPhase)
+        const newTurn = turnAfterBettingAction(publicState.turn, currentPhase, newChips[playerId] === 0, playerId)
         let newPublicState = { ...publicState, chips: newChips, hands: newHands, pot: newPot, turn: newTurn, actedThisStreet: newActedThisStreet, reRaiseEligible: newReRaiseEligible }
 
         if (isActionClosed(newPublicState)) {
@@ -656,7 +712,7 @@ function makeValidator(
         const newActedThisStreet = { ...publicState.actedThisStreet }
         newActedThisStreet[playerId] = true
         const newPot = publicState.pot + betAmount
-        const newTurn = advanceTurn(publicState.turn, currentPhase)
+        const newTurn = turnAfterBettingAction(publicState.turn, currentPhase, newChips[playerId] === 0, playerId)
         let newPublicState = {
           ...publicState,
           chips: newChips,
@@ -769,7 +825,7 @@ function makeValidator(
           }
         }
         const newPot = publicState.pot + raiseAmount
-        const newTurn = advanceTurn(publicState.turn, currentPhase)
+        const newTurn = turnAfterBettingAction(publicState.turn, currentPhase, newChips[playerId] === 0, playerId)
         let newPublicState = {
           ...publicState,
           chips: newChips,
@@ -826,6 +882,99 @@ function makeValidator(
           publicState: newPublicState,
           privateStates: session.privateStates,
         }
+      }
+    }
+
+    if (action.type === 'DRAW') {
+      // Draw variants only.
+      if (publicState.variant === 'holdem') {
+        return { ok: false, reason: "draw actions are not part of Texas Hold'em" }
+      }
+      if (currentPhase !== 'draw') {
+        return { ok: false, reason: 'not the draw round' }
+      }
+      if (currentPlayer(publicState.turn) !== playerId) {
+        return { ok: false, reason: 'not your turn' }
+      }
+
+      const discardIds = action.discardIds
+      if (!Array.isArray(discardIds) || discardIds.length > 3) {
+        return { ok: false, reason: 'you can draw at most 3 cards' }
+      }
+      if (new Set(discardIds).size !== discardIds.length) {
+        return { ok: false, reason: 'duplicate card in discard list' }
+      }
+
+      const privateHand = session.privateStates[playerId].hand
+      for (const discardId of discardIds) {
+        if (!privateHand.some((c) => c.id === discardId)) {
+          return { ok: false, reason: 'card not in your hand' }
+        }
+      }
+
+      // Apply: remove the discards from the private hand and deal that many
+      // replacements from the deck (same onDeckChange discipline as the deal
+      // paths). Discarded cards are gone -- seat caps make exhaustion impossible.
+      const discardSet = new Set(discardIds)
+      const keptCards = privateHand.filter((c) => !discardSet.has(c.id))
+      const { dealt: replacements, remaining: deckAfterDraw } = dealCards(deck, discardIds.length)
+      deck = deckAfterDraw
+      const newPrivateHand = [...keptCards, ...replacements]
+      const newPrivateStates = { ...session.privateStates, [playerId]: { hand: newPrivateHand } }
+      onPrivateStatesChange(newPrivateStates)
+      onDeckChange(deckAfterDraw)
+
+      const newDrawnCounts = { ...publicState.drawnCounts, [playerId]: discardIds.length }
+      const newPublicState = {
+        ...publicState,
+        drawnCounts: newDrawnCounts,
+        turn: advanceTurn(publicState.turn, 'draw'),
+      }
+
+      // The draw round is done once every seat in it has drawn. The last draw
+      // moves the hand into secondBet, then runs the same post-street-change
+      // closure the betting actions use (auto-runout, then showdown if it lands
+      // there) so an everyone-all-in hand flows draw -> showdown directly.
+      const allDrawn = publicState.turn.playerOrder.every((seatId) => newDrawnCounts[seatId] != null)
+      if (!allDrawn) {
+        return {
+          ok: true,
+          publicState: newPublicState,
+          privateStates: newPrivateStates,
+        }
+      }
+
+      let advancedState = advanceStreet(newPublicState)
+
+      if (advancedState.turn.phase === 'showdown') {
+        return conductShowdown(advancedState, newPrivateStates, deck, onDeckChange, onPrivateStatesChange)
+      }
+
+      const { board: newBoardCards, deck: afterBoardDeck } = dealBoardCards(deck, advancedState)
+      advancedState = { ...advancedState, board: [...publicState.board, ...newBoardCards] }
+
+      const actingSeats = getActingSeats(advancedState)
+      if (actingSeats.length <= 1) {
+        const { publicState: runoutState, deck: runoutDeck } = advanceUntilActionOrShowdown(advancedState, afterBoardDeck)
+        onDeckChange(runoutDeck)
+
+        if (runoutState.turn.phase === 'showdown') {
+          return conductShowdown(runoutState, newPrivateStates, runoutDeck, onDeckChange, onPrivateStatesChange)
+        }
+
+        return {
+          ok: true,
+          publicState: runoutState,
+          privateStates: newPrivateStates,
+        }
+      }
+
+      onDeckChange(afterBoardDeck)
+
+      return {
+        ok: true,
+        publicState: advancedState,
+        privateStates: newPrivateStates,
       }
     }
 
@@ -958,8 +1107,11 @@ export function applyPokerAction(
 
   const { session, outcome } = applyAction(holdemSession.session, playerId, action, validate)
 
+  // The deck mirrors the session's commit semantics: a rejected action must
+  // not advance it (the session layer already reverts state on ok: false;
+  // adopting candidateDeck unconditionally would silently lose cards).
   return {
-    holdemSession: { session, deck: candidateDeck, rng: holdemSession.rng },
+    holdemSession: { session, deck: outcome.ok ? candidateDeck : holdemSession.deck, rng: holdemSession.rng },
     outcome,
   }
 }
@@ -986,8 +1138,11 @@ export function runPokerBotTurn(
 
   const { session, outcome } = runBotTurn(holdemSession.session, playerId, strategy, validate)
 
+  // The deck mirrors the session's commit semantics: a rejected action must
+  // not advance it (the session layer already reverts state on ok: false;
+  // adopting candidateDeck unconditionally would silently lose cards).
   return {
-    holdemSession: { session, deck: candidateDeck, rng: holdemSession.rng },
+    holdemSession: { session, deck: outcome.ok ? candidateDeck : holdemSession.deck, rng: holdemSession.rng },
     outcome,
   }
 }
