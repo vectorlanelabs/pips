@@ -1,159 +1,109 @@
-# Charter: Blackjack + Texas Hold'em (2026-08-23)
+# Charter: Poker variants — 5-Card Draw & 7-Card Draw (2026-08-31)
 
 **Mode:** directed
-**Started:** 2026-08-23
+**Started:** 2026-08-31
+**Approved:** by the user in-session, 2026-08-31 ("approved"), after
+presentation of milestones and ambiguity resolutions.
 
-Source: user invocation via `/model-routing Plan, design, implement, test,
-deploy: Texas Hold 'Em and Blackjack. Ask me no questions. Decide for
-yourself about starting chip amounts, bet minimums and limits, etc. -
-every game starts with a fresh set of chips. Don't worry about tracking
-values between games.` Running in an isolated git worktree
-(`.claude/worktrees/poker-blackjack-loop`, branch
-`worktree-poker-blackjack-loop`) per explicit mid-invocation instruction
-("do this on a completely isolated worktree") — no changes land on the
-main working tree or `main` branch until merge is explicitly authorized.
+Source: `specs/60-poker-draw-variants.md` (charter-level plan written and
+revised with the owner this session) plus the owner's room-control
+convention: variant selection is a Solitaire-style dropdown; house rules
+are Uno-style toggles; never a third pattern. Working branch:
+`charter/poker-variants` (off the spec branch, in the main working
+tree — no worktree instruction this run). Commits land on the branch
+freely; **nothing merges to `main` or pushes to origin without the
+user's explicit "push"** (standing project rule; a Pages deploy fires on
+push to main).
 
-Both games are genuinely new territory for this codebase: no existing
-game has chips, bets, or a house/dealer role distinct from a seated
-player. Closest siblings by shape, read in full before any spec was
-written: `src/card-games/rummy/` + `src/screens/Rummy*.tsx` (N-player
-turn order, host-authoritative state, per-seat private hand delivery),
-`src/card-games/solitaire/` (single-deck deal conventions), and
-`src/components/DealIntro.tsx` (the shared shuffle/deal animation every
-card game uses — both new games get it, same as every sibling). The
-generic `src/engine/turn-engine.ts` (`TurnState`/`advanceTurn`) is reused
-for seat-order action rotation in both games' betting/action rounds,
-consistent with `CLAUDE.md`'s bottom-layer engine.
+Crew per `/model-routing` (user-directed): the lead (Fable, this
+session) specs, dispatches, verifies, reviews-gates, and does all git
+and state-file work; `deepseek -m deepseek-v4-flash` writes all product
+code and tests (fallback: `codex exec`); `claude --model sonnet
+--effort medium` runs the Oscar-style adversarial review on every
+code-touching slice; debugging stays with the lead. Both crew probes
+returned OK at charter start.
 
 ## Target user
-Players of this site's existing 16-game library who want the two most
-universally recognized card games — a casino table-stakes group game
-(Blackjack, played against the house) and a competitive multi-way betting
-game (Texas Hold'em) — playable serverlessly with friends or bots, no
-real money at stake.
+Players of the existing 18-game library who want classic draw poker at
+the same table as Hold'em: one "Poker" shelf entry, the host picks
+Texas Hold'em / 5-Card Draw / 7-Card Draw from a dropdown in the room,
+and everything else (chips, blinds, bots, PeerJS multiplayer) works
+exactly like the Hold'em they already have.
 
 ## Core use case
-2-6 players (Blackjack) or 2-8 players (Hold'em), any mix of humans and
-house bots, join a lobby, each start with a fresh stack of chips, and
-play hand after hand — placing bets, taking actions in turn, watching
-outcomes resolve — until they choose to leave or (Hold'em only) get
-eliminated. No chip value is ever persisted across a fresh game start;
-this is explicitly the user's own instruction, not an oversight.
+A host opens Poker, picks 5-Card Draw from the dropdown, seats a mix of
+friends and house bots, and plays hands end to end — deal, first
+betting round, draw (select discards, confirm), second betting round,
+showdown with correct pot/side-pot settlement — with the same pacing,
+deal intro, and select-then-confirm conventions as every sibling game.
 
 ## Non-goals
-- No real-money stakes, no persistence of chip counts between separate
-  game sessions/rematches, no account/ledger system.
-- No tournament structure (no escalating blinds, no multi-table
-  Hold'em) — a single fixed-blind cash-game-style table for Hold'em.
-- No side bets beyond Blackjack's standard insurance (no perfect pairs,
-  21+3, etc.).
-- No resplitting in Blackjack (max one split per hand, i.e. at most 2
-  resulting hands) and no double-after-split — documented v1
-  simplifications, same spirit as Scrabble's "bot never bluffs."
-- No changes to any other existing game.
-- No new runtime dependencies — hand evaluation (poker) and shoe/payout
-  math (blackjack) are hand-written in `src/card-games/`, not a library.
+- Seven-Card **Stud** (resolution: "7-Card Draw" = draw poker dealt
+  seven, best five play at showdown).
+- Antes (blinds 5/10 reused), lowball/hi-lo, multiple draw rounds,
+  tournament blind escalation, draw-4-with-an-ace.
+- Deuces Wild itself — **designed around, not built** (room layout slot
+  for a future Uno-style house-rules block; hand evaluator stays the
+  single authority on card values so wilds later touch only it).
+- Any change to `src/engine/` or `src/card-engine/`.
 
 ## Milestones
-Blackjack ships first (simpler: no inter-player interaction, no side
-pots) to establish the chip/bet UI conventions Hold'em then reuses.
-
-- M0 (spec 52): Blackjack engine — `src/card-games/blackjack/`
-  (shoe/shuffle, state, rules: bet → deal → per-seat hit/stand/double/
-  split → dealer play → payout, insurance), bot basic-strategy hit/
-  stand only (no bot double/split, documented simplification), full
-  test coverage. No React, no screens, no wiring.
-- M1 (spec 53, after M0 lands): Blackjack screens — Room (lobby, seat
-  picker, bet-min/max display), Table (bet input, per-seat hand
-  rendering incl. split hands, dealer hand w/ hole card, hit/stand/
-  double/split/insurance controls gated to the acting seat), Results
-  (per-seat win/push/loss and chip delta), RulesOverlay. Deal-intro
-  reused per `CLAUDE.md`'s pattern-matching rule.
-- M2 (spec 54, after M1 lands): Blackjack wiring — App.tsx lobby/
-  broadcast/bot-per-seat, Landing.tsx shelf tile, route.ts, README.
-  Live-verified in-browser per CLAUDE.md's mandatory bot-pacing-at-
-  capacity check (6-seat table).
-- M3 (spec 55, after M2 lands): Texas Hold'em engine —
-  `src/card-games/holdem/` (deck, state, hand evaluator, betting-round
-  rules incl. min-raise/all-in/side-pot math, blind rotation, bust/
-  elimination), bot heuristic (starting-hand strength + pot-odds
-  check), full test coverage. No React, no screens, no wiring.
-- M4 (spec 56, after M3 lands): Hold'em screens — Room, Table (board
-  cards, per-seat stacks/bets, action controls: fold/check/call/bet/
-  raise/all-in, pot/side-pot display), Results (elimination order /
-  final standings), RulesOverlay.
-- M5 (spec 57, after M4 lands): Hold'em wiring — App.tsx/Landing.tsx/
-  route.ts/README, bot-per-seat, live-verified per CLAUDE.md's bot-
-  pacing rule at an 8-seat table.
-- M6 (spec 58, only if live verification surfaces gaps): polish, same
-  role Scrabble's spec 50 played — not pre-scheduled busywork.
+- M0: mechanical rename `card-games/holdem/` → `poker/`, `Holdem*`
+  screens → `Poker*`, exported identifiers (`createHoldemGame` →
+  `createPokerGame`, types, `HOLDEM_*` constants). Zero behavior
+  change; full suite passes untouched. User-visible copy ("Texas
+  Hold'em"), CSS class names, and App-local variable names are OUT of
+  scope for the rename.
+- M1: engine (spec 60a) — `variant: 'holdem' | 'five-draw' |
+  'seven-draw'` in state and `createPokerGame`; draw-variant street
+  cycle `firstBet → draw → secondBet → showdown → handOver`; `DRAW`
+  action (0–3 discards, once per draw round, all-in players still
+  draw, folded players skip); public per-player drawn counts; seat
+  caps 2–6 (five-draw) / 2–5 (seven-draw) with deck-math assertion;
+  showdown via existing `evaluateBestHand`; bot discard policy +
+  betting reuse; bot-vs-bot full-match sweeps per variant asserting
+  every proposed action is accepted. Hold'em chip-trajectory tests
+  pass UNCHANGED.
+- M2: screens (spec 60b) — PokerRoom variant dropdown (Solitaire
+  select + description, guests read-only), draw-phase
+  select-then-confirm UI ("Draw 2" / "Stand pat"), suit/rank sort
+  toggle for 5/7-card hands, opponent drawn-count captions, showdown
+  staging reuse, variant-keyed rules overlay, Landing tile "Poker".
+- M3: wiring (spec 60c) — variant through room flow and
+  `createPokerGame`, guest DRAW plumbing, bot loop draw case with a
+  pure animation-duration estimator the host holds bots against,
+  variant-aware seat caps on join/add-bot.
+- M4: BattleshipRoom migrates from radio-card variant picker to the
+  Solitaire dropdown (convention item; UI only).
+- M5: live verification in a real browser at max seats per variant
+  including the CLAUDE.md bot-pacing check at a full table; wrap-up.
 
 ## Definition of done
-Both games fully playable end to end (M0-M5 landed), tsc/tests/build
-green throughout, every code-touching slice adversarially reviewed by
-the lead (no `ai-grouch-claude` installed in this environment — using
-this skill's fallback reviewer persona), and both games live-verified in
-the browser by the lead personally at capacity seat counts for the
-mandatory bot-pacing check. Landed as one commit per spec on
-`worktree-poker-blackjack-loop`, **not merged into `main` or pushed
-without the user's explicit "push"** per this project's `CLAUDE.md` git
-workflow — unchanged by running in a worktree.
+All three variants playable end to end (host, guests, bots) with the
+host choosing via the dropdown; Battleship migrated; `npx tsc -b
+--noEmit`, `npm test`, `npm run build` all green; M5 live verification
+recorded in the devlog. Everything committed on the charter branch,
+NOT merged or pushed — wrap-up hands the "push" decision to the user.
 
 ## Run budget
-25 cycles or the 6-milestone list (M0-M5), whichever comes first
-(directed-mode default; M6 is conditional and not counted against this).
+The milestone list or 12 cycles, whichever comes first. On exhaustion:
+land in-flight work, clean tree, cancel the scheduled safety net,
+request renewal in REQUESTS.md and chat.
 
 ## Stop criteria
-- Stop when the definition of done is met (M0-M5 landed and both games
-  live-verified).
-- Any single roadmap item unresolved after 3 cycles forces a pivot/
-  pause/re-scope decision.
-- Pause to REQUESTS.md if a locked design decision below turns out to be
-  infeasible once implemented.
+- Definition of done met → wrap-up.
+- Any single milestone unresolved after 3 cycles → pivot/pause/re-scope
+  decision, not a fourth attempt.
+- Spec 60 turns out infeasible or self-contradictory in a way charter
+  distillation missed → pause to REQUESTS.md.
 
-## Ambiguity resolutions
-The user explicitly delegated all numeric/rule decisions ("decide for
-yourself about starting chip amounts, bet minimums and limits, etc.").
-Locked here, not left to the implementer:
-
-- **Starting chips:** 1000 per player, every fresh game start (lobby
-  entry / rematch), never carried over — matches "don't worry about
-  tracking values between games" literally.
-- **Blackjack:** 6-deck shoe, reshuffle before any round where remaining
-  cards drop under 25% of the shoe (never mid-round). Bet min 10 / max
-  500. Blackjack (natural 21) pays 3:2; dealer blackjack pushes only
-  against a player blackjack, otherwise beats any non-blackjack 21.
-  Dealer stands on all 17s (soft included) — the simpler, still-standard
-  ruleset, avoids extra soft/hard dealer-play branching for v1. Double
-  down allowed on any first-two-card total (not restricted to 9-11).
-  One split max (pairs only), no resplit, no double after split. Insurance
-  offered only when dealer's up-card is an Ace, costs half the original
-  bet, pays 2:1 iff dealer has blackjack. A seat that can't cover the
-  table minimum sits out (visually marked, not removed) rather than
-  being force-ejected.
-- **Texas Hold'em:** No-limit, fixed blinds (no escalation): small blind
-  5 / big blind 10, starting stack 1000. Dealer button rotates every
-  hand. Standard NLHE min-raise (>= size of the previous bet/raise, or
-  the big blind if none yet this round), all-in for less always legal,
-  side pots computed correctly for multiple simultaneous all-ins. A
-  player reaching 0 chips after a hand is eliminated from the table (not
-  dealt further hands, shown in final standings by elimination order);
-  the game ends when one player remains with chips, who is declared the
-  winner.
-- **Bots:** Blackjack bots always play a fixed hit-below-17/stand-17+
-  basic-strategy table, never double or split (documented simplification
-  — avoids bot-driven bet-size changes and split-hand bookkeeping in
-  v1). Hold'em bots use a documented heuristic (starting-hand-strength
-  tier preflop, simple pot-odds/hand-strength check postflop, occasional
-  bluff-free fold/call/raise) — not GTO-optimal, same spirit as
-  Scrabble's "bot never bluffs" precedent.
-- **Segments/routes:** `blackjack` and `holdem` (not `texas-holdem`,
-  matching this codebase's short-segment convention like `skipbo`,
-  `ttt`).
-
-## Model routing
-Implementer: Haiku (this session's cheapest Agent-tool model; deepseek
-not available as an Agent-tool option in this session, consistent with
-every recent charter's routing). Reviewer: the lead's own model (this
-session's Sonnet), fallback adversarial persona from `references/
-review.md` since no `ai-grouch-claude` skill is installed here.
+## Ambiguity resolutions (approved at sign-off)
+1. "7-Card Draw" = draw poker dealt seven, best five at showdown — not
+   Stud.
+2. Blinds (5/10), not antes.
+3. Draw up to 3 replacements; seat caps 2–6 / 2–5 by deck math
+   (52-card deck, no reshuffle: 6×5+6×3=48; 5×7+5×3=50).
+4. All-in players still take their draw turn (drawing is free).
+5. Deuces Wild designed-around only.
+6. Rename scope as in M0 (exported identifiers yes; copy/CSS
+   classes/App locals no).

@@ -1,8 +1,26 @@
 # Roadmap
 
-Charter: Blackjack + Texas Hold'em — see `CHARTER.md`.
+Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
 
-## Charter: Blackjack + Texas Hold'em (2026-08-23) — done
+## Charter: Poker variants (2026-08-31) — active
+
+Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
+
+### Next up
+1. M0 — mechanical rename holdem→poker (dir, screens, exported
+   identifiers; NOT copy/CSS classes/App locals). Suite passes
+   untouched.
+2. M1 — engine: variant + draw street cycle + DRAW action + bots
+   (spec 60a).
+3. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
+   Landing tile (spec 60b).
+4. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
+   guest plumbing (spec 60c).
+5. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
+6. M5 — live verification at max seats per variant incl. bot pacing;
+   wrap-up.
+
+## Charter: Blackjack + Texas Hold'em (2026-08-23) — done (merged & pushed)
 
 **Charter complete.** Both Blackjack (2-6 players, vs. the house) and
 Texas Hold'em (2-8 players, no-limit cash game) are fully playable end

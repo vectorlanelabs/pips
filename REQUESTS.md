@@ -1,7 +1,10 @@
 # Requests for the human
 
-- [ ] 2026-08-24, Blackjack + Texas Hold'em charter wrap-up — **charter
-      complete**, verified in the tree on `worktree-poker-blackjack-loop`
+- [x] 2026-08-24, Blackjack + Texas Hold'em charter wrap-up — RESOLVED
+      2026-08-31: the user later said "push"; the worktree branch was
+      merged to `main` and pushed (both games live on main). Item was
+      stale-open, closed by the poker-variants charter lead. Original:
+      **charter complete**, verified in the tree on `worktree-poker-blackjack-loop`
       (isolated worktree at `.claude/worktrees/poker-blackjack-loop`):
       6/6 milestones landed (Blackjack engine/screens/wiring, Hold'em
       engine/screens/wiring), 1398 tests / tsc / build green throughout,
