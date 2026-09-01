@@ -95,7 +95,13 @@ export function Landing({
           </p>
         </div>
 
-        <div style={{ flex: '1 1 300px', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form
+          style={{ flex: '1 1 300px', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (canJoin) onJoin()
+          }}
+        >
           <label style={{ fontWeight: 600, fontSize: 15 }}>
             Your name
             <input
@@ -118,13 +124,13 @@ export function Landing({
                 placeholder="GG-CODE-52"
               />
             </label>
-            <button type="button" className="btn btn-coral" style={{ height: 52 }} disabled={!canJoin} onClick={onJoin}>
+            <button type="submit" className="btn btn-coral" style={{ height: 52 }} disabled={!canJoin}>
               Join
             </button>
           </div>
           {!ready && <p style={{ fontSize: 14, color: 'var(--faint-text)', margin: 0 }}>Just a name. No account, no password.</p>}
           {error && <p style={{ fontSize: 14, color: 'var(--coral)', margin: 0, fontWeight: 600 }}>{error}</p>}
-        </div>
+        </form>
       </div>
 
       <div style={{ marginTop: 'clamp(32px,5vw,48px)' }}>
