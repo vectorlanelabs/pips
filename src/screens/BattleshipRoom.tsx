@@ -82,20 +82,20 @@ export function BattleshipRoom({
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
 
-          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>House rules</div>
-          <div className="bs-variant-list">
+          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Mode</div>
+          <select
+            className="input select-chevron"
+            aria-label="Game mode"
+            value={variant}
+            onChange={(e) => onSetVariant(e.target.value as BattleshipVariant)}
+          >
             {VARIANTS.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                className={`bs-variant-option${v.id === variant ? ' bs-variant-option--selected' : ''}`}
-                onClick={() => onSetVariant(v.id)}
-              >
-                <span className="bs-variant-name">{v.name}</span>
-                <span className="bs-variant-desc">{v.desc}</span>
-              </button>
+              <option key={v.id} value={v.id}>{v.name}</option>
             ))}
-          </div>
+          </select>
+          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
+            {VARIANTS.find((v) => v.id === variant)?.desc}
+          </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
             <button type="button" className="btn btn-coral btn-lg" onClick={onAddHouseBot}>

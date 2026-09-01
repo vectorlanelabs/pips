@@ -345,51 +345,6 @@
   margin-top: 18px;
 }
 
-/* ---- House rules (variant picker, host waiting screen) ---- */
-
-.bs-variant-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.bs-variant-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 3px solid var(--grey-border);
-  border-radius: 16px;
-  background: #fff;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  transition: background 0.1s ease, border-color 0.1s ease;
-}
-
-.bs-variant-option:hover {
-  border-color: var(--ink);
-}
-
-.bs-variant-option--selected {
-  border-color: #1a6fae;
-  background: #e3eef7;
-}
-
-.bs-variant-name {
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.bs-variant-desc {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted-text);
-}
-
 /* ---- Responsive: boards stack below 900px ---- */
 
 @media (max-width: 899px) {
