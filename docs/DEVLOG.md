@@ -4703,3 +4703,28 @@ shipping each verified charter promptly.
   actions travel guest->host only; guests receive per-seat views built
   from publicState (spec 57's sendTo pattern), receipt in devlog.
 - **Continue?** Yes — M2 screens next.
+
+## Cycle 3 (Poker variants charter) — 2026-08-31
+- **Shipped:** M2 variant screens (3b3e193): PokerRoom variant dropdown
+  per the owner's room-control convention (dropdown = variant, toggles =
+  future house rules), draw-round select-then-confirm UI, rank/suit sort
+  toggle for 5/7-card hands, drawn-count captions, variant-keyed rules
+  overlay, Landing tile renamed to Poker. All new props optional so App
+  compiles untouched until M3.
+- **Delegation:** deepseek:flash, two parts. Part 1 clean in one pass
+  (its report matched the diff exactly). Part 2 hit the iteration cap
+  during its own final re-read but the work was complete — lead
+  verification confirmed. The "one bulk edit per file" standing
+  instruction is working; the cap now only bites on re-reads.
+- **Verification (lead):** tsc/tests(1757)/build re-run; PokerRoom and
+  PokerTable diffs read line-by-line; holdem-unchanged confirmed by
+  probe (isDraw gates every new branch; displayCards === myHoleCards
+  for holdem).
+- **Review (Sonnet):** correctly identified that App wiring is absent —
+  rejected-as-designed (that IS milestone M3; no draw game is reachable
+  until it lands, so the interim soft-lock is unreachable; the branch
+  ships whole). One real find: guest-side double-submit window on the
+  draw button — fixed (drawSubmitted guard) and verified. Landing
+  overpromise note: same as-designed disposition.
+- **Continue?** Yes — M3 wiring, then the charter becomes playable and
+  the pacing work becomes checkable.
