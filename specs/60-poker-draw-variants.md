@@ -31,9 +31,26 @@ by its existing chip-trajectory tests.
 ## Locked design
 
 **Variant model.** `PokerVariant = 'holdem' | 'five-draw' | 'seven-draw'`,
-carried in `publicState.variant` exactly like Battleship's
-`publicState.variant` (host picks in the room, fixed for the session,
-`createPokerGame(playerIds, seed, variant, cardBack)`).
+carried in `publicState.variant`: host picks in the room, fixed for the
+session, `createPokerGame(playerIds, seed, variant, cardBack)`. The
+room control is SOLITAIRE'S pattern — a dropdown (`<select
+className="input select-chevron">` with the variant's one-line
+description rendered beneath it, exactly as `SolitaireRoom` does for
+its modes) — NOT Battleship's radio-card house-rule-style picker. This
+matters because Poker is about to become the first game with BOTH a
+variant selector AND house rules (see "Coming next" below), and it
+fixes the app-wide convention:
+
+> **Room-control convention (owner-set, applies to every game from
+> here on):** a DROPDOWN (Solitaire's select + description) picks WHICH
+> game variant is being played; TOGGLES (Uno's house-rules checkboxes)
+> switch optional rules on or off within it. Never a third pattern.
+
+**Battleship migration (small standalone item, may ride with 60b):**
+Battleship's current radio-card variant picker predates this convention
+and should convert to the Solitaire dropdown — its three modes are
+variants, not house rules. Mechanical UI swap in `BattleshipRoom`, no
+state or engine changes.
 
 **Rename (60a commit #1, mechanical, zero logic).**
 `src/card-games/holdem/` → `src/card-games/poker/`, `Holdem*` screens →
@@ -115,14 +132,17 @@ variant asserting every proposed action is accepted by the validator
 (the Phase 10 freeze lesson — `runPokerBotTurn` outcome must never be
 rejected).
 
-**60b — screens.** `PokerRoom` gets the variant picker in Battleship's
-exact host-chooses pattern (guests see the choice read-only). Picker
-copy: "Texas Hold'em — community cards, 2–8 players" / "5-Card Draw —
-one draw, best five, 2–6 players" / "7-Card Draw — seven dealt, best
-five play, 2–5 players" (plain voice, no em dashes in final copy). A
-variant whose seat cap is below the current seated count is disabled
-with the reason shown; Start is gated on the selected variant's
-min/max. `PokerTable` branches: no board row for draw variants; the
+**60b — screens.** `PokerRoom` gets the variant DROPDOWN in Solitaire's
+exact pattern: host-editable `<select>`, the selected variant's
+description line beneath it, guests see the current choice read-only
+(borrow the guest-read-only treatment from Uno's house-rules block —
+Solitaire has no guests to copy from). Option labels: "Texas Hold'em" /
+"5-Card Draw" / "7-Card Draw"; description lines: "Community cards,
+no-limit betting. 2 to 8 players." / "One draw, best five wins. 2 to 6
+players." / "Seven dealt, best five play. 2 to 5 players." (plain
+voice, no em dashes). A variant whose seat cap is below the current
+seated count renders as a disabled option; Start is gated on the
+selected variant's min/max. `PokerTable` branches: no board row for draw variants; the
 draw phase gets select-then-confirm discards (tap cards to select, one
 confirm button reading "Draw 2" / "Stand pat" — the app-wide
 select-then-confirm convention), the 5/7-card hand gets the suit/rank
@@ -137,13 +157,33 @@ Hold'em" CARDS tile becomes **"Poker"** ("no-limit, 2–8 players"), one
 tile, like Solitaire.
 
 **60c — wiring.** App.tsx: variant state in the room flow (host sets,
-broadcast in the lobby view like Battleship's), passed to
+broadcast to guests in the lobby view the way Uno broadcasts its
+house-rules choices), passed to
 `createPokerGame`; the bot loop learns nothing new except the draw-turn
 case (the strategy returns DRAW; the same never-dead-end rejection
 handling applies) and the draw-animation hold from 60b's estimator.
 Guest action plumbing gains the DRAW intent. Seat-cap enforcement moves
 variant-aware (add-bot and join both respect the selected variant's
 max).
+
+## Coming next (design around it, do not build it)
+
+A **Deuces Wild** house rule is planned immediately after this ships,
+making Poker the first game area with BOTH a variant dropdown and a
+house-rules section. Consequences for this spec's work orders:
+
+- 60b lays out `PokerRoom` so a "House rules" block (Uno's pattern:
+  host-toggled checkboxes with label + description, guests read-only,
+  `UNO_HOUSE_RULE_DEFS`-style defs table) slots in under the variant
+  dropdown without a redesign. Do not render an empty section now —
+  just don't design the column so tightly that adding it moves
+  everything.
+- 60a keeps `hand-eval.ts` extensible enough that wild cards are a
+  change confined to the evaluator (and DRAW/showdown validation), not
+  a rework of `rules.ts` — concretely: nothing outside `hand-eval.ts`
+  may assume a card's rank/suit maps to exactly one evaluated value.
+- State should carry the variant and (later) house rules as separate
+  fields — do not fold the variant into a rules record.
 
 ## Out of scope (explicitly)
 
