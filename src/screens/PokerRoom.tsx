@@ -1,8 +1,27 @@
 import { useState } from 'react'
-import { POKER_MAX_SEATS, POKER_MIN_SEATS } from '../card-games/poker/state'
+import type { PokerVariant } from '../card-games/poker/state'
+import { POKER_MIN_SEATS, maxSeatsFor } from '../card-games/poker/state'
 import { PokerRulesOverlay } from './PokerRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
 import { CardBackPicker } from '../components/CardBackPicker'
+
+export const POKER_VARIANT_LABELS: Record<PokerVariant, string> = {
+  holdem: "Texas Hold'em",
+  'five-draw': '5-Card Draw',
+  'seven-draw': '7-Card Draw',
+}
+
+const VARIANT_DESCRIPTIONS: Record<PokerVariant, string> = {
+  holdem: 'Community cards, no-limit betting. 2 to 8 players.',
+  'five-draw': 'One draw, best five wins. 2 to 6 players.',
+  'seven-draw': 'Seven dealt, best five play. 2 to 5 players.',
+}
+
+const SEAT_COUNT_WORDS: Record<PokerVariant, string> = {
+  holdem: 'eight',
+  'five-draw': 'six',
+  'seven-draw': 'five',
+}
 
 export interface PokerRoomProps {
   code: string
@@ -15,6 +34,8 @@ export interface PokerRoomProps {
   onAddHouseBot: () => void
   onStartGame: () => void
   onLeave: () => void
+  variant?: PokerVariant
+  onSelectVariant?: (v: PokerVariant) => void
 }
 
 const BRAND = 'var(--coral)'
@@ -30,6 +51,8 @@ export function PokerRoom({
   onAddHouseBot,
   onStartGame,
   onLeave,
+  variant = 'holdem',
+  onSelectVariant,
 }: PokerRoomProps) {
   const [copied, setCopied] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
@@ -49,7 +72,8 @@ export function PokerRoom({
   }
 
   const hostName = seats.find((s) => s.isHost)?.name ?? 'the host'
-  const slots = Array.from({ length: POKER_MAX_SEATS }, (_, i) => seats[i] ?? null)
+  const maxSeats = maxSeatsFor(variant)
+  const slots = Array.from({ length: maxSeats }, (_, i) => seats[i] ?? null)
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -103,10 +127,10 @@ export function PokerRoom({
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
-              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= POKER_MAX_SEATS}>
+              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= maxSeats}>
                 Add house bot
               </button>
-              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < POKER_MIN_SEATS}>
+              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < POKER_MIN_SEATS || seats.length > maxSeats}>
                 Start game
               </button>
             </div>
@@ -115,24 +139,50 @@ export function PokerRoom({
               Waiting for {hostName} to start…
             </p>
           )}
-          {seats.length < POKER_MAX_SEATS && (
+          {seats.length < maxSeats && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Two to eight seats. Bots can fill any of them.
+              Two to {SEAT_COUNT_WORDS[variant]} seats. Bots can fill any of them.
             </p>
           )}
         </div>
 
         <div style={{ flex: '1 1 320px', maxWidth: 460 }}>
-          <div
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: BRAND, color: '#fff', fontWeight: 700, fontSize: 15,
-              padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
-              marginBottom: 14,
-            }}
-          >
-            Texas Hold'em
-          </div>
+          {onSelectVariant ? (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Game</div>
+              <select
+                className="input select-chevron"
+                aria-label="Game variant"
+                value={variant}
+                onChange={(e) => onSelectVariant(e.target.value as PokerVariant)}
+              >
+                {Object.entries(POKER_VARIANT_LABELS).map(([key, label]) => (
+                  <option key={key} value={key} disabled={seats.length > maxSeatsFor(key as PokerVariant)}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
+                {VARIANT_DESCRIPTIONS[variant]}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  background: BRAND, color: '#fff', fontWeight: 700, fontSize: 15,
+                  padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
+                  marginBottom: 14,
+                }}
+              >
+                {POKER_VARIANT_LABELS[variant]}
+              </div>
+              <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
+                {VARIANT_DESCRIPTIONS[variant]}
+              </p>
+            </>
+          )}
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {slots.map((seat, i) =>
@@ -171,7 +221,7 @@ export function PokerRoom({
         </div>
       </div>
 
-      {rulesOpen && <PokerRulesOverlay onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay variant={variant} onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

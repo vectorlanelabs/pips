@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import type { Card } from '../card-engine/cards'
+import { RANKS } from '../card-engine/cards'
 import type { PokerPublicState, PokerPrivateState } from '../card-games/poker/state'
-import { POKER_BIG_BLIND } from '../card-games/poker/state'
+import { POKER_BIG_BLIND, handSizeFor } from '../card-games/poker/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
 import { HoldemBoard } from '../components/HoldemBoard'
@@ -8,8 +10,32 @@ import { PlayingCard, CardBack } from '../components/PlayingCard'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { PokerRulesOverlay } from './PokerRulesOverlay'
+import { POKER_VARIANT_LABELS } from './PokerRoom'
 import { useSound } from '../hooks/useSound'
 import './PokerTable.css'
+
+const SUIT_ORDER: Record<string, number> = { clubs: 0, diamonds: 1, hearts: 2, spades: 3 }
+
+// Display-only sort for draw-variant hands (holdem's two hole cards keep
+// their deal order). Always sorts a copy -- callers key selection by card
+// ID, never by index, so the display order can't corrupt a selection.
+function sortHandForDisplay(cards: Card[], sortBy: 'suit' | 'rank'): Card[] {
+  const sorted = [...cards]
+  if (sortBy === 'suit') {
+    sorted.sort((a, b) => {
+      const s = (SUIT_ORDER[a.suit] ?? 0) - (SUIT_ORDER[b.suit] ?? 0)
+      if (s !== 0) return s
+      return RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank)
+    })
+  } else {
+    sorted.sort((a, b) => {
+      const r = RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank)
+      if (r !== 0) return r
+      return (SUIT_ORDER[a.suit] ?? 0) - (SUIT_ORDER[b.suit] ?? 0)
+    })
+  }
+  return sorted
+}
 
 export interface PokerTableProps {
   code: string
@@ -27,6 +53,7 @@ export interface PokerTableProps {
   onRaise: (amount: number) => void
   onStartNextHand: () => void
   onLeaveTable: () => void
+  onDraw?: (discardIds: string[]) => void
 }
 
 export function PokerTable({
@@ -44,6 +71,7 @@ export function PokerTable({
   onRaise,
   onStartNextHand,
   onLeaveTable,
+  onDraw,
 }: PokerTableProps) {
   const { play, enabled, setEnabled } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -58,6 +86,12 @@ export function PokerTable({
   const [blindStage, setBlindStage] = useState<'sb' | 'bb'>('sb')
   const [betAmount, setBetAmount] = useState(POKER_BIG_BLIND * 2)
   const [raiseSizingOpen, setRaiseSizingOpen] = useState(false)
+  const [sortBy, setSortBy] = useState<'suit' | 'rank'>('rank')
+  const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
+  const [drawSubmitted, setDrawSubmitted] = useState(false)
+
+  const variant = publicState.variant
+  const isDraw = variant !== 'holdem'
 
   const stagedForHandRef = useRef<number | null>(null)
   const noticeSeenRef = useRef(!!notice)
@@ -67,6 +101,7 @@ export function PokerTable({
     handResults: publicState.handResults,
     myBetThisStreet: publicState.hands[localPlayerId]?.betThisStreet ?? 0,
     myFolded: publicState.hands[localPlayerId]?.folded ?? false,
+    myDrawnCount: publicState.drawnCounts[localPlayerId] ?? null,
     revealedOpponentCount: 0,
     handResultsVisible: false,
   })
@@ -145,6 +180,7 @@ export function PokerTable({
     const myHand = publicState.hands[localPlayerId]
     const myBetThisStreet = myHand?.betThisStreet ?? 0
     const myFolded = myHand?.folded ?? false
+    const myDrawnCount = publicState.drawnCounts[localPlayerId] ?? null
 
     // Shuffle sound plays from DealIntro itself now (see the uiPhase staging
     // above) -- it always shows, including hand #1, so a second manual
@@ -156,6 +192,13 @@ export function PokerTable({
       (p.phase === 'flop' && publicState.turn.phase === 'turn') ||
       (p.phase === 'turn' && publicState.turn.phase === 'river')
     ) {
+      play('card-draw')
+    }
+
+    // Local player draws replacement cards (draw variants only): one cue
+    // for the whole draw, and only when cards actually moved -- standing
+    // pat is deliberately silent.
+    if (myDrawnCount != null && myDrawnCount > 0 && p.myDrawnCount == null) {
       play('card-draw')
     }
 
@@ -206,10 +249,11 @@ export function PokerTable({
       handResults: publicState.handResults,
       myBetThisStreet,
       myFolded,
+      myDrawnCount,
       revealedOpponentCount: revealedOpponentCountEffective,
       handResultsVisible: handResultsVisibleEffective,
     }
-  }, [publicState.turn.phase, publicState.handOver, publicState.handResults, publicState.hands, publicState.seatOrder, localPlayerId, notice, play, revealedOpponentCountEffective, handResultsVisibleEffective])
+  }, [publicState.turn.phase, publicState.handOver, publicState.handResults, publicState.hands, publicState.drawnCounts, publicState.seatOrder, localPlayerId, notice, play, revealedOpponentCountEffective, handResultsVisibleEffective])
 
   // Derived state
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
@@ -221,7 +265,12 @@ export function PokerTable({
   // the FOLD sole-winner path and conductShowdown in rules.ts) -- excluding
   // handOver here is what actually retires the last actor's "Turn" tag and
   // action controls once the hand is over, not just re-checking phase.
-  const isActionPhase = !publicState.handOver && ['preflop', 'flop', 'turn', 'river'].includes(currentPhase)
+  const isActionPhase = !publicState.handOver && ['preflop', 'flop', 'turn', 'river', 'firstBet', 'secondBet'].includes(currentPhase)
+  // Draw variants run a dedicated draw round between the two betting
+  // streets: no board, and every non-folded seat (all-in included) gets a
+  // turn to discard up to 3 cards.
+  const isDrawPhase = !publicState.handOver && currentPhase === 'draw'
+  const isMyDrawTurn = isDrawPhase && currentPlayer(publicState.turn) === localPlayerId && publicState.drawnCounts[localPlayerId] == null
   const canAct = isMyTurn && isActionPhase
 
   // Button gating conditions based on rules.ts validators
@@ -237,6 +286,28 @@ export function PokerTable({
   useEffect(() => {
     if (!canRaise) setRaiseSizingOpen(false)
   }, [canRaise, currentPhase])
+
+  // Discard selection only means something during my own draw turn; drop it
+  // the moment that turn ends (or the hand moves on) so it can never leak
+  // into a later street or hand. drawSubmitted rides along: it guards
+  // against double submission on guest clients where drawnCounts updates
+  // arrive with latency, so it must reset on the same edge.
+  useEffect(() => {
+    if (!isMyDrawTurn) {
+      setSelectedDiscards([])
+      setDrawSubmitted(false)
+    }
+  }, [isMyDrawTurn])
+
+  const toggleDiscard = (cardId: string): void => {
+    setSelectedDiscards((prev) => {
+      if (prev.includes(cardId)) return prev.filter((id) => id !== cardId)
+      // A draw replaces at most 3 cards; clicking a 4th unselected card
+      // simply does nothing.
+      if (prev.length >= 3) return prev
+      return [...prev, cardId]
+    })
+  }
 
   // Compute min/max for bet/raise slider
   let minBetAmount = 1
@@ -274,6 +345,11 @@ export function PokerTable({
     ? publicState.hands[localPlayerId].cards
     : privateState.hand
 
+  // Draw-variant hands are sorted for display only (default rank, toggle
+  // suit); holdem's two hole cards keep their deal order. Selection tracks
+  // card IDs, never indices, so the display order can't corrupt it.
+  const displayCards = isDraw ? sortHandForDisplay(myHoleCards, sortBy) : myHoleCards
+
   // Quick preset buttons
   const halfPotPreset = Math.floor(publicState.pot / 2)
   const potPreset = publicState.pot
@@ -292,7 +368,7 @@ export function PokerTable({
       id,
       name: names[id] ?? id,
       color: colors[id] ?? 'var(--slate-pip)',
-      handSize: publicState.hands[id]?.folded ? 0 : 2,
+      handSize: publicState.hands[id]?.folded ? 0 : handSizeFor(variant),
     }))
 
   return (
@@ -301,7 +377,7 @@ export function PokerTable({
       <div className="holdem-header">
         <div className="holdem-header-left">
           <Wordmark small onClick={onLeaveTable} />
-          <span className="holdem-game-label">Texas Hold'em</span>
+          <span className="holdem-game-label">{POKER_VARIANT_LABELS[variant]}</span>
           <span className="holdem-peer-strip">
             <span
               className="holdem-peer-dot"
@@ -353,7 +429,7 @@ export function PokerTable({
             yourHandSize={privateState.hand.length}
             renderCardBack={(p) => <CardBack {...p} design={publicState.cardBack} />}
             onComplete={() => setUiPhase('table')}
-            maxFlights={publicState.seatOrder.length * 2}
+            maxFlights={publicState.seatOrder.length * handSizeFor(variant)}
           />
         ) : (
           <>
@@ -402,6 +478,11 @@ export function PokerTable({
                       {isFolded && <span className="chip" style={{ background: '#ddd', color: 'var(--muted-text)', fontSize: 12 }}>Folded</span>}
                       {isAllIn && !isFolded && <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)', fontSize: 12 }}>All in</span>}
                       {isEliminated && <span className="chip" style={{ background: '#ddd', color: 'var(--muted-text)', fontSize: 12 }}>Out</span>}
+                      {publicState.drawnCounts[seatId] != null && (
+                        <span className="chip" style={{ background: 'var(--grey-fill)', color: 'var(--muted-text)', fontSize: 12 }}>
+                          {(publicState.drawnCounts[seatId] ?? 0) > 0 ? `Drew ${publicState.drawnCounts[seatId]}` : 'Stood pat'}
+                        </span>
+                      )}
                     </div>
 
                     {/* Opacity state for folded/eliminated */}
@@ -420,11 +501,16 @@ export function PokerTable({
                           />
                         ))
                       ) : (
-                        // Face-down cards at fan size
-                        <>
-                          <CardBack design={publicState.cardBack} size="fan" style={{ marginLeft: 0 }} />
-                          <CardBack design={publicState.cardBack} size="fan" style={{ marginLeft: -15 }} />
-                        </>
+                        // Face-down cards at fan size: one per private card
+                        // (2 holdem / 5 five-draw / 7 seven-draw)
+                        Array.from({ length: handSizeFor(variant) }, (_, i) => (
+                          <CardBack
+                            key={i}
+                            design={publicState.cardBack}
+                            size="fan"
+                            style={{ marginLeft: i === 0 ? 0 : -15 }}
+                          />
+                        ))
                       )}
                     </div>
                   </div>
@@ -442,9 +528,11 @@ export function PokerTable({
                 <CardBack size="stock" design={publicState.cardBack} />
               </div>
 
-              <div className="holdem-board-group">
-                <HoldemBoard cards={publicState.board} />
-              </div>
+              {!isDraw && (
+                <div className="holdem-board-group">
+                  <HoldemBoard cards={publicState.board} />
+                </div>
+              )}
 
               <div className="holdem-pot">
                 <span className="holdem-pot-label">Pot</span>
@@ -460,16 +548,54 @@ export function PokerTable({
               {/* Your hole cards */}
               <div className="holdem-your-hand-col">
                 {myHoleCards.length > 0 && (
-                  <div className="holdem-your-cards">
-                    {myHoleCards.map((card, i) => (
-                      <PlayingCard
-                        key={i}
-                        rank={card.rank as any}
-                        suit={card.suit as any}
-                        size="hand"
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {isDraw && (
+                      <div className="holdem-your-hand-header">
+                        <span className="holdem-your-hand-label">Your hand</span>
+                        <div className="holdem-sort-toggle">
+                          <button
+                            type="button"
+                            className={`holdem-sort-btn ${sortBy === 'suit' ? 'holdem-sort-btn--active' : ''}`}
+                            onClick={() => setSortBy('suit')}
+                          >
+                            suit
+                          </button>
+                          <button
+                            type="button"
+                            className={`holdem-sort-btn ${sortBy === 'rank' ? 'holdem-sort-btn--active' : ''}`}
+                            onClick={() => setSortBy('rank')}
+                          >
+                            rank
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className={`holdem-your-cards${isDraw ? ' holdem-your-cards--draw' : ''}`}>
+                      {displayCards.map((card) =>
+                        isMyDrawTurn ? (
+                          <button
+                            key={card.id}
+                            type="button"
+                            className={`holdem-your-card-btn${selectedDiscards.includes(card.id) ? ' holdem-your-card-btn--selected' : ''}`}
+                            onClick={() => toggleDiscard(card.id)}
+                          >
+                            <PlayingCard
+                              rank={card.rank as any}
+                              suit={card.suit as any}
+                              size="hand"
+                            />
+                          </button>
+                        ) : (
+                          <PlayingCard
+                            key={card.id}
+                            rank={card.rank as any}
+                            suit={card.suit as any}
+                            size="hand"
+                          />
+                        ),
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -479,6 +605,26 @@ export function PokerTable({
                 <div className="holdem-chip-bank-label">Chips</div>
                 <div className="holdem-chip-bank-value">{myChips}</div>
               </div>
+
+              {/* Draw control (draw variants only): pick discards and
+                  confirm -- or stand pat with none. */}
+              {isMyDrawTurn && (
+                <div className="holdem-action-section">
+                  <div style={{ fontSize: 14, color: 'var(--muted-text)' }}>Choose up to 3 cards to replace.</div>
+                  <button
+                    type="button"
+                    className="btn btn-coral btn-lg"
+                    disabled={drawSubmitted}
+                    onClick={() => {
+                      setDrawSubmitted(true)
+                      onDraw?.(selectedDiscards)
+                      setSelectedDiscards([])
+                    }}
+                  >
+                    {selectedDiscards.length > 0 ? `Draw ${selectedDiscards.length}` : 'Stand pat'}
+                  </button>
+                </div>
+              )}
 
               {/* Action area - fold/check/call/bet-raise */}
               {canAct && (
@@ -589,7 +735,7 @@ export function PokerTable({
               )}
 
               {/* Waiting status */}
-              {isMyTurn && !canAct && !publicState.handOver && (
+              {isMyTurn && !canAct && !isMyDrawTurn && !publicState.handOver && (
                 <div className="holdem-action-section">
                   Game in progress…
                 </div>
@@ -598,6 +744,12 @@ export function PokerTable({
               {!isMyTurn && isActionPhase && (
                 <div className="holdem-action-section">
                   Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'}…
+                </div>
+              )}
+
+              {isDrawPhase && !isMyTurn && (
+                <div className="holdem-action-section">
+                  Waiting for {names[currentPlayer(publicState.turn)] ?? 'a player'} to draw…
                 </div>
               )}
 
@@ -676,7 +828,7 @@ export function PokerTable({
         )}
       </div>
 
-      {rulesOpen && <PokerRulesOverlay onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <PokerRulesOverlay variant={variant} onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

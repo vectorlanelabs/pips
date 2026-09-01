@@ -511,3 +511,75 @@
   color: var(--body-text);
   margin-bottom: 8px;
 }
+
+/* ---- Draw variants: sort toggle + discard selection ----
+   Sort toggle mirrors the rummy hand-header pattern (label left, toggle
+   right); discard selection mirrors the app's standard selected-card
+   language (lift + yellow outline). */
+
+.holdem-your-hand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.holdem-your-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.holdem-sort-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.holdem-sort-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 2px solid var(--grey-border);
+  background: var(--surface);
+  color: var(--muted-text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.holdem-sort-btn--active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+/* Headroom for the selected-card lift (translateY(-10px)), mirroring the
+   rummy hand fan's reservation -- the cards sit lower while selectable so
+   a lift never collides with the header above. */
+.holdem-your-cards--draw {
+  padding-top: 18px;
+}
+
+/* Discard-selection wrapper: plain button chrome so the card inside is the
+   whole visual; the lift + outline carry the selected state. */
+.holdem-your-card-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+
+/* The inner PlayingCard is itself a button; keep it inert so every click
+   lands on this wrapper (the wrapper is the sole click target). */
+.holdem-your-card-btn .playing-card {
+  pointer-events: none;
+}
+
+.holdem-your-card-btn--selected {
+  transform: translateY(-10px);
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}

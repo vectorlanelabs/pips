@@ -67,7 +67,7 @@ export function Landing({
         { title: 'Uno', note: '2–6 players', color: '#e11d2e', onClick: onPickUno },
         { title: 'Skip-Bo', note: '2–4 players', color: '#be185d', onClick: onPickSkipBo },
         { title: 'Blackjack', note: 'vs house, 2–6 players', color: '#ff5d73', onClick: onPickBlackjack },
-        { title: 'Texas Hold\'em', note: 'no-limit, 2–8 players', color: '#8b5cf6', onClick: onPickHoldem },
+        { title: 'Poker', note: 'no-limit, 2–8 players', color: '#8b5cf6', onClick: onPickHoldem },
         { title: 'Solitaire', note: '1 player', color: '#4d7c0f', onClick: onPickSolitaire },
       ],
     },
