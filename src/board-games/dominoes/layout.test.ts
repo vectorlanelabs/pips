@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { layoutBoard, scaleToFit, type LaidTile } from './layout.ts'
+import { layoutBoard, scaleToFit, paneHeightToFit, type LaidTile } from './layout.ts'
 import type { DominoArm, PlacedTile } from './state.ts'
 
 const emptyArms = (): Record<DominoArm, PlacedTile[]> => ({ right: [], left: [], up: [], down: [] })
@@ -339,5 +339,35 @@ describe('scaleToFit', () => {
       right: Array.from({ length: 1000 }, () => placed(5, 4)),
     })
     expect(scaleToFit(huger, 600, 600, 20)).toBe(0.35)
+  })
+})
+
+describe('paneHeightToFit', () => {
+  it('a realistic long-game layout keeps the width-driven scale instead of the fixed-pane crush', () => {
+    // Both arms of a 2-player game deep into the round: the right arm has bent
+    // up (a 14-unit vertical leg) and back left. In the old fixed 400px-ish
+    // pane this layout was height-bound and crushed toward the 0.35 floor;
+    // sized by paneHeightToFit, scaleToFit lands on the width-driven scale.
+    const layout = layoutBoard({ a: 6, b: 5 }, false, {
+      ...emptyArms(),
+      right: Array.from({ length: 12 }, () => placed(3, 2)),
+      left: Array.from({ length: 6 }, () => placed(4, 1)),
+    })
+    const paneW = 1100
+    const widthUnits = layout.maxX - layout.minX + 2
+    const widthScale = Math.min(1, paneW / (widthUnits * 40))
+    const paneH = paneHeightToFit(layout, paneW, 40)
+    expect(scaleToFit(layout, paneW, paneH, 40)).toBeCloseTo(widthScale, 2)
+    // and the width-driven scale is actually readable, not floor-crushed
+    expect(widthScale).toBeGreaterThan(0.7)
+    // sanity: the old fixed pane really was worse for this layout
+    expect(scaleToFit(layout, paneW, 400, 40)).toBeLessThan(widthScale)
+  })
+
+  it('a fresh board needs less height than the CSS minimum and gets clamped by the screen', () => {
+    const small = layoutBoard({ a: 6, b: 4 }, false, emptyArms())
+    // 2.8-unit half-spans → ~3.6 height units → 144px: far under the 280px CSS
+    // floor the screen clamps to, so early game keeps the familiar pane.
+    expect(paneHeightToFit(small, 1100, 40)).toBeLessThan(280)
   })
 })

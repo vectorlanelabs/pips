@@ -147,6 +147,10 @@
 
 /* ---- Board pane ---- */
 
+/* Height here is only the pre-measure fallback — once the pane's width is
+   known, DominoesTable sets an inline height sized to the chain's layout
+   (clamped 280px to 72vh), so long games grow the board instead of
+   shrinking the tiles. */
 .dm-board {
   position: relative;
   width: 100%;
@@ -155,6 +159,7 @@
   border-radius: 20px;
   border: 3px solid var(--ink);
   background: #dcdcf0;
+  transition: height 0.25s ease;
 }
 
 /* ---- Board tiles ---- */

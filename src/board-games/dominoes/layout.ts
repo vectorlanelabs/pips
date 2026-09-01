@@ -207,3 +207,15 @@ export function scaleToFit(layout: BoardLayout, paneW: number, paneH: number, un
   const scale = Math.min(1, paneW / (widthUnits * unitPx), paneH / (heightUnits * unitPx))
   return Math.max(0.35, scale)
 }
+
+// Pane height (px) that shows the layout at the scale the pane's WIDTH alone
+// allows (≤ 1). A fixed-height pane crushed long games toward the 0.35 scale
+// floor — the spiral's vertical legs make the layout taller than any fixed
+// pane — so the screen grows the pane to this height (within its own min/max)
+// and scaleToFit then lands on the width-driven scale instead.
+export function paneHeightToFit(layout: BoardLayout, paneW: number, unitPx: number): number {
+  const widthUnits = layout.maxX - layout.minX + 2
+  const heightUnits = layout.maxY - layout.minY + 2
+  const widthScale = Math.min(1, paneW / (widthUnits * unitPx))
+  return Math.ceil(heightUnits * unitPx * widthScale)
+}

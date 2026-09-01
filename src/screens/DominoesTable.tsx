@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DominoArm, DominoesPublicState, DominoTile } from '../board-games/dominoes/state'
 import { handHasLegalPlay, legalArms } from '../board-games/dominoes/state'
-import { layoutBoard, scaleToFit, type LaidTile } from '../board-games/dominoes/layout'
+import { layoutBoard, scaleToFit, paneHeightToFit, type LaidTile } from '../board-games/dominoes/layout'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro, type DealIntroCardBackProps } from '../components/DealIntro'
 import { Wordmark } from '../components/Wordmark'
@@ -277,6 +277,11 @@ export function DominoesTable({
   )
   const unit = scale * 40
   const boardReady = scale > 0
+  // Grow the pane with the layout instead of shrinking the tiles into a fixed
+  // short pane: tall enough for the width-driven scale, between the CSS
+  // fallback minimum and 72vh. Height depends only on pane WIDTH + layout, so
+  // the ResizeObserver feedback settles after one pass.
+  const boardHeight = paneSize.w > 0 ? `clamp(280px, ${paneHeightToFit(layout, paneSize.w, 40)}px, 72vh)` : undefined
   // Content-bounds midpoint: render everything offset by this so the board
   // centers itself as it grows (scaleToFit sizes by true bounds, so the
   // midpoint — not the origin — must sit at the pane center).
@@ -433,7 +438,7 @@ export function DominoesTable({
         </div>
 
         {/* Board */}
-        <div className="dm-board" ref={boardRef}>
+        <div className="dm-board" ref={boardRef} style={boardHeight !== undefined ? { height: boardHeight } : undefined}>
           {boardReady && (
             <>
               {layout.tiles.map((tile, i) => (
