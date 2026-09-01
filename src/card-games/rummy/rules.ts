@@ -5,7 +5,7 @@ import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, topCard, cardCount, createPlayerZone, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
-import { classifyMeld, hasMeldIncluding } from './melds.ts'
+import { classifyMeld, hasMeldIncluding, canJoinGroupUsing, hasAnyMeld } from './melds.ts'
 import { deadwood, playerContributedMeldValue } from './scoring.ts'
 import type { RummySession, RummyPublicState, RummyPrivateState, RummyAction, RummyPhase, RummyLayoff } from './state.ts'
 import { dealRound, fullMeldCards } from './state.ts'
@@ -26,7 +26,10 @@ function allMeldGroups(
 }
 
 // True iff the pending obligated card could still be used after this action: either some
-// subset of the remaining hand melds it, or it can be laid off onto some existing meld group.
+// subset of the remaining hand melds it, or it can be laid off onto some existing meld group
+// — including lay-offs that need OTHER hand cards to bridge (canJoinGroupUsing). Callers only
+// invoke this on states where the player has (or is right now laying) an own meld, so the
+// lay-off path is actually reachable.
 function obligationSatisfiable(
   obligatedCard: Card,
   remainingHand: Card[],
@@ -34,8 +37,9 @@ function obligationSatisfiable(
   layoffs: RummyLayoff[],
 ): boolean {
   if (hasMeldIncluding(remainingHand, obligatedCard.id)) return true
+  const bridgePool = remainingHand.filter((c) => c.id !== obligatedCard.id)
   for (const g of allMeldGroups(melds, layoffs)) {
-    if (classifyMeld([...g.cards, obligatedCard]).valid) return true
+    if (canJoinGroupUsing(g.cards, obligatedCard, bridgePool)) return true
   }
   return false
 }
@@ -251,8 +255,17 @@ function makeValidator(
         const resultingHandCards = [...myHand.cards, ...takenCards]
         const reachedCard = takenCards.find((c) => c.id === reachedCardId)!
         const meldableInHand = hasMeldIncluding(resultingHandCards, reachedCardId)
-        const layoffableOnTable = allMeldGroups(publicState.melds, publicState.layoffs)
-          .some((g) => classifyMeld([...g.cards, reachedCard]).valid)
+        // A lay-off may need OTHER cards from the resulting hand to bridge the reached card
+        // onto a group (7♦ fits a 9♦-10♦-J♦ run only with the 8♦ down too) — check joinability
+        // with the whole resulting hand as the bridge pool. But the lay-off path only counts
+        // if the player can actually reach a LAY_OFF this turn: they need an own meld already
+        // down, or one layable from the resulting hand. Without that gate they'd take on an
+        // obligation they can never discharge (LAY_OFF requires an own meld, DISCARD is
+        // blocked while obligated) and the game would freeze.
+        const bridgePool = resultingHandCards.filter((c) => c.id !== reachedCardId)
+        const canEverLayOff = (publicState.melds[playerId]?.length ?? 0) > 0 || hasAnyMeld(resultingHandCards)
+        const layoffableOnTable = canEverLayOff && allMeldGroups(publicState.melds, publicState.layoffs)
+          .some((g) => canJoinGroupUsing(g.cards, reachedCard, bridgePool))
         if (!meldableInHand && !layoffableOnTable) {
           return { ok: false, reason: 'that card cannot be melded, pick a different card or draw just the top card instead' }
         }

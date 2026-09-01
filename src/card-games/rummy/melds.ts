@@ -71,6 +71,59 @@ export function isAceHighRun(cards: Card[]): boolean {
   return isConsecutive(valuesHigh)
 }
 
+// True iff `required` can be added to an existing table group, possibly bridged by other
+// cards from `pool` laid off first or alongside it — e.g. a reached 7♦ fits a 9♦-10♦-J♦ run
+// only once the 8♦ from hand goes down too. Grows the group one card at a time, which is a
+// COMPLETE search for both meld shapes: any multi-card run extension can be ordered from the
+// group's ends inward, and set additions are independent of each other. Returns true the
+// moment `required` itself fits.
+export function canJoinGroupUsing(groupCards: Card[], required: Card, pool: Card[]): boolean {
+  let group = groupCards
+  let candidates = [required, ...pool]
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const c of candidates) {
+      if (classifyMeld([...group, c]).valid) {
+        if (c.id === required.id) return true
+        group = [...group, c]
+        candidates = candidates.filter((x) => x.id !== c.id)
+        grew = true
+      }
+    }
+  }
+  return false
+}
+
+// True iff any 3+ subset of `cards` forms a valid meld. Direct shape checks (rank groups for
+// sets, per-suit consecutive-value scan for runs) rather than a subset enumeration — this runs
+// on reach-in validation where the resulting hand can be 20+ cards.
+export function hasAnyMeld(cards: Card[]): boolean {
+  const suitsByRank = new Map<string, Set<string>>()
+  for (const c of cards) {
+    const suits = suitsByRank.get(c.rank) ?? new Set<string>()
+    suits.add(c.suit)
+    suitsByRank.set(c.rank, suits)
+    if (suits.size >= 3) return true
+  }
+  const valuesBySuit = new Map<string, Set<number>>()
+  for (const c of cards) {
+    const values = valuesBySuit.get(c.suit) ?? new Set<number>()
+    // An Ace occupies either end of a run, never both at once — but for detecting SOME
+    // 3-consecutive window, registering both values is safe: any window it completes uses
+    // it at exactly one end.
+    values.add(rankValue(c.rank))
+    if (c.rank === 'A') values.add(rankValueAceHigh(c.rank))
+    valuesBySuit.set(c.suit, values)
+  }
+  for (const values of valuesBySuit.values()) {
+    for (const v of values) {
+      if (values.has(v + 1) && values.has(v + 2)) return true
+    }
+  }
+  return false
+}
+
 // True iff some 3+ subset of `cards` that includes `requiredId` forms a valid meld
 // (set or run) per classifyMeld. Used to validate a discard-pile reach-in: the
 // obligated card must actually be usable, or the player would be stuck forever.

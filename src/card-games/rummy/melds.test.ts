@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyMeld, isAceHighRun } from './melds.ts'
+import { classifyMeld, isAceHighRun, canJoinGroupUsing, hasAnyMeld } from './melds.ts'
 import type { Card } from '../../card-engine/cards.ts'
 
 function card(id: string, suit: Card['suit'], rank: Card['rank']): Card {
@@ -222,5 +222,62 @@ describe('isAceHighRun', () => {
     const ranks: Card['rank'][] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
     const meld = ranks.map((rank, i) => card(`c${i}`, 'spades', rank))
     expect(isAceHighRun(meld)).toBe(false)
+  })
+})
+
+describe('canJoinGroupUsing', () => {
+  const run9toJ = [card('d9', 'diamonds', '9'), card('d10', 'diamonds', '10'), card('dJ', 'diamonds', 'J')]
+
+  it('bridged run extension: 7♦ joins 9-10-J♦ when the 8♦ is in the pool', () => {
+    const seven = card('d7', 'diamonds', '7')
+    expect(canJoinGroupUsing(run9toJ, seven, [card('d8', 'diamonds', '8')])).toBe(true)
+  })
+
+  it('no bridge available: 7♦ cannot join 9-10-J♦ with an unrelated pool', () => {
+    const seven = card('d7', 'diamonds', '7')
+    expect(canJoinGroupUsing(run9toJ, seven, [card('c8', 'clubs', '8'), card('dQ', 'diamonds', 'Q')])).toBe(false)
+  })
+
+  it('direct single-card extension still works with an empty pool', () => {
+    expect(canJoinGroupUsing(run9toJ, card('dQ', 'diamonds', 'Q'), [])).toBe(true)
+    expect(canJoinGroupUsing(run9toJ, card('d8', 'diamonds', '8'), [])).toBe(true)
+  })
+
+  it('two-card bridge: 6♦ joins 9-10-J♦ via 7♦ and 8♦ from the pool', () => {
+    const six = card('d6', 'diamonds', '6')
+    expect(canJoinGroupUsing(run9toJ, six, [card('d8', 'diamonds', '8'), card('d7', 'diamonds', '7')])).toBe(true)
+  })
+
+  it('ace-high bridge: A♦ joins 10-J-Q♦ via the K♦', () => {
+    const group = [card('d10', 'diamonds', '10'), card('dJ', 'diamonds', 'J'), card('dQ', 'diamonds', 'Q')]
+    expect(canJoinGroupUsing(group, card('dA', 'diamonds', 'A'), [card('dK', 'diamonds', 'K')])).toBe(true)
+  })
+
+  it('set extension: fourth suit joins a 3-card set, wrong rank does not', () => {
+    const set = [card('c4', 'clubs', '4'), card('d4', 'diamonds', '4'), card('h4', 'hearts', '4')]
+    expect(canJoinGroupUsing(set, card('s4', 'spades', '4'), [])).toBe(true)
+    expect(canJoinGroupUsing(set, card('s5', 'spades', '5'), [card('c5', 'clubs', '5')])).toBe(false)
+  })
+})
+
+describe('hasAnyMeld', () => {
+  it('finds a set among scattered cards', () => {
+    expect(hasAnyMeld([
+      card('c7', 'clubs', '7'), card('dK', 'diamonds', 'K'), card('h7', 'hearts', '7'),
+      card('s2', 'spades', '2'), card('s7', 'spades', '7'),
+    ])).toBe(true)
+  })
+
+  it('finds an ace-low and an ace-high run', () => {
+    expect(hasAnyMeld([card('cA', 'clubs', 'A'), card('c2', 'clubs', '2'), card('c3', 'clubs', '3')])).toBe(true)
+    expect(hasAnyMeld([card('sQ', 'spades', 'Q'), card('sK', 'spades', 'K'), card('sA', 'spades', 'A')])).toBe(true)
+  })
+
+  it('rejects hands with only pairs and broken runs', () => {
+    expect(hasAnyMeld([
+      card('c7', 'clubs', '7'), card('d7', 'diamonds', '7'),
+      card('h5', 'hearts', '5'), card('h6', 'hearts', '6'), card('h8', 'hearts', '8'),
+      card('sK', 'spades', 'K'), card('sA', 'spades', 'A'), card('s2', 'spades', '2'),
+    ])).toBe(false)
   })
 })

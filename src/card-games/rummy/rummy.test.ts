@@ -2071,3 +2071,139 @@ describe('Rummy integration harness', () => {
     }
   })
 })
+
+// ── Regression: bridged reach-in (play-test report) ────────────────────────────
+// Live game: opponent held 8♦ + Q♦, our meld 9♦-10♦-J♦ was on the table, and the 7♦
+// sat deep in the discard pile. Taking the 7♦ is legal — lay the 8♦ off onto the run
+// and the 7♦ then fits — but the reach-in pre-check only tested the reached card
+// ALONE against each group, so it rejected the take.
+describe('bridged reach-in lay-offs', () => {
+  // Deck ids: clubs c0-c12 (A..K), diamonds c13-c25, hearts c26-c38, spades c39-c51.
+  const SEVEN_D = 'c19', EIGHT_D = 'c20', NINE_D = 'c21', TEN_D = 'c22', JACK_D = 'c23', QUEEN_D = 'c24'
+
+  function bridgedSetup(opts: { p2Melds: boolean }) {
+    const deck = createStandardDeck()
+    const cardsFor = (ids: string[]) => ids.map((id) => deck.find((c) => c.id === id)!)
+    // p1's meld on the table: 9♦-10♦-J♦
+    const p1MeldZone = addCards(createHand('p1'), cardsFor([NINE_D, TEN_D, JACK_D]))
+    // p2's own meld (A♠-2♠-3♠) so LAY_OFF is reachable, matching the live game
+    const p2MeldZone = addCards(createHand('p2'), cardsFor(['c39', 'c40', 'c41']))
+    // Discard bottom→top: 7♦, 6♥, 2♣, 8♠ — reaching index 0 takes all four
+    const discardCards = [SEVEN_D, 'c31', 'c1', 'c46']
+    // p2 hand: 8♦ (the bridge), Q♦, and junk that melds with nothing taken
+    const p2Cards = [EIGHT_D, QUEEN_D, 'c12', 'c30', 'c43']
+    const p1Cards = ['c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8']
+    const meldIds = [NINE_D, TEN_D, JACK_D, 'c39', 'c40', 'c41']
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards, ...meldIds])
+    const stockCards = deck.map((c) => c.id).filter((id) => !used.has(id))
+    return buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+      melds: { p1: [p1MeldZone], p2: opts.p2Melds ? [p2MeldZone] : [] },
+    })
+  }
+
+  it('allows reaching for a card that only fits a group via a bridge card from hand', () => {
+    const rummy = bridgedSetup({ p2Melds: true })
+    const drawn = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 0 })
+    expect(drawn.outcome.ok).toBe(true)
+    expect(drawn.rummy.session.publicState.obligatedCardId).toBe(SEVEN_D)
+
+    // 8♦ + 7♦ laid off together onto 9-10-J♦ discharges the obligation
+    const laid = applyRummyAction(drawn.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: [EIGHT_D, SEVEN_D] })
+    expect(laid.outcome.ok).toBe(true)
+    expect(laid.rummy.session.publicState.obligatedCardId).toBeNull()
+
+    // Q♦ then extends the same group (7-8-9-10-J-Q), and the turn can end normally
+    const queen = applyRummyAction(laid.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: [QUEEN_D] })
+    expect(queen.outcome.ok).toBe(true)
+    const done = applyRummyAction(queen.rummy, 'p2', { type: 'DISCARD_CARD', cardId: 'c12' })
+    expect(done.outcome.ok).toBe(true)
+  })
+
+  it('obligation guard sees bridged lay-offs: an unrelated lay-off is not wrongly blocked', () => {
+    const rummy = bridgedSetup({ p2Melds: true })
+    const drawn = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 0 })
+    expect(drawn.outcome.ok).toBe(true)
+
+    // Laying off ONLY the Q♦ first (group becomes 9-10-J-Q) keeps the 7♦ dischargeable
+    // via the 8♦ bridge — the old single-card obligation check wrongly rejected this.
+    const queen = applyRummyAction(drawn.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: [QUEEN_D] })
+    expect(queen.outcome.ok).toBe(true)
+    const laid = applyRummyAction(queen.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: [EIGHT_D, SEVEN_D] })
+    expect(laid.outcome.ok).toBe(true)
+    expect(laid.rummy.session.publicState.obligatedCardId).toBeNull()
+  })
+
+  it('rejects a lay-off-only reach when the player has no own meld and cannot lay one down', () => {
+    // Without an own meld (and none formable from the resulting hand), LAY_OFF is
+    // unreachable all turn — taking on the obligation would freeze the game, since
+    // DISCARD stays blocked while obligated.
+    const rummy = bridgedSetup({ p2Melds: false })
+    const result = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 0 })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('cannot be melded')
+  })
+
+  it('lay-off-only reach with no own meld is allowed when the resulting hand can lay a meld down', () => {
+    // Same as above, but p2's hand also holds 5♣-6♣-7♣ — they can lay that down first,
+    // which unlocks LAY_OFF for the bridged 7♦.
+    const deck = createStandardDeck()
+    const cardsFor = (ids: string[]) => ids.map((id) => deck.find((c) => c.id === id)!)
+    const p1MeldZone = addCards(createHand('p1'), cardsFor([NINE_D, TEN_D, JACK_D]))
+    const discardCards = [SEVEN_D, 'c31', 'c1', 'c46']
+    const p2Cards = [EIGHT_D, QUEEN_D, 'c4', 'c5', 'c6']
+    const p1Cards = ['c2', 'c3', 'c9', 'c10', 'c12', 'c30', 'c43']
+    const meldIds = [NINE_D, TEN_D, JACK_D]
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards, ...meldIds])
+    const stockCards = deck.map((c) => c.id).filter((id) => !used.has(id))
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+    const drawn = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 0 })
+    expect(drawn.outcome.ok).toBe(true)
+
+    const meld = applyRummyAction(drawn.rummy, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c4', 'c5', 'c6'] })
+    expect(meld.outcome.ok).toBe(true)
+    const laid = applyRummyAction(meld.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: [EIGHT_D, SEVEN_D] })
+    expect(laid.outcome.ok).toBe(true)
+    expect(laid.rummy.session.publicState.obligatedCardId).toBeNull()
+  })
+
+  it('rejects a single-card-layoffable reach when the player can never lay off (freeze closure)', () => {
+    // Q♦ fits 9-10-J♦ directly, but the reacher has no own meld and no meld formable —
+    // the old check accepted this take and the game locked on the undischargeable
+    // obligation.
+    const deck = createStandardDeck()
+    const cardsFor = (ids: string[]) => ids.map((id) => deck.find((c) => c.id === id)!)
+    const p1MeldZone = addCards(createHand('p1'), cardsFor([NINE_D, TEN_D, JACK_D]))
+    const discardCards = [QUEEN_D, 'c31', 'c46']
+    const p2Cards = ['c12', 'c30', 'c43', 'c9', 'c37']
+    const p1Cards = ['c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8']
+    const meldIds = [NINE_D, TEN_D, JACK_D]
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards, ...meldIds])
+    const stockCards = deck.map((c) => c.id).filter((id) => !used.has(id))
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+    const result = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 0 })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('cannot be melded')
+  })
+})
