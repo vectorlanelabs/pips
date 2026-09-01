@@ -4812,3 +4812,25 @@ shipping each verified charter promptly.
   fix + full-tree re-grep; nit (omaha short-stack unit) fixed;
   conductShowdown catch-all nit acknowledged as pre-existing pattern.
 - **Continue?** Yes — M8 house-rules engine (deucesWild + ante).
+
+## Cycle 2 (Poker round 2) — 2026-09-01
+- **Shipped:** M8 house-rules engine (fd9c97f): Deuces Wild (bounded
+  enumeration + proven rule table + five-of-a-kind; oracle property
+  tests over ALL wild counts after review) and Ante (replaces blinds,
+  unopened opening street, button-relative order).
+- **Review (Sonnet) was the star:** BLOCKING find — everyone-short
+  ante posting empties the turn order and hangs the hand forever
+  (heads-up blinds share the hole; 5th latent freeze this charter
+  series has caught). Lead reproduced verbatim (order=[], 'not your
+  turn' forever) before the fix. Major: the w=3/w=4 rule table was the
+  least-tested riskiest path — oracle extended. Nits fixed (countRanks
+  8-11x -> 1x per eval; dead local). Minor deferred with tracking (bot
+  pre-river wild-blindness, strategy-quality only).
+- **Perf judgment logged:** omaha+deuces sweeps timed out at the
+  default test budget — diagnosed as the wilds x 60-combo product,
+  ~150ms per worst-case live bot decision (fine under 900ms pacing);
+  test budget raised rather than the engine contorted; w=2 enumeration
+  halved via unordered pairs.
+- **Verification (lead):** tsc/1814/build; hang repro before fix;
+  evaluator diff read line-by-line.
+- **Continue?** Yes — M9 (screens+wiring), then M10 live verification.

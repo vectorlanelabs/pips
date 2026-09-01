@@ -7,6 +7,13 @@ Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
 Branch `charter/poker-omaha-house-rules`.
 
 ### Done (this charter)
+- [cycle 2] M8 — house-rules engine (fd9c97f). Wilds evaluator with
+  oracle proofs, ante-replaces-blinds, sweeps per rule. Review found a
+  BLOCKING all-in-on-ante hang (lead-reproduced; fixed via the standard
+  closure machinery + regressions). 1814 tests.
+- FOLLOW-UP (deferred, tracked): bot pre-river flush-draw heuristics
+  ignore wilds — strategy quality only, never legality. Candidate for
+  a polish cycle or the next charter.
 - [cycle 1] M6+M7 — Omaha Hold'em (5fff56d). Exactly-2+3 evaluator with
   pinned gotcha tests; isDrawVariant refactor; TWO more latent holdem
   bot bugs found by sweeps/review (short-stack illegal raise in both
@@ -14,9 +21,8 @@ Branch `charter/poker-omaha-house-rules`.
   flop render live-verified. 1778 tests.
 
 ### Next up
-1. M8 — house-rules engine (deucesWild + ante).
-2. M9 — house-rules screens + wiring.
-3. M10 — live verification; wrap-up for owner play-test.
+1. M9 — house-rules screens + wiring.
+2. M10 — live verification; wrap-up for owner play-test.
 
 ## Charter: Poker variants (2026-08-31) — done (merged & pushed 2026-08-31)
 
@@ -24,6 +30,13 @@ Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 All six milestones complete; definition of done met; live-verified.
 
 ### Done (this charter)
+- [cycle 2] M8 — house-rules engine (fd9c97f). Wilds evaluator with
+  oracle proofs, ante-replaces-blinds, sweeps per rule. Review found a
+  BLOCKING all-in-on-ante hang (lead-reproduced; fixed via the standard
+  closure machinery + regressions). 1814 tests.
+- FOLLOW-UP (deferred, tracked): bot pre-river flush-draw heuristics
+  ignore wilds — strategy quality only, never legality. Candidate for
+  a polish cycle or the next charter.
 - [cycle 5] M4 — Battleship Mode dropdown (a3ebaab; lead removed the
   stale 'House rules' heading the implementer left). M5 — full live
   verification (a82d4e1): five-draw at max 6 seats end to end, bot draw
