@@ -121,7 +121,7 @@ import { BlackjackTable } from './screens/BlackjackTable'
 import { BlackjackRoom } from './screens/BlackjackRoom'
 
 // ---- Texas Hold'em (separate parallel session, per CHARTER.md resolution #7) ----
-import { createPokerGame, POKER_MAX_SEATS, POKER_MIN_SEATS, type PokerSession, type PokerPublicState, type PokerPrivateState, type PokerAction } from './card-games/poker/state'
+import { createPokerGame, POKER_MIN_SEATS, maxSeatsFor, handSizeFor, type PokerSession, type PokerPublicState, type PokerPrivateState, type PokerAction, type PokerVariant } from './card-games/poker/state'
 import { applyPokerAction, runPokerBotTurn } from './card-games/poker/rules'
 import { pokerBotStrategy } from './card-games/poker/bot'
 import { PokerTable } from './screens/PokerTable'
@@ -215,7 +215,7 @@ type BlackjackView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: BlackjackPublicState; names: Record<string, string> }
 type HoldemView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string; variant: PokerVariant }
   | { kind: 'game'; revision: number; publicState: PokerPublicState; privateState: PokerPrivateState; names: Record<string, string> }
 type ScrabbleView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; difficulty: BotDifficulty }
@@ -584,6 +584,7 @@ export default function App() {
   const [holdemNotice, setHoldemNotice] = useState<string | null>(null)
   const [holdemStarted, setHoldemStarted] = useState(false)
   const [holdemSeats, setHoldemSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [holdemVariant, setHoldemVariant] = useState<PokerVariant>('holdem')
 
   // ---- Solitaire ----
   const [solitaireOpen, setSolitaireOpen] = useState(false)
@@ -766,6 +767,7 @@ export default function App() {
   const holdemCardBackRef = useRef(savedCardBack())
   const holdemLastHandRef = useRef<number | null>(null)
   const holdemBotsHeldUntilRef = useRef(0)
+  const holdemVariantRef = useRef<PokerVariant>('holdem')
   const scrabbleSessionRef = useRef<ScrabbleSession | null>(null)
   const scrabbleHostRef = useRef<HostHandle<ScrabbleView> | null>(null)
   const scrabbleGuestRef = useRef<GuestHandle<ScrabbleAction> | null>(null)
@@ -1301,6 +1303,8 @@ export default function App() {
     holdemBotSeatsRef.current.clear()
     holdemBotCounterRef.current = 0
     holdemNamesRef.current = {}
+    holdemVariantRef.current = 'holdem'
+    setHoldemVariant('holdem')
     // Card back deliberately survives a reset — it's the host's saved preference.
     // Solitaire
     setSolitaireOpen(false)
@@ -1993,6 +1997,7 @@ export default function App() {
         kind: 'lobby',
         roster: holdemSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === holdemLocalPlayerIdRef.current })),
         cardBack: holdemCardBackRef.current,
+        variant: holdemVariantRef.current,
       }
       setHoldemView(view)
       holdemHostRef.current?.broadcast(view)
@@ -2002,7 +2007,7 @@ export default function App() {
     const handNumber = session.session.publicState.handNumber
     if (holdemLastHandRef.current !== handNumber) {
       holdemLastHandRef.current = handNumber
-      const totalFlights = session.session.publicState.seatOrder.length * 2
+      const totalFlights = session.session.publicState.seatOrder.length * handSizeFor(session.session.publicState.variant)
       holdemBotsHeldUntilRef.current = Date.now() + HOLDEM_BLIND_STAGE_MS + estimateDealIntroMs(totalFlights) + HOLDEM_DEAL_HOLD_BUFFER_MS
     }
     const hostSnap = deriveSnapshot(session.session, holdemLocalPlayerIdRef.current!)
@@ -2043,6 +2048,8 @@ export default function App() {
         holdemStartedRef.current = false
         setHoldemSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
         holdemSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+        setHoldemVariant('holdem')
+        holdemVariantRef.current = 'holdem'
         setHoldemNotice(null)
         holdemBroadcast()
       },
@@ -2051,7 +2058,7 @@ export default function App() {
           holdemHostRef.current?.reject(guestId, 'Game already in progress.')
           return
         }
-        if (holdemSeatsRef.current.length >= POKER_MAX_SEATS) {
+        if (holdemSeatsRef.current.length >= maxSeatsFor(holdemVariantRef.current)) {
           holdemHostRef.current?.reject(guestId, 'Table is full.')
           return
         }
@@ -2086,9 +2093,17 @@ export default function App() {
     })
   }
 
+  function selectHoldemVariant(v: PokerVariant) {
+    if (holdemRole !== 'host' || holdemStartedRef.current) return
+    if (holdemSeatsRef.current.length > maxSeatsFor(v)) return
+    holdemVariantRef.current = v
+    setHoldemVariant(v)
+    holdemBroadcast()
+  }
+
   function addHoldemHouseBot() {
     if (holdemRole !== 'host' || holdemStartedRef.current) return
-    if (holdemSeatsRef.current.length >= POKER_MAX_SEATS) return
+    if (holdemSeatsRef.current.length >= maxSeatsFor(holdemVariantRef.current)) return
     holdemBotCounterRef.current += 1
     const botId = `bot-${holdemBotCounterRef.current}`
     const botName = randomBotName(holdemSeatsRef.current.map((s) => s.name))
@@ -2101,10 +2116,10 @@ export default function App() {
   function holdemStart() {
     if (holdemRole !== 'host' || holdemStartedRef.current) return
     const seats = holdemSeatsRef.current
-    if (seats.length < POKER_MIN_SEATS || seats.length > POKER_MAX_SEATS) return
+    if (seats.length < POKER_MIN_SEATS || seats.length > maxSeatsFor(holdemVariantRef.current)) return
     const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    holdemSessionRef.current = createPokerGame(playerIds, seed, holdemCardBackRef.current)
+    holdemSessionRef.current = createPokerGame(playerIds, seed, holdemCardBackRef.current, holdemVariantRef.current)
     holdemNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     holdemStartedRef.current = true
     setHoldemStarted(true)
@@ -2134,10 +2149,15 @@ export default function App() {
       // we just gave up, the next retry would derive the identical action
       // from the identical state and be rejected again, forever, hanging
       // this bot's turn permanently. Fall back to FOLD, which is always
-      // legal whenever it's genuinely this seat's turn.
-      const foldResult = applyPokerAction(session, botId, { type: 'FOLD' })
-      if (!foldResult.outcome.ok) return
-      holdemSessionRef.current = foldResult.holdemSession
+      // legal whenever it's genuinely this seat's turn -- except during the
+      // draw round, where FOLD is rejected and stand-pat DRAW is the
+      // always-legal fallback instead.
+      const fallback: PokerAction = ps.turn.phase === 'draw'
+        ? { type: 'DRAW', discardIds: [] }   // stand pat -- always legal on your draw turn
+        : { type: 'FOLD' }
+      const fallbackResult = applyPokerAction(session, botId, fallback)
+      if (!fallbackResult.outcome.ok) return
+      holdemSessionRef.current = fallbackResult.holdemSession
       holdemBroadcast()
     }
   }
@@ -6468,6 +6488,8 @@ export default function App() {
         seats={roster}
         notice={holdemNotice ?? error}
         cardBack={viewCardBack}
+        variant={holdemRole === 'host' ? holdemVariant : (holdemView?.kind === 'lobby' ? holdemView.variant : 'holdem')}
+        onSelectVariant={holdemRole === 'host' ? selectHoldemVariant : undefined}
         onSelectCardBack={holdemSetCardBack}
         onAddHouseBot={addHoldemHouseBot}
         onStartGame={holdemStart}
@@ -6494,6 +6516,7 @@ export default function App() {
         onCall={() => holdemDispatch({ type: 'CALL' })}
         onBet={(amount) => holdemDispatch({ type: 'BET', amount })}
         onRaise={(amount) => holdemDispatch({ type: 'RAISE', amount })}
+        onDraw={(discardIds) => holdemDispatch({ type: 'DRAW', discardIds })}
         onStartNextHand={() => holdemDispatch({ type: 'START_NEXT_HAND' })}
         onLeaveTable={resetToEntry}
       />
