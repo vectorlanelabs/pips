@@ -4728,3 +4728,17 @@ shipping each verified charter promptly.
   overpromise note: same as-designed disposition.
 - **Continue?** Yes — M3 wiring, then the charter becomes playable and
   the pacing work becomes checkable.
+
+## Cycle 4 (Poker variants charter) — 2026-08-31
+- **Shipped:** M3 wiring. deepseek:flash one-pass, report matched diff
+  (3 sound judgment calls incl. removing the now-unused POKER_MAX_SEATS
+  import that would have failed noUnusedLocals).
+- **Verification (lead):** tsc/1757/build; full diff read; the deal-hold
+  fix is load-bearing (7-card deals would have outrun the bot hold).
+- **Review (Sonnet):** CLEAN with traced receipts — bot stand-pat
+  fallback legality (atomic drawnCounts+advanceTurn write), seat-cap
+  race impossibility (single-threaded host), guest pre-broadcast
+  variant default, hold arithmetic. Its per-draw pacing probe is
+  settled by design (no per-draw flight animation; sound cues are
+  local-player-only; M5 confirms feel at a full table).
+- **Continue?** Yes — M4 (Battleship dropdown migration), then M5 live.

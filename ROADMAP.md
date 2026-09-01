@@ -7,13 +7,14 @@ Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 
 ### Next up
-1. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
-   guest plumbing (spec 60c).
-2. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
-3. M5 — live verification at max seats per variant incl. bot pacing;
+1. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
+2. M5 — live verification at max seats per variant incl. bot pacing;
    wrap-up.
 
 ### Done (this charter)
+- [cycle 4] M3 — wiring (see git log). Variant through room flow,
+  variant-aware caps, deal-hold scales with hand size, draw-round bot
+  fallback. Review: clean with receipts.
 - [cycle 3] M2 — variant screens (3b3e193). Dropdown room, draw UI,
   sort toggle, variant overlay, Poker landing tile. Review: wiring
   findings rejected-as-designed (=M3); double-submit guard fixed.
