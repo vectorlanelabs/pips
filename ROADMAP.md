@@ -1,8 +1,20 @@
 # Roadmap
 
-Charter: Poker variants (5-Card Draw & 7-Card Draw) — see `CHARTER.md`.
+Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
 
-## Charter: Poker variants (2026-08-31) — done (unmerged, awaiting "push")
+## Charter: Poker round 2 (2026-09-01) — active
+
+Branch `charter/poker-omaha-house-rules`.
+
+### Next up
+1. M6 — Omaha engine (isDrawVariant audit, 4-card deal, exactly-2
+   evaluation, bot, sweeps).
+2. M7 — Omaha screens + wiring.
+3. M8 — house-rules engine (deucesWild + ante).
+4. M9 — house-rules screens + wiring.
+5. M10 — live verification; wrap-up for owner play-test.
+
+## Charter: Poker variants (2026-08-31) — done (merged & pushed 2026-08-31)
 
 Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 All six milestones complete; definition of done met; live-verified.
