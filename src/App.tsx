@@ -2046,7 +2046,7 @@ export default function App() {
 
   function startHoldemHost() {
     setError(null)
-    holdemHostRef.current = createHost<HoldemView, PokerAction>(() => `HE-${generateCode()}`, {
+    holdemHostRef.current = createHost<HoldemView, PokerAction>(() => `PK-${generateCode()}`, {
       onReady(code) {
         const hostId = peerIdForCode(code)
         setHoldemRole('host')
@@ -5592,7 +5592,8 @@ export default function App() {
           else if (code.startsWith('UN-')) startUnoGuest(code)
           else if (code.startsWith('SB-')) startSkipBoGuest(code)
           else if (code.startsWith('BK-')) startBlackjackGuest(code)
-          else if (code.startsWith('HE-')) startHoldemGuest(code)
+          // New poker codes are PK-; HE- still routes so old invite links keep working.
+          else if (code.startsWith('PK-') || code.startsWith('HE-')) startHoldemGuest(code)
           else if (code.startsWith('SCR-')) startScrabbleGuest(code)
           else startGuest(code)
         }}

@@ -132,64 +132,23 @@ export function PokerRoom({
             hostName={!isHost ? hostName : undefined}
           />
 
-          {isHost ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
-              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= maxSeats}>
-                Add house bot
-              </button>
-              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < POKER_MIN_SEATS || seats.length > maxSeats}>
-                Start game
-              </button>
-            </div>
-          ) : (
-            <p style={{ marginTop: 22, fontSize: 15, color: 'var(--muted-text)' }}>
-              Waiting for {hostName} to start…
-            </p>
-          )}
-          {seats.length < maxSeats && (
-            <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Two to {SEAT_COUNT_WORDS[variant]} seats. Bots can fill any of them.
-            </p>
-          )}
-        </div>
-
-        <div style={{ flex: '1 1 320px', maxWidth: 460 }}>
-          {onSelectVariant ? (
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Game</div>
-              <select
-                className="input select-chevron"
-                aria-label="Game variant"
-                value={variant}
-                onChange={(e) => onSelectVariant(e.target.value as PokerVariant)}
-              >
-                {Object.entries(POKER_VARIANT_LABELS).map(([key, label]) => (
-                  <option key={key} value={key} disabled={seats.length > maxSeatsFor(key as PokerVariant)}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
-                {VARIANT_DESCRIPTIONS[variant]}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  background: BRAND, color: '#fff', fontWeight: 700, fontSize: 15,
-                  padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
-                  marginBottom: 14,
-                }}
-              >
-                {POKER_VARIANT_LABELS[variant]}
-              </div>
-              <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
-                {VARIANT_DESCRIPTIONS[variant]}
-              </p>
-            </>
-          )}
+          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Game</div>
+          <select
+            className="input select-chevron"
+            aria-label="Game variant"
+            value={variant}
+            disabled={!onSelectVariant}
+            onChange={(e) => onSelectVariant?.(e.target.value as PokerVariant)}
+          >
+            {Object.entries(POKER_VARIANT_LABELS).map(([key, label]) => (
+              <option key={key} value={key} disabled={seats.length > maxSeatsFor(key as PokerVariant)}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--muted-text)' }}>
+            {VARIANT_DESCRIPTIONS[variant]}
+          </p>
 
           <div style={{ marginTop: 26 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>House rules</div>
@@ -214,6 +173,39 @@ export function PokerRoom({
                 )
               })}
             </div>
+          </div>
+
+          {isHost ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
+              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= maxSeats}>
+                Add house bot
+              </button>
+              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < POKER_MIN_SEATS || seats.length > maxSeats}>
+                Start game
+              </button>
+            </div>
+          ) : (
+            <p style={{ marginTop: 22, fontSize: 15, color: 'var(--muted-text)' }}>
+              Waiting for {hostName} to start…
+            </p>
+          )}
+          {seats.length < maxSeats && (
+            <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
+              Two to {SEAT_COUNT_WORDS[variant]} seats. Bots can fill any of them.
+            </p>
+          )}
+        </div>
+
+        <div style={{ flex: '1 1 320px', maxWidth: 460 }}>
+          <div
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: BRAND, color: '#fff', fontWeight: 700, fontSize: 15,
+              padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
+              marginBottom: 14,
+            }}
+          >
+            {POKER_VARIANT_LABELS[variant]}
           </div>
 
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
