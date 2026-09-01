@@ -9,12 +9,12 @@ Branch `charter/poker-variants`. Plan: `specs/60-poker-draw-variants.md`.
 ### Next up
 1. M1 — engine: variant + draw street cycle + DRAW action + bots
    (spec 60a).
-3. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
+2. M2 — screens: variant dropdown, draw UI, sort toggle, overlay,
    Landing tile (spec 60b).
-4. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
+3. M3 — wiring: App.tsx variant flow, bot draw pacing estimator,
    guest plumbing (spec 60c).
-5. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
-6. M5 — live verification at max seats per variant incl. bot pacing;
+4. M4 — BattleshipRoom → Solitaire dropdown (convention migration).
+5. M5 — live verification at max seats per variant incl. bot pacing;
    wrap-up.
 
 ### Done (this charter)
