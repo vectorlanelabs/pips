@@ -6,7 +6,7 @@ import { createTurnState } from '../../engine/turn-engine.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { createRng } from '../../engine/rng.ts'
 
-export type PokerVariant = 'holdem' | 'five-draw' | 'seven-draw'
+export type PokerVariant = 'holdem' | 'omaha' | 'five-draw' | 'seven-draw'
 
 export type PokerStreet =
   | 'preflop'
@@ -20,7 +20,7 @@ export type PokerStreet =
   | 'handOver'
 
 export interface PokerPlayerHandState {
-  cards: Card[] // always the variant's hand size once dealt this hand (2 holdem / 5 five-draw / 7 seven-draw), [] before dealt / after fold+reveal-not-needed
+  cards: Card[] // always the variant's hand size once dealt this hand (2 holdem / 4 omaha / 5 five-draw / 7 seven-draw), [] before dealt / after fold+reveal-not-needed
   folded: boolean
   allIn: boolean
   totalContributedThisHand: number // across all streets, for side-pot math
@@ -84,16 +84,26 @@ const STARTING_CHIPS = 1000
 // Number of private cards dealt to each seat at the start of a hand
 export function handSizeFor(variant: PokerVariant): number {
   if (variant === 'holdem') return 2
+  if (variant === 'omaha') return 4
   if (variant === 'five-draw') return 5
   return 7
 }
 
-// Max seats a variant supports. POKER_MAX_SEATS stays 8 for holdem; draw
-// variants cap lower so a full table of max draws can never exhaust the deck.
+// Max seats a variant supports. POKER_MAX_SEATS stays 8 for holdem and omaha
+// (8x4 hole cards + 5 board = 37 <= 52); draw variants cap lower so a full
+// table of max draws can never exhaust the deck.
 export function maxSeatsFor(variant: PokerVariant): number {
-  if (variant === 'holdem') return 8
+  if (variant === 'holdem' || variant === 'omaha') return 8
   if (variant === 'five-draw') return 6
   return 5
+}
+
+// Draw variants have the firstBet/draw/secondBet cycle; holdem and omaha
+// share the community-board cycle. Every "which family?" check goes through
+// this — never compare against 'holdem' directly, that breaks the moment a
+// second board variant exists (it just did).
+export function isDrawVariant(variant: PokerVariant): boolean {
+  return variant === 'five-draw' || variant === 'seven-draw'
 }
 
 // Track which seats are still able to act in the current betting round
@@ -193,8 +203,8 @@ export function createPokerGame(
     privateStates[seatId].hand = dealtCards
   }
 
-  // Determine opening action order: starts left of BB (same for holdem preflop
-  // and draw firstBet)
+  // Determine opening action order: starts left of BB (same for holdem/omaha
+  // preflop and draw firstBet)
   let preflopOrder = [...activeSeats]
   const bbIndex = preflopOrder.indexOf(bigBlindSeat)
   if (bbIndex !== -1) {
@@ -203,7 +213,7 @@ export function createPokerGame(
   }
   const preflopActing = preflopOrder.filter((seatId) => !hands[seatId].folded && !hands[seatId].allIn)
 
-  const initialPhase: PokerStreet = variant === 'holdem' ? 'preflop' : 'firstBet'
+  const initialPhase: PokerStreet = isDrawVariant(variant) ? 'firstBet' : 'preflop'
   const turn = createTurnState<PokerStreet>(preflopActing, initialPhase)
 
   const actedThisStreet: Record<string, boolean> = {}

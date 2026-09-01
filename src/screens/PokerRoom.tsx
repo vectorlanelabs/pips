@@ -7,18 +7,21 @@ import { CardBackPicker } from '../components/CardBackPicker'
 
 export const POKER_VARIANT_LABELS: Record<PokerVariant, string> = {
   holdem: "Texas Hold'em",
+  omaha: 'Omaha',
   'five-draw': '5-Card Draw',
   'seven-draw': '7-Card Draw',
 }
 
 const VARIANT_DESCRIPTIONS: Record<PokerVariant, string> = {
   holdem: 'Community cards, no-limit betting. 2 to 8 players.',
+  omaha: 'Four hole cards, exactly two play. 2 to 8 players.',
   'five-draw': 'One draw, best five wins. 2 to 6 players.',
   'seven-draw': 'Seven dealt, best five play. 2 to 5 players.',
 }
 
 const SEAT_COUNT_WORDS: Record<PokerVariant, string> = {
   holdem: 'eight',
+  omaha: 'eight',
   'five-draw': 'six',
   'seven-draw': 'five',
 }

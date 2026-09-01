@@ -233,6 +233,37 @@ export function evaluateBestHand(holeCards: Card[], boardCards: Card[]): HandRan
   return bestHand
 }
 
+// Evaluate an Omaha hand: the best five-card hand formed from EXACTLY two of
+// the four hole cards and EXACTLY three of the five board cards (C(4,2) x
+// C(5,3) = 60 candidates, each scored by the same evaluateHand as holdem).
+// Mirrors evaluateBestHand's incomplete-board behavior so mid-street probes
+// (bot strategy, tests) fail the same way for both variants.
+export function evaluateOmahaHand(holeCards: Card[], boardCards: Card[]): HandRank {
+  if (holeCards.length !== 4) {
+    throw new Error('Omaha needs exactly 4 hole cards')
+  }
+  if (boardCards.length !== 5) {
+    throw new Error('Cannot evaluate hand until all board cards are known')
+  }
+
+  let bestHand: HandRank | null = null
+
+  for (const holeCombo of combinations(holeCards, 2)) {
+    for (const boardCombo of combinations(boardCards, 3)) {
+      const hand = evaluateHand([...holeCombo, ...boardCombo])
+      if (bestHand === null || compareRanks(hand, bestHand) > 0) {
+        bestHand = hand
+      }
+    }
+  }
+
+  if (bestHand === null) {
+    throw new Error('No valid hand found')
+  }
+
+  return bestHand
+}
+
 // Compare two hand ranks: returns 1 if a is better, -1 if b is better, 0 if tied
 export function compareRanks(a: HandRank, b: HandRank): number {
   if (a.category !== b.category) {

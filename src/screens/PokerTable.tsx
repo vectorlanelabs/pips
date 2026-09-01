@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Card } from '../card-engine/cards'
 import { RANKS } from '../card-engine/cards'
 import type { PokerPublicState, PokerPrivateState } from '../card-games/poker/state'
-import { POKER_BIG_BLIND, handSizeFor } from '../card-games/poker/state'
+import { POKER_BIG_BLIND, handSizeFor, isDrawVariant } from '../card-games/poker/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
 import { HoldemBoard } from '../components/HoldemBoard'
@@ -91,7 +91,7 @@ export function PokerTable({
   const [drawSubmitted, setDrawSubmitted] = useState(false)
 
   const variant = publicState.variant
-  const isDraw = variant !== 'holdem'
+  const isDraw = isDrawVariant(variant)
 
   const stagedForHandRef = useRef<number | null>(null)
   const noticeSeenRef = useRef(!!notice)

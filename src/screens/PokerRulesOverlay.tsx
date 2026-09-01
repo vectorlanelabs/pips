@@ -28,6 +28,13 @@ const DRAW_BULLETS: Record<'five-draw' | 'seven-draw', string[]> = {
   ],
 }
 
+const OMAHA_BULLETS = [
+  'Everyone is dealt 4 hole cards face down. 2 to 8 players.',
+  "Blinds and betting work exactly like Texas Hold'em: small blind 5, big blind 10, no-limit raises.",
+  "The board runs exactly like Hold'em: preflop, then a 3-card flop, then the turn, then the river.",
+  'Showdown: your best five-card hand uses EXACTLY two of your hole cards and EXACTLY three board cards.',
+]
+
 export function PokerRulesOverlay({
   variant = 'holdem',
   onClose,
@@ -35,7 +42,7 @@ export function PokerRulesOverlay({
   variant?: PokerVariant
   onClose: () => void
 }) {
-  const bullets = variant === 'holdem' ? HOLDEM_BULLETS : DRAW_BULLETS[variant]
+  const bullets = variant === 'holdem' ? HOLDEM_BULLETS : variant === 'omaha' ? OMAHA_BULLETS : DRAW_BULLETS[variant]
 
   return (
     <div className="overlay-backdrop" onClick={onClose}>

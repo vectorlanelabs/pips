@@ -4,7 +4,7 @@ import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, createTurnState, type TurnState } from '../../engine/turn-engine.ts'
 import { dealCards, shuffleDeck, createStandardDeck } from '../../card-engine/deck.ts'
-import { evaluateBestHand, compareRanks } from './hand-eval.ts'
+import { evaluateBestHand, compareRanks, evaluateOmahaHand } from './hand-eval.ts'
 import type {
   PokerSession,
   PokerPublicState,
@@ -19,6 +19,7 @@ import {
   handSizeFor,
   getActingSeats,
   getNextNonEliminatedSeat,
+  isDrawVariant,
 } from './state.ts'
 
 interface SidePot {
@@ -181,9 +182,10 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     drawnCounts[seatId] = null
   }
 
-  // Draw variants open with the first betting round; holdem opens preflop. The
-  // action order is identical in both cases (starts left of the big blind).
-  const initialPhase: PokerStreet = publicState.variant === 'holdem' ? 'preflop' : 'firstBet'
+  // Draw variants open with the first betting round; holdem and omaha open
+  // preflop. The action order is identical in every case (starts left of the
+  // big blind).
+  const initialPhase: PokerStreet = isDrawVariant(publicState.variant) ? 'firstBet' : 'preflop'
 
   newPublicState = {
     ...newPublicState,
@@ -210,9 +212,9 @@ function advanceStreet(publicState: PokerPublicState): PokerPublicState {
   let newPublicState = { ...publicState }
   let nextStreet: PokerStreet = 'flop'
 
-  // Variant-aware street map: holdem keeps preflop->flop->turn->river; draw
-  // variants run firstBet->draw->secondBet->showdown.
-  if (publicState.variant !== 'holdem') {
+  // Variant-aware street map: holdem and omaha keep preflop->flop->turn->river;
+  // draw variants run firstBet->draw->secondBet->showdown.
+  if (isDrawVariant(publicState.variant)) {
     if (publicState.turn.phase === 'firstBet') {
       nextStreet = 'draw'
     } else if (publicState.turn.phase === 'draw') {
@@ -886,9 +888,14 @@ function makeValidator(
     }
 
     if (action.type === 'DRAW') {
-      // Draw variants only.
-      if (publicState.variant === 'holdem') {
-        return { ok: false, reason: "draw actions are not part of Texas Hold'em" }
+      // Draw variants only. Holdem keeps its long-standing rejection message
+      // (draw.test.ts asserts it); omaha and any future board variant get the
+      // generic one.
+      if (!isDrawVariant(publicState.variant)) {
+        return {
+          ok: false,
+          reason: publicState.variant === 'holdem' ? "draw actions are not part of Texas Hold'em" : 'this poker variant has no draw round',
+        }
       }
       if (currentPhase !== 'draw') {
         return { ok: false, reason: 'not the draw round' }
@@ -1010,7 +1017,9 @@ function conductShowdown(
   const handEvals: Record<string, any> = {}
   for (const seatId of activePlayers) {
     try {
-      const hand = evaluateBestHand(privateStates[seatId].hand, publicState.board)
+      const hand = publicState.variant === 'omaha'
+        ? evaluateOmahaHand(privateStates[seatId].hand, publicState.board)
+        : evaluateBestHand(privateStates[seatId].hand, publicState.board)
       handEvals[seatId] = hand
     } catch (e) {
       // Should not happen if board is complete

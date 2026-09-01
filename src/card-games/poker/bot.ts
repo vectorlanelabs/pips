@@ -1,8 +1,8 @@
 import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
-import { evaluateBestHand } from './hand-eval.ts'
+import { evaluateBestHand, evaluateOmahaHand } from './hand-eval.ts'
 import type { PokerPublicState, PokerPrivateState, PokerAction } from './state.ts'
-import { POKER_BIG_BLIND } from './state.ts'
+import { POKER_BIG_BLIND, isDrawVariant } from './state.ts'
 
 // Preflop hand strength categories
 function getPreflopStrength(holeCards: { rank: string }[]): 'premium' | 'good' | 'weak' {
@@ -52,6 +52,67 @@ function getPostflopHandStrength(holeCards: Array<{ rank: string; suit: string; 
     // Board not complete yet
     return 'weak'
   }
+}
+
+// ---- Omaha strategy ----
+
+// Omaha preflop hand strength (4 hole cards). Deterministic categories:
+// 'premium' = a pair of Jacks or better, or two distinct pairs; 'good' = any
+// pair, at most two suits in the hole, or an Ace and a King; else 'weak'.
+// Exported for the policy unit tests, same as drawDiscardAction below.
+export function getOmahaPreflopStrength(holeCards: Card[]): 'premium' | 'good' | 'weak' {
+  if (holeCards.length !== 4) return 'weak'
+
+  const rankCounts: Record<string, number> = {}
+  const suits = new Set<string>()
+  for (const c of holeCards) {
+    rankCounts[c.rank] = (rankCounts[c.rank] ?? 0) + 1
+    suits.add(c.suit)
+  }
+  const pairRanks = Object.entries(rankCounts)
+    .filter(([, count]) => count >= 2)
+    .map(([rank]) => rank)
+
+  // Premium: a pair of Jacks or better, or two distinct pairs.
+  const hasPremiumPair = pairRanks.some((rank) => rank === 'J' || rank === 'Q' || rank === 'K' || rank === 'A')
+  if (hasPremiumPair || pairRanks.length >= 2) return 'premium'
+
+  // Good: any pair, at most two suits, or an Ace and a King.
+  const hasAK = holeCards.some((c) => c.rank === 'A') && holeCards.some((c) => c.rank === 'K')
+  if (pairRanks.length > 0 || suits.size <= 2 || hasAK) return 'good'
+
+  return 'weak'
+}
+
+// Omaha postflop hand strength. A complete board is judged by
+// evaluateOmahaHand (exactly two hole cards + exactly three board cards):
+// any pair or better is 'strong'. On a 3-4 card board there is no made hand
+// to evaluate, so the only 'medium' signal is an Omaha-legal flush draw -- a
+// same-suit PAIR of hole cards whose suit also appears on 2+ board cards.
+// The exactly-two-hole rule means a lone suited hole card is NOT a draw.
+// Exported for the policy unit tests, same as drawDiscardAction below.
+export function getOmahaPostflopStrength(holeCards: Card[], boardCards: Card[]): 'strong' | 'medium' | 'weak' {
+  if (boardCards.length === 5) {
+    const hand = evaluateOmahaHand(holeCards, boardCards)
+    return hand.category >= 1 ? 'strong' : 'weak'
+  }
+
+  if (boardCards.length === 3 || boardCards.length === 4) {
+    const boardSuits: Record<string, number> = {}
+    for (const c of boardCards) boardSuits[c.suit] = (boardSuits[c.suit] ?? 0) + 1
+
+    const holeSuits: Record<string, number> = {}
+    for (const c of holeCards) holeSuits[c.suit] = (holeSuits[c.suit] ?? 0) + 1
+
+    for (const [suit, count] of Object.entries(holeSuits)) {
+      if (count >= 2 && (boardSuits[suit] ?? 0) >= 2) {
+        return 'medium'
+      }
+    }
+    return 'weak'
+  }
+
+  return 'weak'
 }
 
 // ---- Draw variant strategy ----
@@ -202,14 +263,21 @@ function drawBettingAction(publicState: PokerPublicState, privateState: PokerPri
 export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, PokerAction> = (publicState, privateState, playerId) => {
   const playerHand = publicState.hands[playerId]
   const holeCards = privateState.hand
+  const currentStreet = publicState.turn.phase
+  const currentBet = publicState.currentBetThisStreet
+  const playerBetThisStreet = playerHand.betThisStreet
+  const playerChips = publicState.chips[playerId]
 
   // Draw variants branch FIRST. The draw round is a DRAW action -- never CHECK
   // here: a rejected action would hang the deterministic bot loop forever (same
   // rationale as the reRaiseEligible comment below). firstBet/secondBet use
   // draw-variant betting over the whole private hand. Draw hands never fall
   // through to the holdem logic (whose holeCards.length !== 2 guard would
-  // otherwise return CHECK for every 5/7-card hand).
-  if (publicState.variant !== 'holdem') {
+  // otherwise return CHECK for every 5/7-card hand). The isDrawVariant gate --
+  // not a '!== holdem' check -- keeps the second board variant (omaha) out of
+  // this branch: omaha's 4-card hands must never reach drawDiscardAction or
+  // drawBettingAction, both of which evaluate the whole private hand.
+  if (isDrawVariant(publicState.variant)) {
     if (publicState.turn.phase === 'draw') {
       return drawDiscardAction(holeCards)
     }
@@ -218,14 +286,106 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
     }
   }
 
-  if (holeCards.length !== 2) {
+  // Omaha branch BEFORE the holdem branches: 4 hole cards plus the
+  // exactly-two-hole/exactly-three-board rule mean the holdem strategy (which
+  // assumes 2 hole cards and evaluates over all 7 cards) must never see an
+  // Omaha hand. Preflop strength is deterministic from the four hole cards;
+  // postflop uses evaluateOmahaHand on a complete board and the Omaha-legal
+  // flush draw (a same-suit hole PAIR, never a lone suited card) on 3-4 card
+  // boards. The action tables below are the holdem ones verbatim -- same bet
+  // sizes, same raise math, same fold thresholds.
+  if (publicState.variant === 'omaha') {
+    // Preflop strategy
+    if (currentStreet === 'preflop') {
+      const strength = getOmahaPreflopStrength(holeCards)
+
+      if (currentBet === 0) {
+        // No bet yet, decide whether to bet or check
+        if (strength === 'premium') {
+          // Bet a small amount (2x BB) -- same as holdem preflop
+          const betAmount = Math.min(POKER_BIG_BLIND * 2, playerChips)
+          return { type: 'BET', amount: betAmount }
+        }
+        // Good and weak hands check
+        return { type: 'CHECK' }
+      } else {
+        // Facing a bet
+        const amountToCall = currentBet - playerBetThisStreet
+        if (amountToCall <= 0) {
+          return { type: 'CHECK' }
+        }
+
+        if (strength === 'premium' && publicState.reRaiseEligible[playerId] && playerChips + playerBetThisStreet > currentBet) {
+          // Raise by at least the legal minimum increment (not a flat BB -- a
+          // prior raise may have set a larger lastFullRaiseIncrement, and
+          // raising by less than that would be rejected by the validator).
+          // Only attempted when reRaiseEligible: a bot that already acted since
+          // the last full raise (only a short all-in has happened since) is not
+          // allowed to re-raise -- the validator would reject it every time,
+          // and since this strategy is deterministic, a caller that blindly
+          // retries a rejected action would retry the identical rejected
+          // action forever, permanently hanging the bot's turn. The
+          // playerChips + playerBetThisStreet > currentBet affordability guard
+          // (same as the drawBettingAction raise) stops a short stack from
+          // emitting a RAISE whose amount collapses to <= the current bet --
+          // the validator would reject it, and a rejected deterministic
+          // action hangs the bot loop forever.
+          const minIncrement = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
+          const raiseAmount = Math.min(currentBet + minIncrement, playerChips + playerBetThisStreet)
+          return { type: 'RAISE', amount: raiseAmount }
+        } else if (strength === 'premium' || strength === 'good') {
+          // Call
+          return { type: 'CALL' }
+        } else {
+          // Fold (unless it's just the big blind to call)
+          if (amountToCall <= POKER_BIG_BLIND && currentBet <= POKER_BIG_BLIND) {
+            return { type: 'CALL' }
+          }
+          return { type: 'FOLD' }
+        }
+      }
+    }
+
+    // Postflop strategy (flop, turn, river)
+    if (currentStreet === 'flop' || currentStreet === 'turn' || currentStreet === 'river') {
+      const handStrength = getOmahaPostflopStrength(holeCards, publicState.board)
+
+      if (currentBet === 0) {
+        // No bet, decide to check or bet
+        if (handStrength === 'strong') {
+          // Bet
+          const betAmount = Math.min(POKER_BIG_BLIND, playerChips)
+          return { type: 'BET', amount: betAmount }
+        } else {
+          // Check
+          return { type: 'CHECK' }
+        }
+      } else {
+        // Facing a bet
+        const amountToCall = currentBet - playerBetThisStreet
+        if (amountToCall <= 0) {
+          return { type: 'CHECK' }
+        }
+
+        if (handStrength === 'strong') {
+          // Call (or raise with very strong hand)
+          return { type: 'CALL' }
+        } else if (handStrength === 'medium') {
+          // Call
+          return { type: 'CALL' }
+        } else {
+          // Fold
+          return { type: 'FOLD' }
+        }
+      }
+    }
+
     return { type: 'CHECK' }
   }
 
-  const currentStreet = publicState.turn.phase
-  const currentBet = publicState.currentBetThisStreet
-  const playerBetThisStreet = playerHand.betThisStreet
-  const playerChips = publicState.chips[playerId]
+  if (holeCards.length !== 2) {
+    return { type: 'CHECK' }
+  }
 
   // Preflop strategy
   if (currentStreet === 'preflop') {
@@ -251,7 +411,7 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
         return { type: 'CHECK' }
       }
 
-      if (strength === 'premium' && publicState.reRaiseEligible[playerId]) {
+      if (strength === 'premium' && publicState.reRaiseEligible[playerId] && playerChips + playerBetThisStreet > currentBet) {
         // Raise by at least the legal minimum increment (not a flat BB -- a
         // prior raise may have set a larger lastFullRaiseIncrement, and
         // raising by less than that would be rejected by the validator).
@@ -260,7 +420,10 @@ export const pokerBotStrategy: BotStrategy<PokerPublicState, PokerPrivateState, 
         // allowed to re-raise -- the validator would reject it every time,
         // and since this strategy is deterministic, a caller that blindly
         // retries a rejected action would retry the identical rejected
-        // action forever, permanently hanging the bot's turn.
+        // action forever, permanently hanging the bot's turn. Affordability guard
+        // (same as the omaha and draw branches): only RAISE when playerChips +
+        // playerBetThisStreet > currentBet, else the amount collapses to <=
+        // currentBet and the validator rejects it.
         const minIncrement = Math.max(publicState.lastFullRaiseIncrement, POKER_BIG_BLIND)
         const raiseAmount = Math.min(currentBet + minIncrement, playerChips + playerBetThisStreet)
         return { type: 'RAISE', amount: raiseAmount }

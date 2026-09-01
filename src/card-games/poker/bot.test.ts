@@ -104,6 +104,29 @@ describe('holdem bot', () => {
   })
 })
 
+describe('holdem preflop short-stack guard', () => {
+  it('premium hand facing a bet beyond its stack calls (all-in), never raises', () => {
+    // Pocket aces -- preflop premium, and reRaiseEligible stays true, so the
+    // only thing that can stop a RAISE is the affordability guard.
+    const premiumHand = [card('a', 'A', 'clubs'), card('b', 'A', 'hearts')]
+
+    // Fresh heads-up holdem: p1 is the small blind, so chips[p1] = 995 and
+    // betThisStreet = 5 -> playerChips + playerBetThisStreet = 1000.
+    const game = createPokerGame(['p1', 'p2'], 42)
+    const pubState = {
+      ...game.session.publicState,
+      turn: { ...game.session.publicState.turn, phase: 'preflop' as const },
+      // A bet no one can cover: any RAISE a short stack could emit collapses
+      // to <= currentBet and the validator would reject it.
+      currentBetThisStreet: 1200,
+      reRaiseEligible: { ...game.session.publicState.reRaiseEligible, p1: true },
+    }
+
+    const action = pokerBotStrategy(pubState, { hand: premiumHand }, 'p1')
+    expect(action).toEqual({ type: 'CALL' })
+  })
+})
+
 describe('draw discard policy', () => {
   it('stands pat on a straight', () => {
     const hand = [
