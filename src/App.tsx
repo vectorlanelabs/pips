@@ -348,6 +348,20 @@ const BLACKJACK_DEAL_HOLD_BUFFER_MS = 700
 // -- see holdemBroadcast.
 const HOLDEM_BLIND_STAGE_MS = 900 * 2
 const HOLDEM_DEAL_HOLD_BUFFER_MS = 700
+// Poker was the last card game still pacing bots at bare BASE_MS (900ms) --
+// play-testing read it as rushed, the same complaint that moved Uno, Skip-Bo,
+// Rummy, and Phase 10 to a measured 1600ms card-game beat. A betting decision
+// is the whole point of watching a poker table, and a maxed 8-seat holdem game
+// can land up to 7 consecutive bot decisions between a human's own turns
+// (CLAUDE.md: judge pacing at a maxed-out table, not one bot).
+// Exported so a regression test can pin it against BASE_MS without mounting the app.
+export const POKER_ACTION_MS = 1600
+// Once every human still in the current hand has folded, the remaining
+// bot-vs-bot betting is dead time for the people watching -- race it to
+// showdown at a short beat (each action still visibly flips, it's not
+// instant). Checked per action, so a human dealt into the next hand restores
+// the full pace automatically. Exported for the same regression test.
+export const POKER_FASTFORWARD_MS = 350
 // Scrabble: when a bot is about to act on a still-challengeable placement it
 // didn't make (either to challenge it or, if it declines, to immediately play
 // its own word over it), a human elsewhere at the table needs real time to
@@ -2157,7 +2171,15 @@ export default function App() {
   async function runHoldemBot(botId: string, key: string) {
     while (!holdemStale(key)) {
       const holdRemaining = holdemBotsHeldUntilRef.current - Date.now()
-      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
+      // Full pace while any human is still in the hand; fast-forward the
+      // bot-vs-bot runout once every human seat has folded. A seat missing
+      // from hands (can't happen mid-hand, but cheap to be exact) counts as
+      // in-hand so the failure mode is "too slow", never "too fast".
+      const hands = holdemSessionRef.current!.session.publicState.hands
+      const humanStillInHand = holdemSeatsRef.current.some(
+        (s) => !holdemBotSeatsRef.current.has(s.playerId) && !(hands[s.playerId]?.folded ?? false),
+      )
+      await wait(holdRemaining > 0 ? holdRemaining : (humanStillInHand ? POKER_ACTION_MS : POKER_FASTFORWARD_MS))
       if (holdemStale(key)) return
       if (Date.now() < holdemBotsHeldUntilRef.current) continue
       const session = holdemSessionRef.current!

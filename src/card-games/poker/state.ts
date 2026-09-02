@@ -206,7 +206,7 @@ export function createPokerGame(
   // a street bet, so betThisStreet stays 0 and the opening street starts
   // unopened (currentBetThisStreet stays 0). A seat whose whole stack is the
   // ante goes all-in. Blind games keep the small/big blind flow untouched.
-  let bbAmount = 0
+  let openingBet = 0
   let pot = 0
   if (houseRules.ante) {
     for (const seatId of activeSeats) {
@@ -218,7 +218,11 @@ export function createPokerGame(
     }
   } else {
     const sbAmount = Math.min(POKER_SMALL_BLIND, chips[smallBlindSeat])
-    bbAmount = Math.min(POKER_BIG_BLIND, chips[bigBlindSeat])
+    const bbAmount = Math.min(POKER_BIG_BLIND, chips[bigBlindSeat])
+    // Largest blind posted, same as startNewHand in rules.ts (see the comment
+    // there): at creation every stack covers both blinds, but the two posting
+    // sites must not drift apart.
+    openingBet = Math.max(sbAmount, bbAmount)
     chips[smallBlindSeat] -= sbAmount
     chips[bigBlindSeat] -= bbAmount
     hands[smallBlindSeat].betThisStreet = sbAmount
@@ -284,7 +288,7 @@ export function createPokerGame(
     hands,
     board: [],
     pot,
-    currentBetThisStreet: bbAmount,
+    currentBetThisStreet: openingBet,
     lastFullRaiseIncrement: POKER_BIG_BLIND,
     handNumber: 1,
     handOver: false,

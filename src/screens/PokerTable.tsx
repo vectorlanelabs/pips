@@ -559,9 +559,52 @@ export function PokerTable({
                 </div>
               )}
 
-              <div className="holdem-pot">
-                <span className="holdem-pot-label">Pot</span>
-                <span className="holdem-pot-value">{publicState.pot}</span>
+              {/* Right side of the felt: the hand's outcome lives here, next
+                  to the pot it settles -- not down in the player area. */}
+              <div className="holdem-centre-right">
+                {publicState.handOver && !handResultsVisibleEffective && (
+                  <div className="holdem-centre-status">
+                    {contestingOpponents.length > 0 ? 'Revealing hands…' : 'Hand over…'}
+                  </div>
+                )}
+                {publicState.handOver && handResultsVisibleEffective && publicState.handResults && (
+                  <div className="holdem-hand-results">
+                    {publicState.gameOverWinnerId ? (
+                      <div className="holdem-game-over">
+                        {publicState.gameOverWinnerId === localPlayerId ? 'You win' : `${names[publicState.gameOverWinnerId] ?? 'Someone'} wins`} the table!
+                      </div>
+                    ) : (
+                      <div>
+                        {publicState.handResults.potBreakdown.map((breakdown, i) => {
+                          const winners = breakdown.winnerIds
+                          const winnerNames = winners.map((id) => id === localPlayerId ? 'You' : names[id] ?? id)
+                          const amountPerWinner = Math.floor(breakdown.amount / winners.length)
+
+                          if (winners.length === 1) {
+                            const winnerId = winners[0]
+                            const isLocalWinner = winnerId === localPlayerId
+                            const winnerName = isLocalWinner ? 'You' : names[winnerId] ?? winnerId
+                            return (
+                              <div key={i}>
+                                {winnerName} {isLocalWinner ? 'win' : 'wins'} {breakdown.amount}
+                              </div>
+                            )
+                          } else {
+                            return (
+                              <div key={i}>
+                                {winnerNames.join(' and ')} split the pot, {amountPerWinner} each
+                              </div>
+                            )
+                          }
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="holdem-pot">
+                  <span className="holdem-pot-label">Pot</span>
+                  <span className="holdem-pot-value">{publicState.pot}</span>
+                </div>
               </div>
             </div>
 
@@ -765,49 +808,11 @@ export function PokerTable({
                 </div>
               )}
 
-              {/* Showdown reveal in progress: cards are flipping (or, on a
-                  fold-out win, a short beat) before the result appears. */}
-              {publicState.handOver && !handResultsVisibleEffective && (
-                <div className="holdem-action-section">
-                  {contestingOpponents.length > 0 ? 'Revealing hands…' : 'Hand over…'}
-                </div>
-              )}
-
-              {/* Hand-over banner */}
+              {/* Hand-over actions -- the winner statement itself renders up
+                  in the centre band beside the pot; only the buttons live in
+                  this column. */}
               {publicState.handOver && handResultsVisibleEffective && publicState.handResults && (
                 <div className="holdem-action-section">
-                  <div className="holdem-hand-results">
-                    {publicState.gameOverWinnerId ? (
-                      <div className="holdem-game-over">
-                        {publicState.gameOverWinnerId === localPlayerId ? 'You win' : `${names[publicState.gameOverWinnerId] ?? 'Someone'} wins`} the table!
-                      </div>
-                    ) : (
-                      <div>
-                        {publicState.handResults.potBreakdown.map((breakdown, i) => {
-                          const winners = breakdown.winnerIds
-                          const winnerNames = winners.map((id) => id === localPlayerId ? 'You' : names[id] ?? id)
-                          const amountPerWinner = Math.floor(breakdown.amount / winners.length)
-
-                          if (winners.length === 1) {
-                            const winnerId = winners[0]
-                            const isLocalWinner = winnerId === localPlayerId
-                            const winnerName = isLocalWinner ? 'You' : names[winnerId] ?? winnerId
-                            return (
-                              <div key={i}>
-                                {winnerName} {isLocalWinner ? 'win' : 'wins'} {breakdown.amount}
-                              </div>
-                            )
-                          } else {
-                            return (
-                              <div key={i}>
-                                {winnerNames.join(' and ')} split the pot, {amountPerWinner} each
-                              </div>
-                            )
-                          }
-                        })}
-                      </div>
-                    )}
-                  </div>
                   {/* Full-width stacked, not the same wrapping row the
                       Fold/Check/Call buttons use -- "Deal next hand" and
                       "Leave table" are too wide to reliably sit side by

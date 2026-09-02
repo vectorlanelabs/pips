@@ -300,3 +300,120 @@ describe('draw betting street-size throttle', () => {
     expect(action).toEqual({ type: 'CALL' })
   })
 })
+
+// ── New-strategy policy tests (pacing/smarts play-test round) ──────────────────
+
+import { getPreflopStrength, getHoldemPostflopTier, getOmahaPostflopTier } from './bot.ts'
+
+describe('holdem preflop tiers', () => {
+  const hand = (r1: string, s1: string, r2: string, s2: string) => [card('a', r1, s1), card('b', r2, s2)]
+
+  it('premium: big pairs and AK/AQ', () => {
+    expect(getPreflopStrength(hand('A', 'clubs', 'A', 'hearts'))).toBe('premium')
+    expect(getPreflopStrength(hand('10', 'clubs', '10', 'hearts'))).toBe('premium')
+    expect(getPreflopStrength(hand('A', 'clubs', 'K', 'hearts'))).toBe('premium')
+    expect(getPreflopStrength(hand('A', 'clubs', 'Q', 'hearts'))).toBe('premium')
+  })
+
+  it('good: middle pairs, big aces, suited aces, KQ/KJ', () => {
+    expect(getPreflopStrength(hand('8', 'clubs', '8', 'hearts'))).toBe('good')
+    expect(getPreflopStrength(hand('A', 'clubs', '10', 'hearts'))).toBe('good')
+    expect(getPreflopStrength(hand('A', 'spades', '5', 'spades'))).toBe('good')
+    expect(getPreflopStrength(hand('K', 'clubs', 'Q', 'hearts'))).toBe('good')
+  })
+
+  it('playable: small pairs, broadway combos, suited connectors, suited kings', () => {
+    expect(getPreflopStrength(hand('3', 'clubs', '3', 'hearts'))).toBe('playable')
+    expect(getPreflopStrength(hand('Q', 'clubs', 'J', 'hearts'))).toBe('playable')
+    expect(getPreflopStrength(hand('7', 'spades', '6', 'spades'))).toBe('playable')
+    expect(getPreflopStrength(hand('K', 'spades', '4', 'spades'))).toBe('playable')
+  })
+
+  it('weak: unconnected offsuit junk', () => {
+    expect(getPreflopStrength(hand('7', 'clubs', '2', 'hearts'))).toBe('weak')
+    expect(getPreflopStrength(hand('A', 'clubs', '4', 'hearts'))).toBe('weak')
+    expect(getPreflopStrength(hand('J', 'clubs', '5', 'hearts'))).toBe('weak')
+  })
+})
+
+describe('holdem postflop tiers discount the board', () => {
+  it('a pair sitting openly on the board is air, not strength', () => {
+    // Old read: evaluateBestHand sees "pair" and calls it strong -- every bot
+    // at a paired board thought it had something.
+    const hole = [card('a', 'A', 'clubs'), card('b', '5', 'diamonds')]
+    const board = [card('x', 'K', 'spades'), card('y', 'K', 'hearts'), card('z', '7', 'clubs')]
+    expect(getHoldemPostflopTier(hole, board)).toBe('air')
+  })
+
+  it('a pair made with a hole card is value', () => {
+    const hole = [card('a', 'K', 'clubs'), card('b', '5', 'diamonds')]
+    const board = [card('x', 'K', 'spades'), card('y', '7', 'hearts'), card('z', '2', 'clubs')]
+    expect(getHoldemPostflopTier(hole, board)).toBe('value')
+  })
+
+  it('two pair using both hole cards is a monster', () => {
+    const hole = [card('a', 'K', 'clubs'), card('b', '7', 'diamonds')]
+    const board = [card('x', 'K', 'spades'), card('y', '7', 'hearts'), card('z', '2', 'clubs')]
+    expect(getHoldemPostflopTier(hole, board)).toBe('monster')
+  })
+
+  it('a flush draw using a hole card is a draw before the river', () => {
+    const hole = [card('a', 'A', 'spades'), card('b', '5', 'spades')]
+    const board = [card('x', 'K', 'spades'), card('y', '9', 'spades'), card('z', '2', 'hearts')]
+    expect(getHoldemPostflopTier(hole, board)).toBe('draw')
+  })
+
+  it('a 4-flush lying entirely on the board is not our draw', () => {
+    const hole = [card('a', 'A', 'clubs'), card('b', '5', 'diamonds')]
+    const board = [card('w', 'K', 'spades'), card('x', '9', 'spades'), card('y', '2', 'spades'), card('z', '3', 'spades')]
+    expect(getHoldemPostflopTier(hole, board)).toBe('air')
+  })
+})
+
+describe('omaha partial-board made hands (old read had none)', () => {
+  it('a flopped set is a monster', () => {
+    const hole = [card('a', '7', 'clubs'), card('b', '7', 'diamonds'), card('c', 'A', 'spades'), card('d', 'K', 'hearts')]
+    const board = [card('x', '7', 'spades'), card('y', 'Q', 'diamonds'), card('z', '2', 'hearts')]
+    expect(getOmahaPostflopTier(hole, board)).toBe('monster')
+  })
+
+  it('one board-matching hole card is value', () => {
+    const hole = [card('a', 'Q', 'clubs'), card('b', '9', 'diamonds'), card('c', 'J', 'hearts'), card('d', '3', 'clubs')]
+    const board = [card('x', 'Q', 'diamonds'), card('y', '5', 'hearts'), card('z', '2', 'spades')]
+    expect(getOmahaPostflopTier(hole, board)).toBe('value')
+  })
+
+  it('an Omaha-legal flush draw (suited hole PAIR) is a draw', () => {
+    const hole = [card('a', 'A', 'spades'), card('b', '5', 'spades'), card('c', '8', 'diamonds'), card('d', 'J', 'hearts')]
+    const board = [card('x', 'K', 'spades'), card('y', '9', 'spades'), card('z', '2', 'hearts')]
+    expect(getOmahaPostflopTier(hole, board)).toBe('draw')
+  })
+})
+
+describe('postflop betting uses the discounted read', () => {
+  it('air on a paired board folds to a real bet (old strategy called)', () => {
+    const game = createPokerGame(['p1', 'p2'], 42)
+    const pubState = {
+      ...game.session.publicState,
+      turn: { ...game.session.publicState.turn, phase: 'flop' as const },
+      board: [card('x', 'K', 'spades'), card('y', 'K', 'hearts'), card('z', '7', 'clubs')],
+      currentBetThisStreet: 40,
+    }
+    const hole = [card('a', 'A', 'clubs'), card('b', '5', 'diamonds')]
+    expect(pokerBotStrategy(pubState, { hand: hole }, 'p1')).toEqual({ type: 'FOLD' })
+  })
+
+  it('two pair bets when checked to, sized off the pot', () => {
+    const game = createPokerGame(['p1', 'p2'], 42)
+    const pubState = {
+      ...game.session.publicState,
+      turn: { ...game.session.publicState.turn, phase: 'flop' as const },
+      board: [card('x', 'K', 'spades'), card('y', '7', 'hearts'), card('z', '2', 'clubs')],
+      currentBetThisStreet: 0,
+      pot: 100,
+    }
+    const hole = [card('a', 'K', 'clubs'), card('b', '7', 'diamonds')]
+    const action = pokerBotStrategy(pubState, { hand: hole }, 'p1')
+    expect(action).toEqual({ type: 'BET', amount: 50 })
+  })
+})

@@ -312,11 +312,26 @@
   }
 }
 
+/* Right side of the centre band: hand outcome (reveal status, then the
+   winner statement) sits immediately left of the pot it settles. The
+   wrapper owns the push-to-the-right so the pair travels together. */
+.holdem-centre-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 20px);
+  margin-left: auto;
+}
+
+.holdem-centre-status {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8a6b1f;
+}
+
 .holdem-pot {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   flex: none;
   border: 3px solid var(--ink);
   border-radius: 999px;
@@ -492,24 +507,26 @@
   min-width: 80px;
 }
 
+/* Winner statement on the felt, beside the pot. White card on the cream
+   band, right-aligned so its ragged edge faces away from the pot. */
 .holdem-hand-results {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 14px;
+  font-weight: 600;
   color: var(--body-text);
-  padding: 14px 16px;
-  background: #f5f5f5;
-  border: 2px solid var(--grey-border);
+  text-align: right;
+  padding: 10px 14px;
+  background: #fff;
+  border: 2px solid #f0c020;
   border-radius: 12px;
-  margin-bottom: 12px;
 }
 
 .holdem-game-over {
   font-size: 16px;
   font-weight: 700;
   color: var(--body-text);
-  margin-bottom: 8px;
 }
 
 /* ---- Draw variants: sort toggle + discard selection ----

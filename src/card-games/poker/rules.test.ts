@@ -44,16 +44,91 @@ describe('holdem rules', () => {
       expect(pots[2].amount).toBe(40)
     })
 
-    it('handles folded players in side pots', () => {
+    it('merges the layers a folded player leaves behind into one pot', () => {
+      // p1 folded after contributing 50: layering yields a 150 layer and a
+      // 100 layer, but both are contested by exactly {p2, p3} -- one pot of
+      // 250, one winner line, one odd-chip split on a tie.
       const contributions = { p1: 50, p2: 100, p3: 100 }
       const foldedIds = new Set(['p1'])
       const pots = computeSidePots(contributions, foldedIds)
 
-      // Main pot: 50 * 3 = 150 (only p2 and p3 can win)
-      // Side pot: 50 * 2 = 100 (p2 and p3)
-      expect(pots).toHaveLength(2)
+      expect(pots).toHaveLength(1)
+      expect(pots[0].amount).toBe(250)
       expect(pots[0].eligiblePlayerIds).toEqual(expect.arrayContaining(['p2', 'p3']))
       expect(pots[0].eligiblePlayerIds).not.toContain('p1')
+    })
+
+    it('live-reported hand: one folded caller, three live seats, single 70-chip pot', () => {
+      // Play-test report: human folded holding 10 in; three bots contributed
+      // 20 each. The results box showed "wins 40 / wins 30" for the same
+      // eligible set -- must be one pot of 70.
+      const contributions = { human: 10, b1: 20, b2: 20, b3: 20 }
+      const pots = computeSidePots(contributions, new Set(['human']))
+
+      expect(pots).toHaveLength(1)
+      expect(pots[0].amount).toBe(70)
+      expect(pots[0].eligiblePlayerIds).toEqual(expect.arrayContaining(['b1', 'b2', 'b3']))
+    })
+
+    it('still splits where eligibility genuinely differs, merging only within a tier', () => {
+      // p4 folded at 10, p1 is all-in at 30 but LIVE, p2/p3 full at 100:
+      // the 10 and 30 levels share eligibility {p1,p2,p3} and merge (40+60);
+      // the 100 level is a true side pot for {p2,p3} only.
+      const contributions = { p1: 30, p2: 100, p3: 100, p4: 10 }
+      const pots = computeSidePots(contributions, new Set(['p4']))
+
+      expect(pots).toHaveLength(2)
+      expect(pots[0].amount).toBe(100)
+      expect(pots[0].eligiblePlayerIds).toEqual(expect.arrayContaining(['p1', 'p2', 'p3']))
+      expect(pots[1].amount).toBe(140)
+      expect(pots[1].eligiblePlayerIds).toEqual(expect.arrayContaining(['p2', 'p3']))
+      expect(pots[1].eligiblePlayerIds).not.toContain('p1')
+    })
+  })
+
+  describe('short-blind posting', () => {
+    it('a big blind shorter than the small blind opens the street at the small blind (live-lock regression)', () => {
+      // Found by the omaha bot-vs-bot sweep (seed 11) once bots survived long
+      // enough to get short: a BB all-in for 4 set currentBetThisStreet to 4
+      // while the live SB already had 5 in front. isActionClosed requires
+      // every live seat to EXACTLY match the current bet, and a seat sitting
+      // above it can never unmatch -- the preflop street could never close.
+      const game = createPokerGame(['p1', 'p2', 'p3', 'p4'], 42)
+      const doctored = {
+        ...game,
+        session: {
+          ...game.session,
+          publicState: {
+            ...game.session.publicState,
+            handOver: true,
+            buttonSeat: 'p4',
+            chips: { p1: 2000, p2: 1000, p3: 4, p4: 996 },
+          },
+        },
+      }
+
+      const started = applyPokerAction(doctored, 'p1', { type: 'START_NEXT_HAND' })
+      expect(started.outcome.ok).toBe(true)
+      let state = started.outcome.publicState!
+      expect(state.smallBlindSeat).toBe('p2')
+      expect(state.bigBlindSeat).toBe('p3')
+      expect(state.hands['p3'].allIn).toBe(true)
+      expect(state.hands['p3'].betThisStreet).toBe(4)
+      expect(state.currentBetThisStreet).toBe(5)
+
+      // And the street genuinely closes: p4 and p1 call the 5, the SB (already
+      // at 5) checks, and the hand moves to the flop.
+      let g = started.holdemSession
+      const act = (pid: string, a: Parameters<typeof applyPokerAction>[2]) => {
+        const res = applyPokerAction(g, pid, a)
+        expect(res.outcome.ok, `${pid}: ${!res.outcome.ok ? res.outcome.reason : ''}`).toBe(true)
+        g = res.holdemSession
+        state = res.outcome.publicState!
+      }
+      act('p4', { type: 'CALL' })
+      act('p1', { type: 'CALL' })
+      act('p2', { type: 'CHECK' })
+      expect(state.turn.phase).toBe('flop')
     })
   })
 

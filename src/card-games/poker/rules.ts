@@ -67,7 +67,29 @@ export function computeSidePots(
     previousLevel = level
   }
 
-  return pots
+  // Merge adjacent layers contested by the identical eligible set. A FOLDED
+  // player's contribution level still splits the layering above, but the fold
+  // removed them from eligibility -- so the layers on either side of their
+  // level are one pot, not two. Side pots only exist where eligibility
+  // differs. Beyond the cosmetic double "X wins" line, paying such layers
+  // separately splits a tied pot's odd chip once PER LAYER instead of once
+  // for the whole pot. Levels ascend so eligible sets only ever shrink (in a
+  // stable order, both filtered from allPlayers) -- equal sets are always
+  // adjacent, and an element-wise compare suffices.
+  const merged: SidePot[] = []
+  for (const pot of pots) {
+    const prev = merged[merged.length - 1]
+    if (
+      prev &&
+      prev.eligiblePlayerIds.length === pot.eligiblePlayerIds.length &&
+      prev.eligiblePlayerIds.every((id, i) => id === pot.eligiblePlayerIds[i])
+    ) {
+      prev.amount += pot.amount
+    } else {
+      merged.push({ amount: pot.amount, eligiblePlayerIds: [...pot.eligiblePlayerIds] })
+    }
+  }
+  return merged
 }
 
 // Check if action should close (all active players matched bet or folded/all-in)
@@ -140,7 +162,7 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
   // a street bet, so betThisStreet stays 0 and the opening street starts
   // unopened (currentBetThisStreet stays 0). A seat whose whole stack is the
   // ante goes all-in. Blind games keep the small/big blind flow untouched.
-  let bbAmount = 0
+  let openingBet = 0
   let pot = 0
   if (publicState.houseRules.ante) {
     for (const seatId of activeSeats) {
@@ -152,7 +174,15 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     }
   } else {
     const sbAmount = Math.min(POKER_SMALL_BLIND, newChips[publicState.smallBlindSeat])
-    bbAmount = Math.min(POKER_BIG_BLIND, newChips[publicState.bigBlindSeat])
+    const bbAmount = Math.min(POKER_BIG_BLIND, newChips[publicState.bigBlindSeat])
+    // The street opens at the LARGEST blind posted, not blindly at the big
+    // blind: a short-stacked BB whose whole stack is below the small blind
+    // would otherwise set the street price BELOW chips the (live) SB already
+    // has in front -- isActionClosed requires every live seat to exactly
+    // match the current bet, and a seat sitting ABOVE it can never "unmatch",
+    // so the street could never close (live-locked hand, found by the
+    // bot-vs-bot sweeps the moment bots survived long enough to get short).
+    openingBet = Math.max(sbAmount, bbAmount)
 
     newChips[publicState.smallBlindSeat] -= sbAmount
     newChips[publicState.bigBlindSeat] -= bbAmount
@@ -219,7 +249,7 @@ function startNewHand(publicState: PokerPublicState, deck: Card[]): { publicStat
     chips: newChips,
     board: [],
     pot,
-    currentBetThisStreet: bbAmount,
+    currentBetThisStreet: openingBet,
     lastFullRaiseIncrement: POKER_BIG_BLIND,
     turn: createTurnState<PokerStreet>(preflopActing, initialPhase),
     handNumber: publicState.handNumber + 1,
