@@ -1,5 +1,16 @@
 # Requests for the human
 
+- [ ] 2026-09-01, Wahoo two-colors wrap-up — **charter complete, ready
+      for your play-test**: the twoColors house rule (Uno-pattern toggle,
+      2-player only, visible auto-off at 3+ seats) with each player
+      running two opposite-corner colors that jump/bump each other
+      exactly like opponents (forced self-bumps included, with their own
+      status line), all-eight win, two-dot legend. 1854 tests / tsc /
+      build green; live-verified incl. measured bot pacing
+      (1599-1614ms/beat) and a 200-seed bot-vs-bot soak. On branch
+      `charter/wahoo-two-colors` (independent of the poker branch) —
+      play-test with `npm run dev` on this branch, then say "push".
+
 - [ ] 2026-09-01, Poker round 2 wrap-up — **charter complete, ready for
       your play-test**: Omaha in the variant dropdown (exactly-two-hole
       rule enforced and gotcha-tested), Deuces Wild and Ante as

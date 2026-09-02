@@ -1,6 +1,29 @@
 # Roadmap
 
-Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
+Charter: Wahoo two colors each — see `CHARTER.md`.
+
+## Charter: Wahoo two colors each (2026-09-01) — done (unmerged, awaiting play-test + "push")
+
+Branch `charter/wahoo-two-colors`. Specs: `specs/61-wahoo-two-colors-engine.md`,
+`specs/62-wahoo-two-colors-screens-wiring.md`. Baseline: 1828 tests / tsc clean.
+
+### Done (this charter)
+- [cycle 2] M2 — spec 62 screens+wiring (1bfa743 room+App, aa7d2da
+  table, 7edfd00 review fixes). Oscar round 2 caught a false "verified
+  no change needed" on WahooResults (8-home winner showed 4) plus a
+  contested-click wrong-move path — both lead-reproduced, fixed with
+  regressions. Live pass: lobby auto-off, both-color rolls, opponent
+  bump, center shortcut, self-bump line on camera, two-dot legend;
+  pacing measured 1599-1614ms/beat on a bot six-chain. 200-seed
+  bot-vs-bot soak: all terminate, all-eight win invariant, self-bumps
+  only when forced (14/14). 1854 tests.
+- [cycle 1] M1 — set-keyed engine + twoColors house rule (7a2b006).
+  Implementer hit its iteration cap after the engine rework but before
+  the test file; recovered per protocol (partial kept, tests re-dispatched
+  narrow). 23 new tests; rule-off seating proven byte-identical across
+  150 seeded games; Oscar approve (no blocking/major; 1 nit fixed, 1
+  rejected-as-designed). 1851 tests repo-wide; sole tsc error is the
+  expected WahooResults.test.ts spec-62 handoff.
 
 ## Charter: Poker round 2 (2026-09-01) — done (unmerged, awaiting play-test + "push")
 

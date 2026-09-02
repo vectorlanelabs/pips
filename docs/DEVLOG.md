@@ -4869,3 +4869,74 @@ shipping each verified charter promptly.
   M2 spec had deviated by replacing the right-column brand pill with
   the dropdown — the pill is restored); (3) poker codes now PK- with
   HE- still routing for old links.
+
+## Cycle 1 (Wahoo two colors) — 2026-09-01
+- **Shipped:** M1 set-keyed engine + twoColors house rule (7a2b006).
+  seatArms/positions/centerBy rekeyed by marble set with setOwners
+  (identity when off); own-color-as-opponent falls out of the keying
+  rather than special cases; all-eight win; bot self-bump partition.
+- **Delegation friction:** deepseek:flash hit its 25-iteration cap after
+  the engine rework but before two-colors.test.ts — recovered per the
+  delegation protocol: inspected the tree (coherent, 79 existing tests
+  green), kept it, re-dispatched the test file as a narrow slice. The
+  test-writer's report was calibrated (self-caught its own wrong fixture
+  arithmetic and said so).
+- **Review (Sonnet/Oscar):** approve, no blocking/major. Its sandbox
+  blocked command execution, so its verdict was static tracing — the
+  lead's own runs (102 wahoo / 1851 full / tsc) supply the executed
+  evidence it flagged as missing. Dispositions: moveBumps unused param
+  REJECTED as designed (spec-locked signature); bot.ts positions name
+  shadow FIXED (lead-applied rename, this note is the honest record).
+- **Lead verification:** suite re-run independently; full diff read
+  line-by-line; rule-off seating dumped old-vs-new across 150 seeded
+  games — byte-identical (SEATING_IDENTICAL probe).
+- **Continue?** Yes — M2 (spec 62 screens+wiring + live pass).
+
+## Cycle 2 (Wahoo two colors) — 2026-09-01 — CHARTER WRAP-UP
+- **Shipped:** M2 spec 62 in three commits: room toggle + App lobby
+  plumbing (1bfa743), set-aware WahooTable (aa7d2da), review fixes
+  (7edfd00). Plus loop infra: second launch config on :5199 (7f709f1)
+  because the owner's poker play-test server holds :5173.
+- **The review earned its keep — and caught a false verification:**
+  Part A's implementer reported "WahooResults verified, no change
+  needed" without checking it; the lead accepted that line. Oscar
+  (sonnet, round 2, with an execution allowlist after its first run
+  stalled on sandbox approvals) reproduced the miss: rankWahooResults
+  read positions by playerId, so a two-color winner with 8 home showed
+  4 — every second set invisible. Lead re-reproduced (F1: expect 8,
+  got 4) before the fix; now aggregates over setOwners with 3
+  regression tests. Second BLOCKING: contested-destination selection
+  derived the pending group from the marble alone (find-first) — with
+  two sets one marble can contest the center AND a track hole, so
+  clicking one hole could fire the other's move; re-keyed by the
+  clicked hole (pendingDestKey). MAJOR: legend showed one color per
+  two-color player; now one dot per owned set (verified live).
+  Dispositions: all three FIXED; round 2 had no minors/nits; round 2's
+  coverage gaps (build, live pacing) were covered by the lead's own
+  runs. Lesson fed forward: an implementer's "verified, no change
+  needed" on a named at-risk file is a claim to check, not accept.
+- **M2 live evidence (lead-driven browser pass):** lobby toggle in
+  Uno's anatomy; auto-off flips visibly (+ greys, "Two players only")
+  the moment a 3rd seat fills; fresh rooms reset it. In-game: both
+  colors offer targets on one roll; second-set play; opponent bump
+  ("You bumped Ida!"); center shortcut; engineered self-bump on camera
+  ("You sent your own marble home!" — blue shortcut bumped own yellow
+  from the center); legend two dots per player. Zero console errors.
+- **Pacing (mandatory check) MEASURED:** MutationObserver timestamps on
+  the status line across a bot six-chain running two colors:
+  1614/1602/1612/1599 ms between beats — every roll visible before its
+  move, no cue overlap, constants untouched.
+- **Deviation, logged:** the spec's "full live game to the end" was
+  replaced by a 200-seed headless bot-vs-bot soak (all games terminate,
+  avg 684 actions/max 1009; win invariant all-eight asserted per game;
+  bot self-bumps 14 = forced situations 14, i.e. never voluntary,
+  always when forced) — a manual ~340-turn live game was not a sane
+  use of the budget; the win/results path is covered by the soak + the
+  new results regression tests.
+- **Verification (lead):** every implementer report re-run (tsc, 1854
+  tests, build); every diff read line-by-line; both blockers
+  reproduced before fix specs. Implementer friction: 25-iteration cap
+  hit in 3 of 5 dispatches (recovered per protocol each time); one
+  transient ECONNRESET re-dispatched.
+- **Charter definition of done: MET** in 2 cycles of 6. NOTHING merged
+  or pushed — awaiting the owner's play-test and "push".

@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import type { WahooHouseRuleKey } from '../board-games/wahoo/state'
+import { WAHOO_HOUSE_RULE_DEFS } from '../board-games/wahoo/state'
 import { WahooRulesOverlay } from './WahooRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import './WahooRoom.css'
 
 export interface WahooRoomProps {
   code: string
@@ -8,7 +11,9 @@ export interface WahooRoomProps {
   isHost: boolean
   seats: { name: string; isBot: boolean; isHost: boolean }[]  // host first, join order
   notice?: string | null
+  houseRules: Record<WahooHouseRuleKey, boolean>       // host's currently-chosen overrides (guests see these read-only)
   onAddHouseBot: () => void      // host-only
+  onToggleHouseRule: (key: WahooHouseRuleKey) => void   // host-only
   onStartGame: () => void        // host-only
   onLeave: () => void
 }
@@ -21,7 +26,9 @@ export function WahooRoom({
   isHost,
   seats,
   notice,
+  houseRules,
   onAddHouseBot,
+  onToggleHouseRule,
   onStartGame,
   onLeave,
 }: WahooRoomProps) {
@@ -88,6 +95,34 @@ export function WahooRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
+
+          <div style={{ marginTop: 26 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>House rules</div>
+            <div className="wh-house-rules">
+              {WAHOO_HOUSE_RULE_DEFS.map((def) => {
+                const on = houseRules[def.key]
+                // twoColors is a two-player-only rule: with more than two seats the
+                // host can't enable it either, and the note says why.
+                const twoPlayersOnly = def.key === 'twoColors' && seats.length > 2
+                return (
+                  <button
+                    key={def.key}
+                    type="button"
+                    disabled={!isHost || twoPlayersOnly}
+                    aria-pressed={on}
+                    className={`wh-house-rule${on ? ' wh-house-rule--on' : ''}`}
+                    onClick={() => onToggleHouseRule(def.key)}
+                  >
+                    <span className="wh-house-rule-text">
+                      <span className="wh-house-rule-label">{def.label}</span>
+                      <span className="wh-house-rule-desc">{twoPlayersOnly ? 'Two players only' : def.description}</span>
+                    </span>
+                    <span className="wh-house-rule-pill">{on ? 'On' : 'Off'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

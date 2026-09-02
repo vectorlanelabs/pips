@@ -16,30 +16,31 @@ import {
 } from './state.ts'
 
 // Applies a validated move to the current state. Returns the new positions
-// map, the new center owner, and the id of any bumped opponent (null if none).
+// map, the new center owner, and the setId of any bumped marble (null if
+// none). Everything operates on the moving set (move.setId).
 function applyMove(
   publicState: WahooPublicState,
-  playerId: string,
   die: number,
   move: WahooMove,
 ): { positions: Record<string, MarblePos[]>; centerBy: WahooPublicState['centerBy']; bumpedId: string | null } {
-  const arm = publicState.seatArms[playerId]
-  const myPositions = [...publicState.positions[playerId]]
+  const setId = move.setId
+  const arm = publicState.seatArms[setId]
+  const myPositions = [...publicState.positions[setId]]
   const others = { ...publicState.positions }
   let centerBy = publicState.centerBy
   let bumpedId: string | null = null
 
-  // Bump the first opponent marble found on the given absolute track hole.
+  // Bump the first marble of any other set found on the given absolute track hole.
   const bumpAt = (abs: number): void => {
-    for (const pid of Object.keys(others)) {
-      if (pid === playerId) continue
-      const idx = others[pid].findIndex(
-        (q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(publicState.seatArms[pid], q) === abs,
+    for (const s of Object.keys(others)) {
+      if (s === setId) continue
+      const idx = others[s].findIndex(
+        (q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(publicState.seatArms[s], q) === abs,
       )
       if (idx !== -1) {
-        bumpedId = pid
-        others[pid] = [...others[pid]]
-        others[pid][idx] = -1
+        bumpedId = s
+        others[s] = [...others[s]]
+        others[s][idx] = -1
         return
       }
     }
@@ -53,14 +54,14 @@ function applyMove(
     myPositions[move.marbleIdx] = to
     if (to <= OWNER_TRACK_LEN - 1) bumpAt(trackIndexFor(arm, to))
   } else if (move.kind === 'shortcut') {
-    const from = publicState.positions[playerId][move.marbleIdx]
-    if (centerBy && centerBy.playerId !== playerId) {
-      bumpedId = centerBy.playerId
+    const from = publicState.positions[setId][move.marbleIdx]
+    if (centerBy && centerBy.setId !== setId) {
+      bumpedId = centerBy.setId
       others[bumpedId] = [...others[bumpedId]]
       others[bumpedId][centerBy.marbleIdx] = -1
     }
     myPositions[move.marbleIdx] = -2
-    centerBy = { playerId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 6 | 22 }
+    centerBy = { setId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 6 | 22 }
   } else {
     // exit: the center marble jumps to the diagonal corner.
     const target = exitTargetRel(centerBy!.entryCornerRel)
@@ -69,7 +70,7 @@ function applyMove(
     centerBy = null
   }
 
-  return { positions: { ...others, [playerId]: myPositions }, centerBy, bumpedId }
+  return { positions: { ...others, [setId]: myPositions }, centerBy, bumpedId }
 }
 
 // The die roll needs the host rng, so the validator closes over `wh.rng` (the
@@ -88,31 +89,33 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
 
       // Third consecutive 6: bust immediately, no move required. Sends home
       // whichever marble was actually moved most recently in this chain
-      // (lastMoved) — if nothing has been moved yet this chain (e.g. the first
-      // two sixes both had no legal move), there is nothing to send home and
-      // the turn simply ends.
+      // (lastMoved — keyed by setId, so it can be the actor's second color)
+      // — if nothing has been moved yet this chain (e.g. the first two sixes
+      // both had no legal move), there is nothing to send home and the turn
+      // simply ends.
       if (streak >= 3) {
-        const busted =
-          publicState.lastMoved && publicState.lastMoved.playerId === playerId
+        const lastMoved = publicState.lastMoved
+        const positions =
+          lastMoved && lastMoved.playerId === playerId
             ? (() => {
-                const arr = [...publicState.positions[playerId]]
-                arr[publicState.lastMoved!.marbleIdx] = -1
-                return arr
+                const arr = [...publicState.positions[lastMoved.setId]]
+                arr[lastMoved.marbleIdx] = -1
+                return { ...publicState.positions, [lastMoved.setId]: arr }
               })()
-            : publicState.positions[playerId]
+            : publicState.positions
         const centerBy =
           publicState.centerBy &&
-          publicState.centerBy.playerId === playerId &&
-          publicState.lastMoved &&
-          publicState.lastMoved.playerId === playerId &&
-          publicState.centerBy.marbleIdx === publicState.lastMoved.marbleIdx
+          lastMoved &&
+          lastMoved.playerId === playerId &&
+          publicState.centerBy.setId === lastMoved.setId &&
+          publicState.centerBy.marbleIdx === lastMoved.marbleIdx
             ? null
             : publicState.centerBy
         return {
           ok: true,
           publicState: {
             ...publicState,
-            positions: { ...publicState.positions, [playerId]: busted },
+            positions,
             centerBy,
             turn: advanceTurn(publicState.turn, 'roll'),
             die: null,
@@ -156,17 +159,20 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
       if (publicState.turn.phase !== 'move') return { ok: false, reason: 'roll first' }
       // action.move arrives over the wire as `unknown` at runtime — the WahooAction
       // union is compile-time only, so a malformed/stale/hostile guest payload (missing
-      // or null `move`) must be rejected here rather than dereferencing straight through.
+      // or null `move`, or a missing/non-string `setId`) must be rejected here rather
+      // than dereferencing straight through.
       if (typeof action.move !== 'object' || action.move === null) {
         return { ok: false, reason: 'invalid move' }
       }
       const die = publicState.die!
       const moves = legalMoves(publicState, playerId, die)
-      const move = moves.find((m) => m.marbleIdx === action.move.marbleIdx && m.kind === action.move.kind)
+      const move = moves.find(
+        (m) => m.setId === action.move.setId && m.marbleIdx === action.move.marbleIdx && m.kind === action.move.kind,
+      )
       if (!move) return { ok: false, reason: 'not a legal move' }
 
-      const { positions, centerBy, bumpedId } = applyMove(publicState, playerId, die, move)
-      const lastMoved = { playerId, marbleIdx: move.marbleIdx }
+      const { positions, centerBy, bumpedId } = applyMove(publicState, die, move)
+      const lastMoved = { playerId, setId: move.setId, marbleIdx: move.marbleIdx }
       const lastEvent: WahooEvent =
         move.kind === 'advance'
           ? { kind: 'move', by: playerId, marbleIdx: move.marbleIdx, bumpedId }
@@ -179,9 +185,12 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
         lastEvent,
       }
 
-      // Win check first: all four marbles in the lane ends the game now, even
-      // if the die was a 6 that would have completed a bust chain.
-      if (positions[playerId].every((p) => p >= LANE_START)) {
+      // Win check first: every set the actor owns having all four marbles in
+      // the lane ends the game now, even if the die was a 6 that would have
+      // completed a bust chain. In normal games that is exactly today's
+      // single-array check (one set per player).
+      const mySetIds = Object.keys(publicState.setOwners).filter((s) => publicState.setOwners[s] === playerId)
+      if (mySetIds.every((s) => positions[s].every((p) => p >= LANE_START))) {
         return {
           ok: true,
           publicState: {

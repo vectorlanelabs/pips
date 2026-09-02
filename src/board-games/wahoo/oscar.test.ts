@@ -30,6 +30,7 @@ function buildWahoo(config: {
   playerIds?: string[]
   seatArms?: Record<string, number>
   positions?: Record<string, MarblePos[]>
+  setOwners?: Record<string, string>
   stage?: 'play' | 'over'
   phase?: 'roll' | 'move'
   currentIndex?: number
@@ -40,6 +41,7 @@ function buildWahoo(config: {
   lastEvent?: WahooEvent | null
   winnerId?: string | null
   mutedArm?: number | null
+  houseRules?: { twoColors: boolean }
   rngSeed?: number
 }): WahooSession {
   const playerIds = config.playerIds ?? ['p1', 'p2']
@@ -48,12 +50,17 @@ function buildWahoo(config: {
     ;(turn as { currentIndex: number }).currentIndex = config.currentIndex
   }
   const defaults: Record<string, MarblePos[]> = {}
-  for (const p of playerIds) defaults[p] = [-1, -1, -1, -1]
+  const defaultOwners: Record<string, string> = {}
+  for (const p of playerIds) {
+    defaults[p] = [-1, -1, -1, -1]
+    defaultOwners[p] = p
+  }
   const publicState: WahooPublicState = {
     stage: config.stage ?? 'play',
     turn,
     seatArms: config.seatArms ?? { p1: 0, p2: 2 },
     positions: config.positions ?? defaults,
+    setOwners: config.setOwners ?? defaultOwners,
     centerBy: config.centerBy ?? null,
     die: config.die ?? null,
     sixStreak: config.sixStreak ?? 0,
@@ -61,6 +68,7 @@ function buildWahoo(config: {
     lastEvent: config.lastEvent ?? null,
     winnerId: config.winnerId ?? null,
     mutedArm: config.mutedArm ?? null,
+    houseRules: config.houseRules ?? { twoColors: false },
   }
   const privateStates: Record<string, WahooPrivateState> = {}
   for (const p of playerIds) privateStates[p] = {}
@@ -79,8 +87,8 @@ describe('attack: wrap-boundary cross-seat collision (63 -> 0)', () => {
       currentIndex: 1,
       positions: { p1: [-1, -1, -1, -1], p2: [36, -1, -1, -1] },
     })
-    expect(legalMoves(wh.session.publicState, 'p2', 1)).toContainEqual({ marbleIdx: 0, kind: 'advance' })
-    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(legalMoves(wh.session.publicState, 'p2', 1)).toContainEqual({ setId: 'p2', marbleIdx: 0, kind: 'advance' })
+    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { setId: 'p2', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.positions['p2']).toEqual([37, -1, -1, -1])
@@ -116,7 +124,7 @@ describe('attack: wrap-boundary cross-seat collision (63 -> 0)', () => {
       currentIndex: 1,
       positions: { p1: [56, -1, -1, -1], p2: [6, -1, -1, -1] },
     })
-    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { setId: 'p2', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.positions['p2']).toEqual([8, -1, -1, -1])
@@ -135,11 +143,11 @@ describe('attack: move forgery', () => {
       positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] },
     })
     const moves = legalMoves(wh.session.publicState, 'p1', 6)
-    expect(moves).toContainEqual({ marbleIdx: 0, kind: 'advance' })
-    expect(moves).toContainEqual({ marbleIdx: 1, kind: 'out' })
-    const forged = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 1, kind: 'advance' } })
+    expect(moves).toContainEqual({ setId: 'p1', marbleIdx: 0, kind: 'advance' })
+    expect(moves).toContainEqual({ setId: 'p1', marbleIdx: 1, kind: 'out' })
+    const forged = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 1, kind: 'advance' } })
     expect(forged.outcome.ok).toBe(false)
-    const forged2 = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'out' } })
+    const forged2 = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'out' } })
     expect(forged2.outcome.ok).toBe(false)
   })
 
@@ -182,26 +190,26 @@ describe('attack: move forgery', () => {
     const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     const forged = applyWahooAction(wh, 'p1', {
       type: 'MOVE',
-      move: { marbleIdx: 0, kind: 'teleport' as unknown as 'advance' },
+      move: { setId: 'p1', marbleIdx: 0, kind: 'teleport' as unknown as 'advance' },
     })
     expect(forged.outcome.ok).toBe(false)
   })
 
   it('rejects a second MOVE against the same already-consumed die (stale replay)', () => {
     const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    const first = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const first = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(first.outcome.ok).toBe(true)
     expect(first.wh.session.publicState.turn.phase).toBe('roll')
     // Replaying the exact same accepted action against the pre-move session must
     // fail once state has actually moved on (simulated here by re-submitting to
     // the POST-move session, where phase is 'roll' and die is null).
-    const replay = applyWahooAction(first.wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const replay = applyWahooAction(first.wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(replay.outcome.ok).toBe(false)
 
     // Confirm it fails for the *right* reason: phase gating, not just turn
     // gating -- the current player (p2) also cannot submit a MOVE with p1's
     // stale die, because phase is 'roll' (die cleared) until they ROLL.
-    const p2replay = applyWahooAction(first.wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const p2replay = applyWahooAction(first.wh, 'p2', { type: 'MOVE', move: { setId: 'p2', marbleIdx: 0, kind: 'advance' } })
     expect(p2replay.outcome.ok).toBe(false)
     expect(p2replay.outcome.reason).toContain('roll first')
   })
@@ -214,7 +222,7 @@ describe('attack: move forgery', () => {
       die: 3,
       positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] },
     })
-    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(false)
     expect(r.outcome.reason).toContain('game over')
   })
@@ -231,7 +239,7 @@ describe('attack: lane privacy', () => {
       currentIndex: 1,
       positions: { p1: [LANE_START, LANE_START + 1, LANE_START + 2, LANE_END], p2: [18, -1, -1, -1] },
     })
-    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { setId: 'p2', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     // p1's lane marbles are untouched by any opponent track move.
     expect(r.wh.session.publicState.positions['p1']).toEqual([
@@ -258,7 +266,7 @@ describe('attack: six-chain integrity', () => {
     expect(r.outcome.ok).toBe(true)
     wh = r.wh
     expect(wh.session.publicState.die).toBe(6)
-    r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     wh = r.wh
     expect(wh.session.publicState.sixStreak).toBe(1)
@@ -294,7 +302,7 @@ describe('attack: six-chain integrity', () => {
     })
     const rolled = applyWahooAction(p2wh, 'p2', { type: 'ROLL' })
     expect(rolled.outcome.ok).toBe(true)
-    const moved = applyWahooAction(rolled.wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const moved = applyWahooAction(rolled.wh, 'p2', { type: 'MOVE', move: { setId: 'p2', marbleIdx: 0, kind: 'advance' } })
     expect(moved.outcome.ok).toBe(true)
     expect(moved.wh.session.publicState.sixStreak).toBe(1)
   })
@@ -312,12 +320,12 @@ describe('attack: six-chain integrity', () => {
       rngSeed: 749, // next rng() call (the following ROLL) yields a 6
       positions: { p1: [17, -1, -1, -1], p2: [-1, -1, -1, -1] },
     })
-    expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
-    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
+    expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ setId: 'p1', marbleIdx: 0, kind: 'shortcut' })
+    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'shortcut' } })
     expect(moved.outcome.ok).toBe(true)
     const movedPub = moved.wh.session.publicState
     expect(movedPub.sixStreak).toBe(2)
-    expect(movedPub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[1] })
+    expect(movedPub.centerBy).toEqual({ setId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[1] })
     expect(currentPlayer(movedPub.turn)).toBe('p1') // extra roll
 
     const r = applyWahooAction(moved.wh, 'p1', { type: 'ROLL' })
@@ -339,13 +347,13 @@ describe('attack: six-chain integrity', () => {
       sixStreak: 2,
       rngSeed: 749, // next rng() call (the following ROLL) yields a 6
       positions: { p1: [5, -2, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
+      centerBy: { setId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
     })
-    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(moved.outcome.ok).toBe(true)
     const movedPub = moved.wh.session.publicState
     expect(movedPub.sixStreak).toBe(2)
-    expect(movedPub.lastMoved).toEqual({ playerId: 'p1', marbleIdx: 0 })
+    expect(movedPub.lastMoved).toEqual({ playerId: 'p1', setId: 'p1', marbleIdx: 0 })
     expect(currentPlayer(movedPub.turn)).toBe('p1') // extra roll
 
     const r = applyWahooAction(moved.wh, 'p1', { type: 'ROLL' })
@@ -353,7 +361,7 @@ describe('attack: six-chain integrity', () => {
     const pub = r.wh.session.publicState
     expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
     expect(pub.positions['p1']).toEqual([-1, -2, -1, -1]) // marble 0 busted, marble 1 still centered
-    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] })
+    expect(pub.centerBy).toEqual({ setId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] })
   })
 
   it('a stale lastMoved from an EARLIER, already-ended turn is never sent home by a later moveless six-chain bust (Blocking #1)', () => {
@@ -377,7 +385,7 @@ describe('attack: six-chain integrity', () => {
     })
 
     // p1 moves (non-six): the turn -- and the six-chain -- ends here.
-    let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     wh = r.wh
     expect(wh.session.publicState.positions['p1']).toEqual([61, LANE_START, LANE_START + 1, LANE_START + 2])
@@ -438,7 +446,7 @@ describe('attack: overshoot and boundary exactness', () => {
     // die 2 avoids the 'out' moves that a 1 would offer for the base marbles.
     const wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [LANE_END, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     expect(legalMoves(wh.session.publicState, 'p1', 2)).toEqual([])
-    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(false)
   })
 
@@ -449,7 +457,7 @@ describe('attack: overshoot and boundary exactness', () => {
     // confirmed here with the marble reached by ordinary track advance instead
     // of being placed by hand at the corner.
     let wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [36, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     expect(r.wh.session.publicState.positions['p1'][0]).toBe(SHORTCUT_EXITS[SHORTCUT_ENTRIES[0]])
 
@@ -457,7 +465,7 @@ describe('attack: overshoot and boundary exactness', () => {
       phase: 'move',
       die: 1,
       positions: { p1: [SHORTCUT_EXITS[SHORTCUT_ENTRIES[0]], -2, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
+      centerBy: { setId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 1).some((m) => m.kind === 'exit')).toBe(false)
   })
@@ -468,7 +476,7 @@ describe('attack: serialization across every event kind', () => {
     {
       name: 'shortcut',
       build: () => buildWahoo({ phase: 'move', die: 2, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } }),
-      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } }).wh,
+      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'shortcut' } }).wh,
     },
     {
       name: 'exit',
@@ -477,9 +485,9 @@ describe('attack: serialization across every event kind', () => {
           phase: 'move',
           die: 1,
           positions: { p1: [-2, -1, -1, -1], p2: [-1, -1, -1, -1] },
-          centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] },
+          centerBy: { setId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] },
         }),
-      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } }).wh,
+      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'exit' } }).wh,
     },
     {
       name: 'bust',
@@ -488,7 +496,7 @@ describe('attack: serialization across every event kind', () => {
           phase: 'roll',
           rngSeed: 4, // next roll is a 6, see wahoo.test.ts
           sixStreak: 2,
-          lastMoved: { playerId: 'p1', marbleIdx: 0 },
+          lastMoved: { playerId: 'p1', setId: 'p1', marbleIdx: 0 },
           positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] },
         }),
       act: (wh) => applyWahooAction(wh, 'p1', { type: 'ROLL' }).wh,
@@ -511,7 +519,7 @@ describe('attack: serialization across every event kind', () => {
           die: 1,
           positions: { p1: [HOME_ENTRANCE_REL, LANE_START + 1, LANE_START + 2, LANE_END], p2: [-1, -1, -1, -1] },
         }),
-      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } }).wh,
+      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { setId: 'p1', marbleIdx: 0, kind: 'advance' } }).wh,
     },
   ]
 
@@ -578,13 +586,13 @@ describe('attack: legalMoves destination collisions (WahooTable UI ambiguity)', 
     const wh = buildWahoo({
       seatArms: { p1: 0, p2: 2 },
       positions: { p1: [-2, 32, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] },
+      centerBy: { setId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] },
       phase: 'move',
       die: 6,
     })
     const moves = legalMoves(wh.session.publicState, 'p1', 6)
-    expect(moves).toContainEqual({ marbleIdx: 0, kind: 'exit' })
-    expect(moves).toContainEqual({ marbleIdx: 1, kind: 'advance' })
+    expect(moves).toContainEqual({ setId: 'p1', marbleIdx: 0, kind: 'exit' })
+    expect(moves).toContainEqual({ setId: 'p1', marbleIdx: 1, kind: 'advance' })
     // Both are legal, materially different moves (one frees the center, one
     // advances a track marble) -- but they land on the same absolute hole.
     expect(trackIndexFor(0, SHORTCUT_EXITS[SHORTCUT_ENTRIES[0]])).toBe(trackIndexFor(0, 32 + 6))

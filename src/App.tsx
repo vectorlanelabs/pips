@@ -64,7 +64,7 @@ import { DominoesResults } from './screens/DominoesResults'
 import { DominoesRoom } from './screens/DominoesRoom'
 
 // ---- Wahoo (separate parallel session, per CHARTER.md resolution #7) ----
-import { createWahooGame, type WahooSession, type WahooPublicState, type WahooAction } from './board-games/wahoo/state'
+import { createWahooGame, resolveWahooHouseRules, type WahooHouseRuleKey, type WahooSession, type WahooPublicState, type WahooAction } from './board-games/wahoo/state'
 import { applyWahooAction, runWahooBotTurn } from './board-games/wahoo/rules'
 import { wahooBotStrategy } from './board-games/wahoo/bot'
 import { WahooTable } from './screens/WahooTable'
@@ -171,7 +171,7 @@ type DominoesView =
   // instead of the action just silently doing nothing. Never stored as the guest's current view.
   | { kind: 'notice'; message: string }
 type WahooView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<WahooHouseRuleKey, boolean> }
   | { kind: 'game'; revision: number; publicState: WahooPublicState; names: Record<string, string> }
   // Sent one-off, out of band from the revision-gated 'game' snapshots, whenever this guest's own
   // action is rejected — carries the validator's reason so the table can show WHY nothing happened
@@ -510,6 +510,7 @@ export default function App() {
   const [wahooStarted, setWahooStarted] = useState(false)
   const [wahooSeats, setWahooSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [wahooDropped, setWahooDropped] = useState<string[]>([])
+  const [wahooHouseRules, setWahooHouseRules] = useState<Record<WahooHouseRuleKey, boolean>>(() => resolveWahooHouseRules())
 
   // ---- Checkers ----
   const [checkersRole, setCheckersRole] = useState<'host' | 'guest' | null>(null)
@@ -676,6 +677,7 @@ export default function App() {
   const wahooBotCounterRef = useRef(0)
   const wahooDroppedRef = useRef<string[]>([])
   const wahooRejectionNoticeRef = useRef<string | null>(null)
+  const wahooHouseRulesRef = useRef<Record<WahooHouseRuleKey, boolean>>(resolveWahooHouseRules())
   const checkersSessionRef = useRef<CheckersSession | null>(null)
   const checkersHostRef = useRef<HostHandle<CheckersView> | null>(null)
   const checkersGuestRef = useRef<GuestHandle<CheckersAction> | null>(null)
@@ -1145,6 +1147,8 @@ export default function App() {
     wahooBotCounterRef.current = 0
     wahooNamesRef.current = {}
     wahooRejectionNoticeRef.current = null
+    setWahooHouseRules(resolveWahooHouseRules())
+    wahooHouseRulesRef.current = resolveWahooHouseRules()
     // Checkers
     checkersHostRef.current?.destroy()
     checkersHostRef.current = null
@@ -3100,6 +3104,7 @@ export default function App() {
       const view: WahooView = {
         kind: 'lobby',
         roster: wahooSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === wahooLocalPlayerIdRef.current })),
+        houseRules: { ...wahooHouseRulesRef.current },
       }
       setWahooView(view)
       wahooHostRef.current?.broadcast(view)
@@ -3134,6 +3139,8 @@ export default function App() {
         wahooDroppedRef.current = []
         setWahooDropped([])
         setWahooNotice(null)
+        setWahooHouseRules(resolveWahooHouseRules())
+        wahooHouseRulesRef.current = resolveWahooHouseRules()
         wahooBroadcast()
       },
       onJoin(guestId, guestName) {
@@ -3147,6 +3154,7 @@ export default function App() {
         }
         wahooSeatsRef.current = [...wahooSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
         setWahooSeats(wahooSeatsRef.current)
+        wahooAutoOffTwoColors()
         wahooBroadcast()
       },
       onAction(guestId, action) {
@@ -3185,6 +3193,16 @@ export default function App() {
     })
   }
 
+  // twoColors is a two-player-only rule: the moment a third seat fills, drop it
+  // in the ref and rebroadcast so everyone in the room sees the toggle flip to
+  // Off. It stays off if seats fall back to two — the host can re-enable by hand.
+  function wahooAutoOffTwoColors() {
+    if (wahooSeatsRef.current.length > 2 && wahooHouseRulesRef.current.twoColors) {
+      wahooHouseRulesRef.current = { ...wahooHouseRulesRef.current, twoColors: false }
+      setWahooHouseRules(wahooHouseRulesRef.current)
+    }
+  }
+
   function addWahooHouseBot() {
     if (wahooRole !== 'host' || wahooStartedRef.current) return
     if (wahooSeatsRef.current.length >= 4) return
@@ -3193,7 +3211,19 @@ export default function App() {
     const botName = randomBotName(wahooSeatsRef.current.map((s) => s.name))
     wahooSeatsRef.current = [...wahooSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setWahooSeats(wahooSeatsRef.current)
+    wahooAutoOffTwoColors()
     wahooBotSeatsRef.current.add(botId)
+    wahooBroadcast()
+  }
+
+  function wahooToggleHouseRule(key: WahooHouseRuleKey) {
+    if (wahooRole !== 'host' || wahooStartedRef.current) return
+    // Ref-first (not the state value): wahooBroadcast() runs synchronously below
+    // and must send the just-toggled rules, which the state updater can't
+    // guarantee yet.
+    const next = { ...wahooHouseRulesRef.current, [key]: !wahooHouseRulesRef.current[key] }
+    wahooHouseRulesRef.current = next
+    setWahooHouseRules(next)
     wahooBroadcast()
   }
 
@@ -3207,7 +3237,7 @@ export default function App() {
       ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
     }
     const seed = Math.floor(Math.random() * 2147483647)
-    wahooSessionRef.current = createWahooGame(playerIds, seed)
+    wahooSessionRef.current = createWahooGame(playerIds, seed, wahooHouseRulesRef.current)
     wahooNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     wahooStartedRef.current = true
     setWahooStarted(true)
@@ -3351,7 +3381,7 @@ export default function App() {
       ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
     }
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createWahooGame(playerIds, seed)
+    const next = createWahooGame(playerIds, seed, wahooHouseRulesRef.current)
     next.session = { ...next.session, revision: prevRevision + 1 }
     wahooSessionRef.current = next
     wahooBroadcast()
@@ -5956,6 +5986,9 @@ export default function App() {
     const roster = wahooRole === 'host'
       ? wahooSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === wahooLocalPlayerId }))
       : (wahooView?.kind === 'lobby' ? wahooView.roster : [])
+    const viewHouseRules = wahooRole === 'host'
+      ? wahooHouseRules
+      : (wahooView?.kind === 'lobby' ? wahooView.houseRules : resolveWahooHouseRules())
     return (
       <WahooRoom
         code={wahooCode}
@@ -5963,7 +5996,9 @@ export default function App() {
         isHost={wahooRole === 'host'}
         seats={roster}
         notice={wahooNotice ?? error}
+        houseRules={viewHouseRules}
         onAddHouseBot={addWahooHouseBot}
+        onToggleHouseRule={wahooToggleHouseRule}
         onStartGame={wahooStart}
         onLeave={resetToEntry}
       />
