@@ -7,13 +7,21 @@ import { rankWahooResults } from './WahooResults'
 // `p >= 52` as "home" instead of the engine's actual win threshold `LANE_START` (63,
 // from board.ts), so track marbles at 52-62 were miscounted as home and could invert
 // ranking. positions 52 and 62 are still on the shared track; 63 and 66 are in the lane.
-function buildPublicState(positions: Record<string, number[]>): WahooPublicState {
-  const playerIds = Object.keys(positions)
+// setOwners/houseRules are optional so twoColors fixtures can override them; playerOrder
+// derives from the unique owners of setOwners (the identity map = one row per set key,
+// which is exactly the normal-game shape).
+function buildPublicState(
+  positions: Record<string, number[]>,
+  opts: { setOwners?: Record<string, string>; houseRules?: { twoColors: boolean } } = {},
+): WahooPublicState {
+  const setIds = Object.keys(positions)
+  const setOwners = opts.setOwners ?? Object.fromEntries(setIds.map((id) => [id, id]))
+  const playerIds = [...new Set(Object.values(setOwners))]
   return {
     stage: 'over',
     turn: createTurnState<'roll' | 'move'>(playerIds, 'roll'),
-    seatArms: Object.fromEntries(playerIds.map((id, i) => [id, i])),
-    setOwners: Object.fromEntries(playerIds.map((id) => [id, id])),
+    seatArms: Object.fromEntries(setIds.map((id, i) => [id, i])),
+    setOwners,
     positions,
     centerBy: null,
     die: null,
@@ -22,7 +30,7 @@ function buildPublicState(positions: Record<string, number[]>): WahooPublicState
     lastEvent: null,
     winnerId: playerIds[0],
     mutedArm: null,
-    houseRules: { twoColors: false },
+    houseRules: opts.houseRules ?? { twoColors: false },
   }
 }
 
@@ -53,5 +61,55 @@ describe('rankWahooResults', () => {
     const rows = rankWahooResults(publicState, {})
     expect(rows[0].home).toBe(2)
     expect(rows[0].base).toBe(2)
+  })
+
+  it('twoColors: winner with all 8 marbles home across both sets shows home 8, base 0', () => {
+    const publicState = buildPublicState(
+      {
+        p1: [63, 64, 65, 66],
+        'p1:2': [63, 64, 65, 66],
+        p2: [-1, -1, -1, -1],
+        'p2:2': [-1, -1, -1, -1],
+      },
+      {
+        setOwners: { p1: 'p1', 'p1:2': 'p1', p2: 'p2', 'p2:2': 'p2' },
+        houseRules: { twoColors: true },
+      },
+    )
+    const rows = rankWahooResults(publicState, { p1: 'P1', p2: 'P2' })
+    expect(rows).toHaveLength(2) // one row per player, never one per set
+    expect(rows[0].id).toBe('p1')
+    expect(rows[0].home).toBe(8)
+    expect(rows[0].base).toBe(0)
+  })
+
+  it('twoColors: aggregates a player\'s home/base across both owned sets', () => {
+    const publicState = buildPublicState(
+      {
+        p1: [63, 64, 65, 30], // primary set: 3 home, 1 on the track
+        'p1:2': [63, 64, -1, 20], // second set: 2 home, 1 base, 1 on the track
+        p2: [-1, -1, -1, -1],
+        'p2:2': [-1, -1, -1, -1],
+      },
+      {
+        setOwners: { p1: 'p1', 'p1:2': 'p1', p2: 'p2', 'p2:2': 'p2' },
+        houseRules: { twoColors: true },
+      },
+    )
+    const rows = rankWahooResults(publicState, { p1: 'P1', p2: 'P2' })
+    const p1 = rows.find((r) => r.id === 'p1')!
+    expect(p1.home).toBe(5) // 3 from the primary set + 2 from the second
+    expect(p1.base).toBe(1) // 1 from the second set
+  })
+
+  it('twoColors off: explicit identity setOwners still yields one row per player with single-set counts', () => {
+    const publicState = buildPublicState(
+      { p1: [63, 66, -1, 20], p2: [64, 65, -1, -1] },
+      { setOwners: { p1: 'p1', p2: 'p2' }, houseRules: { twoColors: false } },
+    )
+    const rows = rankWahooResults(publicState, { p1: 'P1', p2: 'P2' })
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.id === 'p1')).toMatchObject({ home: 2, base: 1 })
+    expect(rows.find((r) => r.id === 'p2')).toMatchObject({ home: 2, base: 2 })
   })
 })

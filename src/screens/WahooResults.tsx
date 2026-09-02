@@ -36,13 +36,19 @@ export interface WahooResultRow {
 // is unit-testable without rendering the component.
 export function rankWahooResults(publicState: WahooPublicState, names: Record<string, string>): WahooResultRow[] {
   return publicState.turn.playerOrder
-    .map((id) => ({
-      id,
-      name: names[id] ?? id,
-      color: ARM_COLORS[publicState.seatArms[id]],
-      home: (publicState.positions[id] ?? []).filter((p) => p >= LANE_START).length,
-      base: (publicState.positions[id] ?? []).filter((p) => p === -1).length,
-    }))
+    .map((id) => {
+      // positions are keyed by setId, not playerId — under twoColors a player owns two sets
+      // (`playerId` and `${playerId}:2`), so home/base aggregate over every set they control.
+      const setIds = Object.keys(publicState.setOwners).filter((s) => publicState.setOwners[s] === id)
+      const marbles = setIds.flatMap((s) => publicState.positions[s] ?? [])
+      return {
+        id,
+        name: names[id] ?? id,
+        color: ARM_COLORS[publicState.seatArms[id]],
+        home: marbles.filter((p) => p >= LANE_START).length,
+        base: marbles.filter((p) => p === -1).length,
+      }
+    })
     .sort((a, b) => b.home - a.home)
 }
 

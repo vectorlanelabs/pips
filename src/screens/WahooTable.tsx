@@ -231,7 +231,11 @@ export function WahooTable({
   // Marble-first selection for shared (contested) destinations: null = plain
   // destination-click mode; a (setId, marbleIdx) pair narrows the visible
   // targets to that marble's moves (see destGroups/pendingContest below).
+  // pendingDestKey remembers which contested HOLE was clicked — a marble can
+  // be a candidate of several shared holes at once, so the hole, not the
+  // marble, picks the contest (see pendingContest).
   const [selectedMarble, setSelectedMarble] = useState<{ setId: string; marbleIdx: number } | null>(null)
+  const [pendingDestKey, setPendingDestKey] = useState<string | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
   // Measure the square board pane; unit = pane/BOARD_SPAN (content ±8 + margin).
@@ -331,17 +335,16 @@ export function WahooTable({
   const uniqueTargets = useMemo(() => destGroups.filter((g) => g.moves.length === 1), [destGroups])
   const contestedTargets = useMemo(() => destGroups.filter((g) => g.moves.length >= 2), [destGroups])
 
-  // The contested destination the selected marble is a candidate of, if any.
-  // A marble can be a candidate of at most one shared hole, so this lookup is
-  // unambiguous; that hole's candidate set gets the selectable (execute) rings.
+  // The contested destination group whose hole was clicked, looked up by dest
+  // key (`${dest.x}:${dest.y}`) rather than by a marble: under twoColors one
+  // marble can be a candidate of several shared holes at once (its shortcut
+  // contests the center while its advance contests a track hole another owned
+  // set can also reach), so the marble alone can't say which hole was clicked.
+  // This group's candidate set gets the selectable (execute) rings.
   const pendingContest = useMemo(() => {
-    if (selectedMarble === null) return null
-    return (
-      contestedTargets.find((g) =>
-        g.moves.some((m) => m.setId === selectedMarble.setId && m.marbleIdx === selectedMarble.marbleIdx),
-      ) ?? null
-    )
-  }, [selectedMarble, contestedTargets])
+    if (pendingDestKey === null) return null
+    return contestedTargets.find((g) => `${g.dest.x}:${g.dest.y}` === pendingDestKey) ?? null
+  }, [pendingDestKey, contestedTargets])
 
   // The pending contest's candidate marbles, keyed as `${setId}:${marbleIdx}`
   // (marbleIdx is a plain 0..3 integer, so the join is unambiguous): those
@@ -369,6 +372,7 @@ export function WahooTable({
   // selection so a stale marble choice can't resurrect on a later turn.
   useEffect(() => {
     setSelectedMarble(null)
+    setPendingDestKey(null)
   }, [myMoves])
 
   // Marbles that have ≥1 legal move (ring buttons: click to filter to that
@@ -450,9 +454,17 @@ export function WahooTable({
           <div className="wh-legend">
             {publicState.turn.playerOrder.map((pid) => {
               const isTurn = pid === currentPlayer(publicState.turn)
+              // One dot per set the player owns, primary setId first then `:2`
+              // (twoColors). Normal games own exactly one set — the identity
+              // map — so they render exactly one dot, as always.
+              const ownedSetIds = Object.keys(publicState.setOwners)
+                .filter((s) => publicState.setOwners[s] === pid)
+                .sort((a, b) => (a === pid ? -1 : b === pid ? 1 : 0))
               return (
                 <div key={pid} className={`wh-seat-chip${isTurn ? ' wh-seat-chip--turn' : ''}`}>
-                  <span className="wh-seat-dot" style={{ background: seatColor(publicState, pid) }} />
+                  {ownedSetIds.map((setId) => (
+                    <span key={setId} className="wh-seat-dot" style={{ background: seatColor(publicState, setId) }} />
+                  ))}
                   <span className="wh-seat-name">{names[pid] ?? pid}</span>
                   {isTurn && <span className="wh-turn-tag">turn</span>}
                 </div>
@@ -464,7 +476,7 @@ export function WahooTable({
 
         <div className="wh-board-col">
           {/* Board — clicking anywhere off a target or marble ring clears the selection */}
-          <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarble(null)}>
+          <div className="wh-board" ref={boardRef} onClick={() => { setSelectedMarble(null); setPendingDestKey(null) }}>
             {boardReady && (
               <>
                 {/* Solid cream cross under the holes; the felt shows around it and
@@ -596,10 +608,13 @@ export function WahooTable({
                       onClick={(e) => {
                         e.stopPropagation()
                         if (isCandidate && pendingContest) {
+                          // pendingContest is keyed by the clicked hole, so this
+                          // lookup is guaranteed to be a move to that hole.
                           const move = pendingContest.moves.find((m) => m.setId === setId && m.marbleIdx === marbleIdx)
                           if (move) onMove(move)
                         } else {
                           setSelectedMarble({ setId, marbleIdx })
+                          setPendingDestKey(null)
                         }
                       }}
                       aria-label={isCandidate ? 'Move this marble to the shared destination' : 'Show this marble’s destinations'}
@@ -608,9 +623,11 @@ export function WahooTable({
                 })}
 
                 {/* Destination targets: unique holes click to move; shared holes
-                    click to enter marble-first selection instead. With a marble
-                    selected, only its destinations are shown — the contested one
-                    becomes pending, and clicking it confirms that marble's move. */}
+                    click to enter marble-first selection instead. Clicking a
+                    shared hole keys the pending contest by that hole (pendingDestKey);
+                    its candidate marble rings then light up and click to execute.
+                    With a marble selected (filter mode), only its destinations
+                    are shown and each click executes that marble's move. */}
                 {selectedMarble === null ? (
                   <>
                     {uniqueTargets.map((t) => (
@@ -631,49 +648,50 @@ export function WahooTable({
                         aria-label="Move a marble here"
                       />
                     ))}
-                    {contestedTargets.map((t) => (
-                      <button
-                        key={`c${t.dest.x}:${t.dest.y}`}
-                        type="button"
-                        className="wh-target wh-target--contested"
-                        style={{
-                          left: `calc(50% + ${t.dest.x * unit}px)`,
-                          top: `calc(50% + ${t.dest.y * unit}px)`,
-                          width: targetDiameter(board, t.dest, unit),
-                          height: targetDiameter(board, t.dest, unit),
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedMarble({ setId: t.moves[0].setId, marbleIdx: t.moves[0].marbleIdx })
-                        }}
-                        aria-label="Shared destination: choose a marble"
-                      />
-                    ))}
+                    {contestedTargets.map((t) => {
+                      const isPending = pendingContest !== null
+                        && t.dest.x === pendingContest.dest.x
+                        && t.dest.y === pendingContest.dest.y
+                      return (
+                        <button
+                          key={`c${t.dest.x}:${t.dest.y}`}
+                          type="button"
+                          className={`wh-target wh-target--contested${isPending ? ' wh-target--pending' : ''}`}
+                          style={{
+                            left: `calc(50% + ${t.dest.x * unit}px)`,
+                            top: `calc(50% + ${t.dest.y * unit}px)`,
+                            width: targetDiameter(board, t.dest, unit),
+                            height: targetDiameter(board, t.dest, unit),
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPendingDestKey(`${t.dest.x}:${t.dest.y}`)
+                            setSelectedMarble(null)
+                          }}
+                          aria-label="Shared destination: choose a marble"
+                        />
+                      )
+                    })}
                   </>
                 ) : (
-                  selectedTargets.map((t) => {
-                    const isPending = pendingContest !== null
-                      && t.dest.x === pendingContest.dest.x
-                      && t.dest.y === pendingContest.dest.y
-                    return (
-                      <button
-                        key={`s${t.dest.x}:${t.dest.y}`}
-                        type="button"
-                        className={`wh-target${isPending ? ' wh-target--contested wh-target--pending' : ''}`}
-                        style={{
-                          left: `calc(50% + ${t.dest.x * unit}px)`,
-                          top: `calc(50% + ${t.dest.y * unit}px)`,
-                          width: targetDiameter(board, t.dest, unit),
-                          height: targetDiameter(board, t.dest, unit),
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onMove(t.move)
-                        }}
-                        aria-label="Move the selected marble here"
-                      />
-                    )
-                  })
+                  selectedTargets.map((t) => (
+                    <button
+                      key={`s${t.dest.x}:${t.dest.y}`}
+                      type="button"
+                      className="wh-target"
+                      style={{
+                        left: `calc(50% + ${t.dest.x * unit}px)`,
+                        top: `calc(50% + ${t.dest.y * unit}px)`,
+                        width: targetDiameter(board, t.dest, unit),
+                        height: targetDiameter(board, t.dest, unit),
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onMove(t.move)
+                      }}
+                      aria-label="Move the selected marble here"
+                    />
+                  ))
                 )}
               </>
             )}
