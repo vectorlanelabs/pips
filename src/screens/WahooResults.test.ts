@@ -13,6 +13,7 @@ function buildPublicState(positions: Record<string, number[]>): WahooPublicState
     stage: 'over',
     turn: createTurnState<'roll' | 'move'>(playerIds, 'roll'),
     seatArms: Object.fromEntries(playerIds.map((id, i) => [id, i])),
+    setOwners: Object.fromEntries(playerIds.map((id) => [id, id])),
     positions,
     centerBy: null,
     die: null,
@@ -21,6 +22,7 @@ function buildPublicState(positions: Record<string, number[]>): WahooPublicState
     lastEvent: null,
     winnerId: playerIds[0],
     mutedArm: null,
+    houseRules: { twoColors: false },
   }
 }
 
