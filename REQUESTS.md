@@ -1,7 +1,8 @@
 # Requests for the human
 
-- [ ] 2026-09-01, Wahoo two-colors wrap-up — **charter complete, ready
-      for your play-test**: the twoColors house rule (Uno-pattern toggle,
+- [x] 2026-09-01, Wahoo two-colors wrap-up — DONE: user said "push"
+      2026-09-01; merged to `main` (bd603b9), pushed, branch pruned.
+      Original: **charter complete, ready for your play-test**: the twoColors house rule (Uno-pattern toggle,
       2-player only, visible auto-off at 3+ seats) with each player
       running two opposite-corner colors that jump/bump each other
       exactly like opponents (forced self-bumps included, with their own
