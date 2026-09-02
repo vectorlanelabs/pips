@@ -1,6 +1,18 @@
 # Roadmap
 
-Charter: Poker round 2 (Omaha + Deuces Wild + Ante) — see `CHARTER.md`.
+Charter: Wahoo two colors each — see `CHARTER.md`.
+
+## Charter: Wahoo two colors each (2026-09-01) — in progress
+
+Branch `charter/wahoo-two-colors`. Specs: `specs/61-wahoo-two-colors-engine.md`,
+`specs/62-wahoo-two-colors-screens-wiring.md`. Baseline: 1828 tests / tsc clean.
+
+### Next
+- [ ] M1 — spec 61 engine (state/rules/bot set-keyed model + two-colors.test.ts)
+- [ ] M2 — spec 62 screens+wiring incl. live browser pass + bot pacing check
+
+### Done (this charter)
+- (nothing yet)
 
 ## Charter: Poker round 2 (2026-09-01) — done (unmerged, awaiting play-test + "push")
 
