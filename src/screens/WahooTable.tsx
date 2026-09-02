@@ -34,8 +34,8 @@ const ARM_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
 const CORNER_RING = 'rgba(147, 51, 234, 0.5)' // brand-tinted ring on the four corner holes
 const GREY_BORDER = 'var(--grey-border)' // unseated arms: grey instead of an arm color
 
-function seatColor(publicState: WahooPublicState, playerId: string): string {
-  return ARM_COLORS[publicState.seatArms[playerId]]
+function seatColor(publicState: WahooPublicState, setId: string): string {
+  return ARM_COLORS[publicState.seatArms[setId]]
 }
 
 // Arm color as an rgba fill at the given alpha (home-lane holes use 0.45).
@@ -86,9 +86,9 @@ const CENTER_DIAMETER = 0.9
 
 // The physical hole a marble currently occupies (-1 base, -2 center, 0..62
 // track relative to the arm's come-out, 63..66 home lane, outermost first).
-function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, marbleIdx: number): Hole {
-  const arm = publicState.seatArms[playerId]
-  const p = publicState.positions[playerId][marbleIdx]
+function marbleHole(board: WahooBoard, publicState: WahooPublicState, setId: string, marbleIdx: number): Hole {
+  const arm = publicState.seatArms[setId]
+  const p = publicState.positions[setId][marbleIdx]
   if (p === -1) return board.bases[arm][marbleIdx]
   if (p === -2) return board.center
   if (p <= OWNER_TRACK_LEN - 1) return board.track[trackIndexFor(arm, p)]
@@ -98,12 +98,12 @@ function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: 
 // The physical hole a legal move's marble ends at: out → the arm's entry hole,
 // advance → the track/lane landing hole, shortcut → center, exit → the
 // diagonal corner.
-function destinationHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, die: number, move: WahooMove): Hole {
-  const arm = publicState.seatArms[playerId]
+function destinationHole(board: WahooBoard, publicState: WahooPublicState, setId: string, die: number, move: WahooMove): Hole {
+  const arm = publicState.seatArms[setId]
   if (move.kind === 'out') return board.track[trackIndexFor(arm, 0)]
   if (move.kind === 'shortcut') return board.center
   if (move.kind === 'exit') return board.track[trackIndexFor(arm, exitTargetRel(publicState.centerBy!.entryCornerRel))]
-  const to = publicState.positions[playerId][move.marbleIdx] + die
+  const to = publicState.positions[setId][move.marbleIdx] + die
   return to <= OWNER_TRACK_LEN - 1 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - LANE_START]
 }
 
@@ -163,7 +163,13 @@ function computeStatusLine(publicState: WahooPublicState, localPlayerId: string,
     case 'out':
     case 'shortcut':
     case 'exit':
-      if (ev.bumpedId !== null) return `${actor} bumped ${names[ev.bumpedId] ?? ev.bumpedId}!`
+      if (ev.bumpedId !== null) {
+        const victimOwner = publicState.setOwners[ev.bumpedId]
+        if (victimOwner === ev.by) {
+          return actor === 'You' ? 'You sent your own marble home!' : `${actor} sent their own marble home!`
+        }
+        return `${actor} bumped ${names[victimOwner] ?? victimOwner}!`
+      }
       if (ev.kind === 'move') return `${actor} moved a marble.`
       if (ev.kind === 'out') return `${actor} brought a marble out.`
       if (ev.kind === 'shortcut') return `${actor} took the center shortcut!`
@@ -223,9 +229,9 @@ export function WahooTable({
   const [dieRotation, setDieRotation] = useState(0)
   const flickerRun = useRef(0)
   // Marble-first selection for shared (contested) destinations: null = plain
-  // destination-click mode; a marble index narrows the visible targets to that
-  // marble's moves (see destGroups/pendingContest below).
-  const [selectedMarbleIdx, setSelectedMarbleIdx] = useState<number | null>(null)
+  // destination-click mode; a (setId, marbleIdx) pair narrows the visible
+  // targets to that marble's moves (see destGroups/pendingContest below).
+  const [selectedMarble, setSelectedMarble] = useState<{ setId: string; marbleIdx: number } | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
   // Measure the square board pane; unit = pane/BOARD_SPAN (content ±8 + margin).
@@ -313,14 +319,14 @@ export function WahooTable({
   const destGroups = useMemo(() => {
     const byDest = new Map<string, { dest: Hole; moves: WahooMove[] }>()
     for (const m of myMoves) {
-      const dest = destinationHole(board, publicState, localPlayerId, publicState.die!, m)
+      const dest = destinationHole(board, publicState, m.setId, publicState.die!, m)
       const key = `${dest.x}:${dest.y}`
       const group = byDest.get(key)
       if (group) group.moves.push(m)
       else byDest.set(key, { dest, moves: [m] })
     }
     return [...byDest.values()]
-  }, [myMoves, board, publicState, localPlayerId])
+  }, [myMoves, board, publicState])
 
   const uniqueTargets = useMemo(() => destGroups.filter((g) => g.moves.length === 1), [destGroups])
   const contestedTargets = useMemo(() => destGroups.filter((g) => g.moves.length >= 2), [destGroups])
@@ -329,42 +335,52 @@ export function WahooTable({
   // A marble can be a candidate of at most one shared hole, so this lookup is
   // unambiguous; that hole's candidate set gets the selectable (execute) rings.
   const pendingContest = useMemo(() => {
-    if (selectedMarbleIdx === null) return null
-    return contestedTargets.find((g) => g.moves.some((m) => m.marbleIdx === selectedMarbleIdx)) ?? null
-  }, [selectedMarbleIdx, contestedTargets])
+    if (selectedMarble === null) return null
+    return (
+      contestedTargets.find((g) =>
+        g.moves.some((m) => m.setId === selectedMarble.setId && m.marbleIdx === selectedMarble.marbleIdx),
+      ) ?? null
+    )
+  }, [selectedMarble, contestedTargets])
 
-  const candidateIdxs = useMemo(() => {
-    if (!pendingContest) return new Set<number>()
-    return new Set(pendingContest.moves.map((m) => m.marbleIdx))
+  // The pending contest's candidate marbles, keyed as `${setId}:${marbleIdx}`
+  // (marbleIdx is a plain 0..3 integer, so the join is unambiguous): those
+  // rings click to execute the move to the shared hole rather than filter.
+  const candidateKeys = useMemo(() => {
+    if (!pendingContest) return new Set<string>()
+    return new Set(pendingContest.moves.map((m) => `${m.setId}:${m.marbleIdx}`))
   }, [pendingContest])
 
   // With a marble selected, the visible targets narrow to that marble's moves.
   const selectedTargets = useMemo(() => {
-    if (selectedMarbleIdx === null) return []
+    if (selectedMarble === null) return []
     const byDest = new Map<string, { dest: Hole; move: WahooMove }>()
     for (const m of myMoves) {
-      if (m.marbleIdx !== selectedMarbleIdx) continue
-      const dest = destinationHole(board, publicState, localPlayerId, publicState.die!, m)
+      if (m.setId !== selectedMarble.setId || m.marbleIdx !== selectedMarble.marbleIdx) continue
+      const dest = destinationHole(board, publicState, m.setId, publicState.die!, m)
       const key = `${dest.x}:${dest.y}`
       if (!byDest.has(key)) byDest.set(key, { dest, move: m })
     }
     return [...byDest.values()]
-  }, [selectedMarbleIdx, myMoves, board, publicState, localPlayerId])
+  }, [selectedMarble, myMoves, board, publicState])
 
   // The selection only means something for the current legal-move set; any
   // action that changes it (a move, a roll, a turn hand-off) drops the
   // selection so a stale marble choice can't resurrect on a later turn.
   useEffect(() => {
-    setSelectedMarbleIdx(null)
+    setSelectedMarble(null)
   }, [myMoves])
 
   // Marbles that have ≥1 legal move (ring buttons: click to filter to that
   // marble's targets, or — for a pending-contest candidate — click to execute
   // that marble's move to the shared hole).
-  const movableMarbleIdxs = useMemo(() => {
-    const seen = new Set<number>()
-    for (const m of myMoves) seen.add(m.marbleIdx)
-    return [...seen]
+  const movableMarbles = useMemo(() => {
+    const byKey = new Map<string, { setId: string; marbleIdx: number }>()
+    for (const m of myMoves) {
+      const key = `${m.setId}:${m.marbleIdx}`
+      if (!byKey.has(key)) byKey.set(key, { setId: m.setId, marbleIdx: m.marbleIdx })
+    }
+    return [...byKey.values()]
   }, [myMoves])
 
   const status = useMemo(
@@ -448,7 +464,7 @@ export function WahooTable({
 
         <div className="wh-board-col">
           {/* Board — clicking anywhere off a target or marble ring clears the selection */}
-          <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarbleIdx(null)}>
+          <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarble(null)}>
             {boardReady && (
               <>
                 {/* Solid cream cross under the holes; the felt shows around it and
@@ -537,19 +553,19 @@ export function WahooTable({
 
                 {/* Marbles: 3D-shaded circles in seat color (radial gradient via
                     --marble-color), ink border + hard drop shadow */}
-                {Object.entries(publicState.positions).map(([pid, positions]) =>
+                {Object.entries(publicState.positions).map(([setId, positions]) =>
                   positions.map((_p, i) => {
-                    const h = marbleHole(board, publicState, pid, i)
+                    const h = marbleHole(board, publicState, setId, i)
                     return (
                       <span
-                        key={`${pid}-${i}`}
+                        key={`${setId}-${i}`}
                         className="wh-marble"
                         style={{
                           width: 0.85 * unit,
                           height: 0.85 * unit,
                           // The seat color feeds the CSS radial gradient (see
                           // .wh-marble) — same color, spherical shading added.
-                          ...({ '--marble-color': seatColor(publicState, pid) } as CSSProperties),
+                          ...({ '--marble-color': seatColor(publicState, setId) } as CSSProperties),
                           transform: `translate(calc(-50% + ${h.x * unit}px), calc(-50% + ${h.y * unit}px))`,
                         }}
                       />
@@ -560,13 +576,15 @@ export function WahooTable({
                 {/* Movable marbles: ring buttons. A plain click filters to that
                     marble's targets; a candidate of the pending contested
                     destination executes its move instead. */}
-                {movableMarbleIdxs.map((marbleIdx) => {
-                  const h = marbleHole(board, publicState, localPlayerId, marbleIdx)
-                  const isCandidate = candidateIdxs.has(marbleIdx)
-                  const isSelected = selectedMarbleIdx === marbleIdx
+                {movableMarbles.map(({ setId, marbleIdx }) => {
+                  const h = marbleHole(board, publicState, setId, marbleIdx)
+                  const isCandidate = candidateKeys.has(`${setId}:${marbleIdx}`)
+                  const isSelected = selectedMarble !== null
+                    && selectedMarble.setId === setId
+                    && selectedMarble.marbleIdx === marbleIdx
                   return (
                     <button
-                      key={`mr${marbleIdx}`}
+                      key={`mr${setId}:${marbleIdx}`}
                       type="button"
                       className={`wh-marble-ring${isCandidate ? ' wh-marble-ring--candidate' : isSelected ? ' wh-marble-ring--selected' : ''}`}
                       style={{
@@ -578,10 +596,10 @@ export function WahooTable({
                       onClick={(e) => {
                         e.stopPropagation()
                         if (isCandidate && pendingContest) {
-                          const move = pendingContest.moves.find((m) => m.marbleIdx === marbleIdx)
+                          const move = pendingContest.moves.find((m) => m.setId === setId && m.marbleIdx === marbleIdx)
                           if (move) onMove(move)
                         } else {
-                          setSelectedMarbleIdx(marbleIdx)
+                          setSelectedMarble({ setId, marbleIdx })
                         }
                       }}
                       aria-label={isCandidate ? 'Move this marble to the shared destination' : 'Show this marble’s destinations'}
@@ -593,7 +611,7 @@ export function WahooTable({
                     click to enter marble-first selection instead. With a marble
                     selected, only its destinations are shown — the contested one
                     becomes pending, and clicking it confirms that marble's move. */}
-                {selectedMarbleIdx === null ? (
+                {selectedMarble === null ? (
                   <>
                     {uniqueTargets.map((t) => (
                       <button
@@ -626,7 +644,7 @@ export function WahooTable({
                         }}
                         onClick={(e) => {
                           e.stopPropagation()
-                          setSelectedMarbleIdx(t.moves[0].marbleIdx)
+                          setSelectedMarble({ setId: t.moves[0].setId, marbleIdx: t.moves[0].marbleIdx })
                         }}
                         aria-label="Shared destination: choose a marble"
                       />
