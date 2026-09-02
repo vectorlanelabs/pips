@@ -8,11 +8,16 @@ Branch `charter/wahoo-two-colors`. Specs: `specs/61-wahoo-two-colors-engine.md`,
 `specs/62-wahoo-two-colors-screens-wiring.md`. Baseline: 1828 tests / tsc clean.
 
 ### Next
-- [ ] M1 — spec 61 engine (state/rules/bot set-keyed model + two-colors.test.ts)
 - [ ] M2 — spec 62 screens+wiring incl. live browser pass + bot pacing check
 
 ### Done (this charter)
-- (nothing yet)
+- [cycle 1] M1 — set-keyed engine + twoColors house rule (7a2b006).
+  Implementer hit its iteration cap after the engine rework but before
+  the test file; recovered per protocol (partial kept, tests re-dispatched
+  narrow). 23 new tests; rule-off seating proven byte-identical across
+  150 seeded games; Oscar approve (no blocking/major; 1 nit fixed, 1
+  rejected-as-designed). 1851 tests repo-wide; sole tsc error is the
+  expected WahooResults.test.ts spec-62 handoff.
 
 ## Charter: Poker round 2 (2026-09-01) — done (unmerged, awaiting play-test + "push")
 

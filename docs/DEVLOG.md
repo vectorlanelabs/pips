@@ -4869,3 +4869,25 @@ shipping each verified charter promptly.
   M2 spec had deviated by replacing the right-column brand pill with
   the dropdown — the pill is restored); (3) poker codes now PK- with
   HE- still routing for old links.
+
+## Cycle 1 (Wahoo two colors) — 2026-09-01
+- **Shipped:** M1 set-keyed engine + twoColors house rule (7a2b006).
+  seatArms/positions/centerBy rekeyed by marble set with setOwners
+  (identity when off); own-color-as-opponent falls out of the keying
+  rather than special cases; all-eight win; bot self-bump partition.
+- **Delegation friction:** deepseek:flash hit its 25-iteration cap after
+  the engine rework but before two-colors.test.ts — recovered per the
+  delegation protocol: inspected the tree (coherent, 79 existing tests
+  green), kept it, re-dispatched the test file as a narrow slice. The
+  test-writer's report was calibrated (self-caught its own wrong fixture
+  arithmetic and said so).
+- **Review (Sonnet/Oscar):** approve, no blocking/major. Its sandbox
+  blocked command execution, so its verdict was static tracing — the
+  lead's own runs (102 wahoo / 1851 full / tsc) supply the executed
+  evidence it flagged as missing. Dispositions: moveBumps unused param
+  REJECTED as designed (spec-locked signature); bot.ts positions name
+  shadow FIXED (lead-applied rename, this note is the honest record).
+- **Lead verification:** suite re-run independently; full diff read
+  line-by-line; rule-off seating dumped old-vs-new across 150 seeded
+  games — byte-identical (SEATING_IDENTICAL probe).
+- **Continue?** Yes — M2 (spec 62 screens+wiring + live pass).
