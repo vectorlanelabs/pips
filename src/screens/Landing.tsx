@@ -183,6 +183,12 @@ export function Landing({
           </div>
         ))}
       </div>
+
+      {/* Build stamp: the deployed commit, so a finished push is visually
+          checkable without digging into the bundle. */}
+      <div style={{ marginTop: 'clamp(28px,4vw,44px)', fontSize: 11, color: 'var(--faint-text)' }}>
+        v. {__BUILD_COMMIT__}
+      </div>
     </div>
   )
 }
