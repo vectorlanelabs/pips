@@ -10,11 +10,11 @@ export interface PhaseGroup {
 
 // Orders a valid run's cards for display: naturals ascending by rank, with
 // each Wild placed at the exact gap position it fills. Wilds beyond what's
-// needed to fill internal gaps are pure range-extensions with no single
-// correct side — split them deterministically, floor(extra/2) before the
-// naturals and the rest after. Deterministic and stable: the same card set
-// always produces the same order, unlike the broken NaN-comparator sort it
-// replaces.
+// needed to fill internal gaps follow the SAME canonical placement the
+// validator locks (runOccupiedRange): upward while room below 12 remains,
+// overflow below min. The old floor(extra/2) split ignored the ends' actual
+// room, so a run topping out at 12 drew its extension Wild in the 13 slot —
+// a card that doesn't exist (live-reported bug).
 //
 // `cards` is not guaranteed to be a complete, self-contained valid run: a
 // caller may pass only a subset (e.g. a group's own zone plus same-player
@@ -44,7 +44,8 @@ export function orderRunForDisplay(cards: Card[]): Card[] {
     }
   }
   const extra = wilds.slice(wildIdx)
-  const before = Math.floor(extra.length / 2)
+  const after = Math.min(extra.length, Math.max(0, 12 - maxNum))
+  const before = extra.length - after
   return [...extra.slice(0, before), ...filled, ...extra.slice(before)]
 }
 
@@ -71,17 +72,28 @@ export function isValidSet(cards: Card[]): boolean {
   return naturals.every((c) => c.rank === firstRank)
 }
 
-// The [min,max] rank span already established by a run's naturals, or null if
-// the run has no naturals yet (nothing pins any Wild to a value yet). Every
-// rank inside this span is necessarily already occupied — by a natural, or by
-// a Wild filling that gap — since the run is valid. Used to lock a Wild's
-// implied value in place: once a Wild is filling gap N in a laid-down run, no
-// later HIT may add a natural N and bump it loose to represent something
-// else. Only extending the range below min or above max is still open.
-export function runLockedRange(cards: Card[]): { min: number; max: number } | null {
+// The [min,max] rank span a valid run actually OCCUPIES, wilds included, or
+// null if the run has no naturals (nothing pins any Wild to a value yet).
+// Wild values are never stored — they're re-derived from this one canonical
+// placement everywhere (validation AND display), so the two can't disagree:
+// interior gaps are filled first (forced), and each leftover Wild extends the
+// run UPWARD while room below 12 remains, with overflow going below min. The
+// predecessor of this function spanned only the NATURALS, which locked a Wild
+// sitting in an interior gap but left an end-extension Wild unprotected: on
+// 9-10-11-12 + W the Wild is unambiguously the 8 (no room above 12), yet a
+// later natural 8 was accepted and silently re-read the Wild as a 7 — a free
+// extra card per hit, indefinitely (live-reported bug).
+export function runOccupiedRange(cards: Card[]): { min: number; max: number } | null {
   const numbers = cards.filter((c) => c.meta?.kind === 'number').map((c) => Number(c.rank))
   if (numbers.length === 0) return null
-  return { min: Math.min(...numbers), max: Math.max(...numbers) }
+  const wildCount = cards.filter((c) => c.meta?.kind === 'wild').length
+  const minNum = Math.min(...numbers)
+  const maxNum = Math.max(...numbers)
+  const gapsToFill = maxNum - minNum + 1 - numbers.length
+  const extraWilds = Math.max(0, wildCount - gapsToFill)
+  const above = Math.min(extraWilds, 12 - maxNum)
+  const below = extraWilds - above
+  return { min: minNum - below, max: maxNum + above }
 }
 
 // True iff a contiguous run of consecutive integers in [1,12] (no wraparound)
@@ -147,15 +159,42 @@ export function validateGroupExtension(
   if (cards.some((c) => c.meta?.kind === 'skip')) {
     return { ok: false, reason: 'a Skip card cannot be used in a phase' }
   }
-  // A run's already-established range is off-limits to new naturals: every rank
-  // in it is already covered (by a natural, or by a Wild filling that gap), so a
-  // new natural landing in-range would silently evict a Wild from the slot it
-  // was locked into — see runLockedRange.
+  // A run's occupied range (wilds included — see runOccupiedRange) is
+  // off-limits to new naturals: every rank in it is already covered by a
+  // natural or a Wild, so a new natural landing in-range would silently evict
+  // a Wild from the value it was played as. And the extension must stay
+  // contiguous AGAINST THAT RANGE, treated as a solid block: re-running the
+  // bare isValidRun over the combined cards would let a hit skip past a
+  // missing rank (e.g. a natural 7 onto 9-10 + W W, occupying 9..12) and
+  // legitimize itself by re-reading an end-extension Wild as the 8 — the same
+  // value-slide by another door. A run with no naturals has no established
+  // reading to protect, so it falls through to the plain validity check.
   if (type === 'run') {
-    const locked = runLockedRange(currentFull)
-    if (locked) {
-      const intruder = cards.find((c) => c.meta?.kind === 'number' && Number(c.rank) >= locked.min && Number(c.rank) <= locked.max)
-      if (intruder) return { ok: false, reason: 'that number is already covered by a Wild in this run' }
+    const occupied = runOccupiedRange(currentFull)
+    if (occupied) {
+      const newValues: number[] = []
+      const seen = new Set<number>()
+      for (const c of cards) {
+        if (c.meta?.kind !== 'number') continue
+        const v = Number(c.rank)
+        if (v >= occupied.min && v <= occupied.max) {
+          return { ok: false, reason: 'that number is already covered by a Wild in this run' }
+        }
+        if (seen.has(v)) return { ok: false, reason: 'those cards cannot be added to that group' }
+        seen.add(v)
+        newValues.push(v)
+      }
+      const newWilds = cards.filter((c) => c.meta?.kind === 'wild').length
+      // Contiguity over the occupied block plus the new cards, same math as
+      // isValidRun with the block standing in for its span of naturals.
+      const min = Math.min(occupied.min, ...newValues)
+      const max = Math.max(occupied.max, ...newValues)
+      const covered = occupied.max - occupied.min + 1 + newValues.length
+      const gapsToFill = max - min + 1 - covered
+      if (gapsToFill > newWilds) return { ok: false, reason: 'those cards cannot be added to that group' }
+      const extraWilds = newWilds - gapsToFill
+      if (extraWilds > min - 1 + (12 - max)) return { ok: false, reason: 'those cards cannot be added to that group' }
+      return { ok: true }
     }
   }
   const combined = [...currentFull, ...cards]

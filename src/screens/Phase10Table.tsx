@@ -136,7 +136,7 @@ function layPhaseEnabled(selectedIds: string[], hand: Card[], requirement: Phase
 
 // validateGroupExtension is the same predicate the host validator runs, so an
 // enabled hit target can never be rejected server-side (the bare isValid* checks
-// used before missed the runLockedRange rule and offered doomed hits).
+// used before missed the runOccupiedRange rule and offered doomed hits).
 function canHitGroup(groupCards: Card[], groupType: GroupType, selectedCards: Card[]): boolean {
   return validateGroupExtension(groupCards, groupType, selectedCards).ok
 }

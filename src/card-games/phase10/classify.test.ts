@@ -553,3 +553,93 @@ describe('classifyPhaseHand', () => {
     expect(result.valid).toBe(false)
   })
 })
+
+// ── Regression: end-extension Wilds must lock and render inside 1..12 ──────────
+// Live report: run 9-10-11-12, Wild hit onto it (unambiguously the 8 -- no room
+// above 12), then a natural 8 was accepted and silently re-read the Wild as a 7,
+// indefinitely (7, 6, ... one free card per hit). The board also drew the Wild
+// above the 12, as a nonexistent 13.
+import { validateGroupExtension, runOccupiedRange } from './classify.ts'
+
+function run(...ranks: number[]): Card[] {
+  return ranks.map((r, i) => numberCard(`n${r}-${i}`, 'green', String(r)))
+}
+
+describe('runOccupiedRange', () => {
+  it('spans end-extension Wilds, upward first with room, overflow below', () => {
+    expect(runOccupiedRange([...run(9, 10, 11, 12), wildCard('w')])).toEqual({ min: 8, max: 12 })
+    expect(runOccupiedRange([...run(1, 2, 3, 4), wildCard('w')])).toEqual({ min: 1, max: 5 })
+    expect(runOccupiedRange([...run(9, 10), wildCard('w1'), wildCard('w2')])).toEqual({ min: 9, max: 12 })
+    expect(runOccupiedRange([...run(11, 12), wildCard('w1'), wildCard('w2'), wildCard('w3')])).toEqual({ min: 8, max: 12 })
+  })
+
+  it('interior Wilds stay inside the naturals span', () => {
+    expect(runOccupiedRange([numberCard('a', 'red', '7'), numberCard('b', 'red', '9'), wildCard('w')])).toEqual({ min: 7, max: 9 })
+  })
+
+  it('null with no naturals to anchor a reading', () => {
+    expect(runOccupiedRange([wildCard('w1'), wildCard('w2')])).toBeNull()
+  })
+})
+
+describe('validateGroupExtension locks end-extension Wilds', () => {
+  it('rejects the natural 8 onto 9-10-11-12 + Wild (the Wild IS the 8)', () => {
+    const group = [...run(9, 10, 11, 12), wildCard('w')]
+    const result = validateGroupExtension(group, 'run', [numberCard('h8', 'red', '8')])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toContain('already covered by a Wild')
+  })
+
+  it('rejects the natural 5 onto 1-2-3-4 + Wild (mirror at the low end)', () => {
+    const group = [...run(1, 2, 3, 4), wildCard('w')]
+    expect(validateGroupExtension(group, 'run', [numberCard('h5', 'red', '5')]).ok).toBe(false)
+  })
+
+  it('rejects a hit that skips past the occupied range (no re-reading by another door)', () => {
+    // 9-10 + W W occupies 9..12 (Wilds are the 11 and 12). A natural 7 leaves a
+    // hole at 8 -- accepting it would re-read a Wild as the 8. A natural 8 is
+    // the genuine extension.
+    const group = [...run(9, 10), wildCard('w1'), wildCard('w2')]
+    expect(validateGroupExtension(group, 'run', [numberCard('h7', 'red', '7')]).ok).toBe(false)
+    expect(validateGroupExtension(group, 'run', [numberCard('h8', 'red', '8')]).ok).toBe(true)
+  })
+
+  it('still accepts genuine extensions on the open side', () => {
+    const group = [...run(9, 10, 11, 12), wildCard('w')]   // occupies 8..12
+    expect(validateGroupExtension(group, 'run', [numberCard('h7', 'red', '7')]).ok).toBe(true)
+    expect(validateGroupExtension(group, 'run', [wildCard('w2')]).ok).toBe(true)
+  })
+
+  it('a Wild hit is rejected once the run occupies the full 1..12', () => {
+    const group = [...run(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), wildCard('w')]   // Wild is the 1
+    expect(validateGroupExtension(group, 'run', [wildCard('w2')]).ok).toBe(false)
+    expect(validateGroupExtension(group, 'run', [numberCard('h1', 'red', '1')]).ok).toBe(false)
+  })
+
+  it('multi-card hits extend contiguously against the occupied block', () => {
+    const group = [...run(9, 10, 11, 12), wildCard('w')]   // occupies 8..12
+    // 6 + 7 together: contiguous below the block.
+    expect(validateGroupExtension(group, 'run', [numberCard('h6', 'red', '6'), numberCard('h7', 'red', '7')]).ok).toBe(true)
+    // 5 + 7 together: leaves a hole at 6 with no Wild to fill it.
+    expect(validateGroupExtension(group, 'run', [numberCard('h5', 'red', '5'), numberCard('h7', 'red', '7')]).ok).toBe(false)
+    // 5 + 7 + Wild: the Wild fills the 6.
+    expect(validateGroupExtension(group, 'run', [numberCard('h5', 'red', '5'), numberCard('h7', 'red', '7'), wildCard('w2')]).ok).toBe(true)
+  })
+})
+
+describe('orderRunForDisplay keeps extension Wilds inside 1..12', () => {
+  it('renders 9-10-11-12 + Wild with the Wild FIRST (as the 8), never as a 13', () => {
+    const ordered = orderRunForDisplay([...run(9, 10, 11, 12), wildCard('w')])
+    expect(ordered.map((c) => c.id)[0]).toBe('w')
+  })
+
+  it('renders 1-2-3-4 + Wild with the Wild last (as the 5)', () => {
+    const ordered = orderRunForDisplay([...run(1, 2, 3, 4), wildCard('w')])
+    expect(ordered.map((c) => c.id)[4]).toBe('w')
+  })
+
+  it('splits multiple extension Wilds by actual room: 11-12 + 3 Wilds puts all three below', () => {
+    const ordered = orderRunForDisplay([...run(11, 12), wildCard('w1'), wildCard('w2'), wildCard('w3')])
+    expect(ordered.map((c) => c.id)).toEqual(['w1', 'w2', 'w3', 'n11-0', 'n12-1'])
+  })
+})

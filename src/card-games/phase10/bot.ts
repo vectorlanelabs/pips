@@ -181,7 +181,7 @@ export const phase10BotStrategy: BotStrategy<
         const currentFull = fullGroupCards(publicState.groups, publicState.hits, targetPlayerId, groupIndex)
         // validateGroupExtension is the SAME predicate the host validator runs —
         // the bot must never judge a hit by anything weaker (it once used the
-        // bare isValid* predicates, missed the runLockedRange rule, proposed a
+        // bare isValid* predicates, missed the runOccupiedRange rule, proposed a
         // hit the validator rejected, and froze forever re-proposing it).
         for (const card of hand) {
           if (validateGroupExtension(currentFull, group.type, [card]).ok) {
