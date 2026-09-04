@@ -94,6 +94,12 @@ export interface FarkleState {
   kept: number[]
   turnScore: number
   farkle: boolean
+  // Set true by the roll that just used up all 6 dice's worth of scoring (whether that
+  // happened across several partial keeps or in one single all-scoring roll) and reset to
+  // false on every other roll — the authoritative hot-dice signal. Not derivable client-side
+  // from kept.length going 0->0 (a single roll that scores all 6 fresh dice never has a
+  // nonzero kept.length to diff against), so the host computes and broadcasts it directly.
+  hotDice: boolean
   lost: number
   finalRound: boolean
   finalTrigger: string | null

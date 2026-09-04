@@ -44,17 +44,21 @@ export function FarkleTable({
   // Sound effects — diff room state transitions, but only for my own actions
   // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
   const selKey = f.dice.map((d) => d.sel).join(',')
-  const soundSigRef = useRef({ rollSig, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn })
+  const soundSigRef = useRef({ rollSig, selKey, logLen: f.log.length, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
     let bustTimer: number | undefined
     if (p.wasMyTurn) {
       const rollChanged = rollSig !== p.rollSig
-      const hotDice = rollChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
       const busted = f.log.length > p.logLen && f.log[f.log.length - 1].tone === 'farkle'
       if (rollChanged && f.dice.length > 0 && !busted) {
-        play(hotDice ? 'hot-dice' : 'dice-roll')
+        // f.hotDice is authoritative from the host — it covers both "used up all 6 dice
+        // across several partial keeps" and "scored all 6 fresh dice in one single roll",
+        // the latter of which a kept.length before/after diff here could never detect (kept
+        // only accumulates BETWEEN rolls, so a first-roll clean sweep looks identical to "no
+        // dice kept yet" from this component's last-rendered state).
+        play(f.hotDice ? 'hot-dice' : 'dice-roll')
       } else if (selKey !== p.selKey && rollSig === p.rollSig) {
         play('die-select')
       }
@@ -70,11 +74,11 @@ export function FarkleTable({
         }
       }
     }
-    soundSigRef.current = { rollSig, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
+    soundSigRef.current = { rollSig, selKey, logLen: f.log.length, wasMyTurn: isMyTurn }
     return () => {
       if (bustTimer !== undefined) window.clearTimeout(bustTimer)
     }
-  }, [rollSig, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
+  }, [rollSig, selKey, f.log.length, f.kept.length, f.dice.length, f.hotDice, isMyTurn, play])
 
   // Auto-advance after my own farkle: wait ~1.8s so the bust sound lands, then hand
   // the dice to the next player. The manual 'End turn' button stays as a skip-the-wait.
