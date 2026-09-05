@@ -78,7 +78,7 @@ export function makeSeat(id: string, name: string, bot: boolean, isHost: boolean
 
 function initFarkle(): FarkleState {
   return {
-    dice: [], kept: [], turnScore: 0, farkle: false, lost: 0,
+    dice: [], kept: [], turnScore: 0, farkle: false, hotDice: false, lost: 0,
     finalRound: false, finalTrigger: null, status: 'Six dice, ready.', round: 1, log: [],
     winningScore: 10000, openingScore: 500, rejection: null,
   }
@@ -256,6 +256,13 @@ function farkleRoll(state: RoomState, by: string): RoomState {
     return farkleReject(state, f, by, 'Set aside a scoring die before rolling again.')
   }
   let remaining = 6 - kept.length
+  // Hot dice: this roll used up all 6 dice's worth of scoring, whether that took several
+  // partial keeps across the turn or landed in one single all-scoring roll — either way every
+  // die is back in play. Computed here (not reconstructed client-side from a kept-length
+  // before/after diff) because the single-roll case never has a nonzero kept.length to diff
+  // against: kept only accumulates BETWEEN rolls, so "all 6 scored on the very first roll"
+  // looks identical to "no dice kept yet" from the client's last-rendered state.
+  const hotDice = remaining === 0
   if (remaining === 0) { remaining = 6; kept = [] }
   const dice = rollFarkleDice(remaining)
   const scored = hasAnyScore(dice.map((d) => d.val))
@@ -266,10 +273,10 @@ function farkleRoll(state: RoomState, by: string): RoomState {
     return {
       ...state,
       seats,
-      farkle: { ...f, dice, kept, turnScore: 0, farkle: true, lost: turnScore, status: 'Farkle!', log, rejection: null },
+      farkle: { ...f, dice, kept, turnScore: 0, farkle: true, hotDice, lost: turnScore, status: 'Farkle!', log, rejection: null },
     }
   }
-  return { ...state, farkle: { ...f, dice, kept, turnScore, farkle: false, status: 'Keep what scores.', rejection: null } }
+  return { ...state, farkle: { ...f, dice, kept, turnScore, farkle: false, hotDice, status: 'Keep what scores.', rejection: null } }
 }
 
 function farkleToggle(state: RoomState, by: string, dieId: number): RoomState {
@@ -323,13 +330,13 @@ function farkleBank(state: RoomState, by: string): RoomState {
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
   const ended = checkFarkleMatchEnd(seats, turnIdx, finalRound, finalTrigger)
   if (ended) {
-    return { ...state, seats, screen: 'results', winnerId: ended.winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [], rejection: null } }
+    return { ...state, seats, screen: 'results', winnerId: ended.winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [], hotDice: false, rejection: null } }
   }
   return {
     ...state,
     seats,
     turnIdx,
-    farkle: { ...f, log, turnScore: 0, dice: [], kept: [], farkle: false, finalRound, finalTrigger, round, status: 'Six dice, ready.', rejection: null },
+    farkle: { ...f, log, turnScore: 0, dice: [], kept: [], farkle: false, hotDice: false, finalRound, finalTrigger, round, status: 'Six dice, ready.', rejection: null },
   }
 }
 
@@ -338,7 +345,7 @@ function farkleEndTurn(state: RoomState, by: string): RoomState {
   const f = state.farkle
   if (!isFarkleTurn(state, by)) return farkleReject(state, f, by, "It's not your turn.")
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
-  const nextFarkle = { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.', rejection: null }
+  const nextFarkle = { ...f, farkle: false, dice: [], kept: [], hotDice: false, round, status: 'Six dice, ready.', rejection: null }
   const ended = checkFarkleMatchEnd(state.seats, turnIdx, f.finalRound, f.finalTrigger)
   if (ended) return { ...state, turnIdx, screen: 'results', winnerId: ended.winnerId, farkle: nextFarkle }
   return { ...state, turnIdx, farkle: nextFarkle }

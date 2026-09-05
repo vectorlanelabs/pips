@@ -156,6 +156,116 @@ describe('farkle — held dice survive a busted roll', () => {
   })
 })
 
+describe('farkle — hotDice is set whenever a roll uses up all 6 dice', () => {
+  // Deterministic dice values via a mocked Math.random. rollDie consumes two calls per die
+  // (val, then rot) — the (i + 0.5) / 6 centering avoids floating-point boundary flakiness
+  // that a plain i / 6 sequence would risk (1/6 * 6 can floor to 0 instead of 1).
+  function mockSequentialDiceVals(vals: number[]) {
+    const calls: number[] = []
+    for (const v of vals) {
+      calls.push((v - 1 + 0.5) / 6) // produces val via 1 + floor(x * 6)
+      calls.push(0.5) // rot — value doesn't matter for this test
+    }
+    let i = 0
+    vi.spyOn(Math, 'random').mockImplementation(() => calls[i++ % calls.length])
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function farkleRoom(): RoomState {
+    let room = makeRoom('TEST-3', 'farkle', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    return { ...room, screen: 'farkle' as const }
+  }
+
+  it('sets hotDice true when a SINGLE roll scores all 6 fresh dice at once (no prior partial keep)', () => {
+    // A straight 1-6, all six already selected — the exact bug case: kept was 0 before this
+    // roll (nothing was ever set aside from an earlier partial roll this turn), so a
+    // before/after diff of kept.length could never distinguish this from "no dice kept yet".
+    mockSequentialDiceVals([3, 3, 3, 3, 3, 3]) // the fresh reroll this action produces
+    const room = farkleRoom()
+    const straightRolled = {
+      ...room,
+      farkle: {
+        ...room.farkle,
+        kept: [],
+        turnScore: 0,
+        dice: [1, 2, 3, 4, 5, 6].map((val, id) => ({ id, val, sel: true, rot: 0 })),
+      },
+    }
+
+    const result = applyAction(straightRolled, { type: 'farkleRoll' }, 'h1')
+
+    expect(result.farkle.kept).toEqual([]) // reset — every die is back in play
+    expect(result.farkle.dice).toHaveLength(6)
+    expect(result.farkle.hotDice).toBe(true)
+  })
+
+  it('sets hotDice true when 6 dice are used up across multiple partial keeps', () => {
+    mockSequentialDiceVals([2, 4, 1, 5, 3, 6])
+    const room = farkleRoom()
+    // Already kept two 5s from an earlier roll this turn; now selecting four more 1s to reach 6.
+    const partiallyKept = {
+      ...room,
+      farkle: {
+        ...room.farkle,
+        kept: [5, 5],
+        turnScore: 100,
+        dice: [1, 1, 1, 1].map((val, id) => ({ id, val, sel: true, rot: 0 })),
+      },
+    }
+
+    const result = applyAction(partiallyKept, { type: 'farkleRoll' }, 'h1')
+
+    expect(result.farkle.kept).toEqual([])
+    expect(result.farkle.hotDice).toBe(true)
+  })
+
+  it('leaves hotDice false for an ordinary roll that does not use up all 6 dice', () => {
+    mockSequentialDiceVals([2, 2, 2, 2]) // remaining 4 dice re-rolled, scores (three 2s + spare)
+    const room = farkleRoom()
+    const partialSelect = {
+      ...room,
+      farkle: {
+        ...room.farkle,
+        kept: [],
+        turnScore: 0,
+        // Only 2 of the 6 dice selected (a single scoring pair-of-5s is not standard, so use a
+        // lone 1 and 5 — each scores alone) — kept only reaches 2, nowhere near 6.
+        dice: [{ id: 0, val: 1, sel: true, rot: 0 }, { id: 1, val: 5, sel: true, rot: 0 }, { id: 2, val: 2, sel: false, rot: 0 }, { id: 3, val: 3, sel: false, rot: 0 }],
+      },
+    }
+
+    const result = applyAction(partialSelect, { type: 'farkleRoll' }, 'h1')
+
+    expect(result.farkle.kept).toEqual([1, 5])
+    expect(result.farkle.hotDice).toBe(false)
+  })
+
+  it('resets a stale hotDice flag to false on the next bank', () => {
+    const room = farkleRoom()
+    // turnScore must clear the opening threshold (500, from initFarkle's default openingScore)
+    // or farkleBank rejects the action and hotDice would trivially stay unchanged — not the
+    // reset-on-success path this test means to cover.
+    const afterHotDice = { ...room, farkle: { ...room.farkle, hotDice: true, dice: [{ id: 0, val: 5, sel: true, rot: 0 }], turnScore: 600 } }
+
+    const result = applyAction(afterHotDice, { type: 'farkleBank' }, 'h1')
+
+    expect(result.farkle.hotDice).toBe(false)
+  })
+
+  it('resets a stale hotDice flag to false on the next end-turn', () => {
+    const room = farkleRoom()
+    const afterHotDiceBust = { ...room, farkle: { ...room.farkle, hotDice: true, farkle: true } }
+
+    const result = applyAction(afterHotDiceBust, { type: 'farkleEndTurn' }, 'h1')
+
+    expect(result.farkle.hotDice).toBe(false)
+  })
+})
+
 describe('farkle — a bust during the final lap ends the match', () => {
   function finalLapRoom(): RoomState {
     let room = makeRoom('TEST-2', 'farkle', 'Host', 'h1')
