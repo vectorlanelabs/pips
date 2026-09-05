@@ -42,6 +42,13 @@ export interface ScrabblePublicState {
   scores: Record<string, number>
   consecutivePasses: number
   lastPlacement: LastPlacement | null
+  // The most recent non-placement event, so the table's status line can say
+  // what happened instead of falling back to the pre-game "waiting for the
+  // first play" copy: PASS and EXCHANGE_TILES clear lastPlacement (they close
+  // the challenge window), and a successful CHALLENGE retracts it — all three
+  // were otherwise invisible to the other players. Cleared by the next
+  // PLACE_WORD. `count` is the number of tiles exchanged (0 for the others).
+  lastNonPlacement: { by: string; kind: 'pass' | 'exchange' | 'challenge'; count: number } | null
   winnerId: string | null            // set only when stage === 'over'
 }
 
@@ -133,6 +140,7 @@ export function createScrabbleGame(playerIds: string[], seed: number): ScrabbleS
     scores: Object.fromEntries(playerIds.map((pid) => [pid, 0])),
     consecutivePasses: 0,
     lastPlacement: null,
+    lastNonPlacement: null,
     winnerId: null,
   }
 

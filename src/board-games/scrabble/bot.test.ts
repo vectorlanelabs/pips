@@ -75,6 +75,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -177,6 +178,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -253,6 +255,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -360,6 +363,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -429,6 +433,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -546,6 +551,7 @@ describe('Scrabble bot word search', () => {
         drawnTileIds: [],
         challengeable: true,
       },
+      lastNonPlacement: null,
       winnerId: null,
     }
 
@@ -630,6 +636,7 @@ describe('Scrabble bot word search', () => {
       stage: 'play',
       consecutivePasses: 0,
       lastPlacement: null,
+      lastNonPlacement: null,
       winnerId: null,
     }
     const privateState: ScrabblePrivateState = { rack }

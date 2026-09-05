@@ -340,6 +340,7 @@ function makeValidator(
             scores: newScores,
             bagCount: cardCount(newBag),
             lastPlacement: null,
+            lastNonPlacement: { by: playerId, kind: 'challenge', count: 0 },
             handCounts: { ...publicState.handCounts, [originalPlacerId]: cardCount(newRack) },
           },
           privateStates: {
@@ -464,6 +465,7 @@ function makeValidator(
         handCounts: newHandCounts,
         consecutivePasses: 0,
         lastPlacement,
+        lastNonPlacement: null,
         turn: advanceTurn(publicState.turn, 'play'),
       }
 
@@ -515,6 +517,7 @@ function makeValidator(
         handCounts: newHandCounts,
         consecutivePasses: publicState.consecutivePasses + 1,
         lastPlacement: null,
+        lastNonPlacement: { by: playerId, kind: 'exchange', count: action.tileIds.length },
         turn: advanceTurn(publicState.turn, 'play'),
       }
 
@@ -535,6 +538,7 @@ function makeValidator(
         ...publicState,
         consecutivePasses: publicState.consecutivePasses + 1,
         lastPlacement: null,
+        lastNonPlacement: { by: playerId, kind: 'pass', count: 0 },
         turn: advanceTurn(publicState.turn, 'play'),
       }
 

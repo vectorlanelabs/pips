@@ -41,12 +41,27 @@ interface BlankAssignment {
   letter: string | null
 }
 
-function computeEventLine(
+// Exported for unit tests (pure function over public state).
+export function computeEventLine(
   publicState: ScrabblePublicState,
   localPlayerId: string,
+  names?: Record<string, string>,
 ): string {
   const placement = publicState.lastPlacement
   if (!placement) {
+    // No placement standing: either nothing has been played yet, or the last
+    // action was a pass/exchange/successful challenge (all of which clear
+    // lastPlacement). Without this branch, every one of those showed the
+    // pre-game "waiting for the first play" line mid-game.
+    const nonPlacement = publicState.lastNonPlacement
+    if (nonPlacement) {
+      const who = nonPlacement.by === localPlayerId ? 'You' : names?.[nonPlacement.by] ?? 'They'
+      if (nonPlacement.kind === 'pass') return `${who} passed.`
+      if (nonPlacement.kind === 'exchange') {
+        return `${who} exchanged ${nonPlacement.count} tile${nonPlacement.count === 1 ? '' : 's'}.`
+      }
+      return `${who} challenged the word off the board.`
+    }
     return publicState.turn.playerOrder[0] === localPlayerId
       ? 'Your move.'
       : 'Waiting for the first play…'
@@ -132,11 +147,18 @@ export function ScrabbleTable({
     const isBoardEmpty = publicState.board.every((row) => row.every((cell) => cell === null))
     if (isBoardEmpty) {
       setShowIntro(true)
+      // The deal moment gets the shuffle cue, same as Blackjack's round start
+      // and the card games' deal intros.
+      play('shuffle')
     }
   }, [])
 
-  // Turn start sound
-  useTurnStartSound(isMyTurn, opponentIds.length, playTurnStart)
+  // Turn start sound. The hook needs the count of HUMANS at the table
+  // (yourself included) and mutes below 2 — passing opponentIds.length here
+  // suppressed the cue in every 2-human game (1 opponent read as 1 human).
+  // Same derivation as Phase10Table: bots are seated as `bot-N`.
+  const humanCount = publicState.turn.playerOrder.filter((id) => !id.startsWith('bot')).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
 
   // Clear selection when it's no longer your turn or stage changes
   useEffect(() => {
@@ -161,13 +183,26 @@ export function ScrabbleTable({
     }
   }, [publicState.lastPlacement, play])
 
+  // Winner-only victory cue at game end — the Uno/Wahoo results convention
+  // (the loser hearing the same fanfare would sting).
   useEffect(() => {
-    if (prevStageRef.current === 'play' && publicState.stage === 'over') {
-      prevStageRef.current = publicState.stage
-    } else if (publicState.stage !== prevStageRef.current) {
-      prevStageRef.current = publicState.stage
+    if (prevStageRef.current !== 'over' && publicState.stage === 'over' && publicState.winnerId === localPlayerId) {
+      play('game-win')
     }
-  }, [publicState.stage])
+    prevStageRef.current = publicState.stage
+  }, [publicState.stage, publicState.winnerId, localPlayerId, play])
+
+  // Error cue when a play is rejected (invalid word, bad placement) — the same
+  // notice-edge pattern Rummy and Phase 10 use for their error banners.
+  const noticeSeenRef = useRef(!!notice)
+  useEffect(() => {
+    if (notice && !noticeSeenRef.current) {
+      play('error')
+      noticeSeenRef.current = true
+    } else if (!notice) {
+      noticeSeenRef.current = false
+    }
+  }, [notice, play])
 
   // Check if staged tiles are in a single line
   const canPlayWord = useMemo(() => {
@@ -290,8 +325,8 @@ export function ScrabbleTable({
   )
 
   const eventLine = useMemo(
-    () => computeEventLine(publicState, localPlayerId),
-    [publicState, localPlayerId],
+    () => computeEventLine(publicState, localPlayerId, opponentNames),
+    [publicState, localPlayerId, opponentNames],
   )
 
   const promptLine = useMemo(
