@@ -359,7 +359,7 @@ export function ScrabbleTable({
             {/* Board (left column on wide viewports) */}
             <div className="scr-board-col">
               <div className="scr-board">
-                {boardCells.map(({ row, col, cell, staged, premium, isCenter, isLastMove }) => (
+                {boardCells.map(({ row, col, cell, staged, blank, premium, isCenter, isLastMove }) => (
                   <div
                     key={`${row}-${col}`}
                     className={`scr-board-cell${
@@ -377,7 +377,10 @@ export function ScrabbleTable({
                             : ''
                         }${isLastMove && !staged ? ' scr-tile-face--last-move' : ''}`}
                       >
-                        {(cell?.letter || staged?.letter || '').toUpperCase()}
+                        {/* A staged blank's chosen letter lives in blankAssignments —
+                            staged.letter is only the submit-time fallback placeholder,
+                            and rendering it showed 'A' no matter what was picked. */}
+                        {(cell?.letter || blank?.letter || staged?.letter || '').toUpperCase()}
                         <span className="scr-tile-points">
                           {(() => {
                             if (staged) {
